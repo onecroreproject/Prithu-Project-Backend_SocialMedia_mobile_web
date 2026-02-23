@@ -526,15 +526,20 @@ exports.fetchUserShared = async (req, res) => {
       return res.status(200).json({ success: true, sharedFeeds: [] });
     }
 
-    // Process feeds to filter by type and count
+    // 1️⃣ Pre-calculate counts in O(N)
+    const feedCounts = new Map();
+    actions.sharedFeeds.forEach(f => {
+      const id = f.feedId?._id?.toString() || f.feedId?.toString();
+      if (id) feedCounts.set(id, (feedCounts.get(id) || 0) + 1);
+    });
+
+    // 2️⃣ Map in O(N)
     const processedFeeds = actions.sharedFeeds
-      .filter((item) => !type || item.feedId?.type === type) // filter by type if provided
+      .filter((item) => !type || item.feedId?.type === type)
       .map((item) => ({
         feed: item.feedId,
         sharedAt: item.sharedAt,
-        count: actions.sharedFeeds.filter(
-          (f) => f.feedId?.toString() === item.feedId?._id.toString()
-        ).length,
+        count: feedCounts.get(item.feedId?._id?.toString() || item.feedId?.toString()) || 0,
       }));
 
     res.status(200).json({
@@ -565,15 +570,20 @@ exports.fetchUserDownloaded = async (req, res) => {
       return res.status(200).json({ success: true, downloadedFeeds: [] });
     }
 
-    // Process feeds to filter by type and count
+    // 1️⃣ Pre-calculate counts in O(N)
+    const feedCounts = new Map();
+    actions.downloadedFeeds.forEach(f => {
+      const id = f.feedId?._id?.toString() || f.feedId?.toString();
+      if (id) feedCounts.set(id, (feedCounts.get(id) || 0) + 1);
+    });
+
+    // 2️⃣ Map in O(N)
     const processedFeeds = actions.downloadedFeeds
-      .filter((item) => !type || item.feedId?.type === type) // filter by type if provided
+      .filter((item) => !type || item.feedId?.type === type)
       .map((item) => ({
         feed: item.feedId,
         downloadedAt: item.downloadedAt,
-        count: actions.downloadedFeeds.filter(
-          (f) => f.feedId?.toString() === item.feedId?._id.toString()
-        ).length,
+        count: feedCounts.get(item.feedId?._id?.toString() || item.feedId?.toString()) || 0,
       }));
 
     res.status(200).json({
@@ -594,9 +604,12 @@ exports.getUserAnalyticsSummary = async (req, res) => {
       return res.status(400).json({ success: false, message: "User ID required" });
     }
 
+    const redisKey = `analytics:summary:${userId}`;
+    const cached = await redisClient.get(redisKey);
+    if (cached) return res.status(200).json(JSON.parse(cached));
+
     // Optimized: Single aggregation pipeline to count all metrics
     const [result] = await UserFeedActions.aggregate([
-      { $match: { userId: mongoose.Types.ObjectId(userId) } },
       {
         $lookup: {
           from: "User",

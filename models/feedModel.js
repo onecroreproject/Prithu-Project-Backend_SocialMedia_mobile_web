@@ -505,4 +505,25 @@ feedSchema.pre("save", function (next) {
   }
   next();
 });
+// Methods for history tracking
+feedSchema.methods.saveEditHistory = async function (userId, description) {
+  const currentData = this.toObject();
+  const historyEntry = {
+    caption: currentData.caption,
+    files: currentData.files?.map(f => ({
+      url: f.url,
+      type: f.type,
+      driveFileId: f.driveFileId,
+      size: f.size
+    })),
+    designMetadata: currentData.designMetadata,
+    editedAt: new Date(),
+    editedBy: userId,
+    changeDescription: description
+  };
+
+  this.previousVersions.push(historyEntry);
+  this.version = (this.version || 1) + 1;
+};
+
 module.exports = prithuDB.model("Feed", feedSchema, "Feeds");

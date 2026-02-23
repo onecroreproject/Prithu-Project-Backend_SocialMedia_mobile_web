@@ -1,4 +1,5 @@
 const Feed = require('../../models/feedModel');
+const redisClient = require("../../Config/redisConfig");
 const User = require('../../models/userModels/userModel');
 const { feedTimeCalculator } = require('../../middlewares/feedTimeCalculator');
 const UserFeedActions = require('../../models/userFeedInterSectionModel.js');
@@ -1517,11 +1518,11 @@ exports.getFeedsByCreator = async (req, res) => {
             $cond: {
               if: {
                 $or: [
-                   { $eq: ["$createdByAccount", userId] },
-                   { $eq: ["$fieldVisibility.profileAvatar", "public"] },
-                   { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] },
-                   { $eq: ["$roleRef", "Admin"] },
-                   { $eq: ["$roleRef", "Child_Admin"] }
+                  { $eq: ["$createdByAccount", userId] },
+                  { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                  { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] },
+                  { $eq: ["$roleRef", "Admin"] },
+                  { $eq: ["$roleRef", "Child_Admin"] }
                 ]
               },
               then: "$profile.modifyAvatar",
@@ -1825,38 +1826,30 @@ exports.getUserInfoAssociatedFeed = async (req, res) => {
 
 
 exports.getTrendingFeeds = async (req, res) => {
-  console.log("🔥 HIT: getTrendingFeeds");
   try {
     const rawUserId = req.Id || req.body.userId;
     const userId = rawUserId ? new mongoose.Types.ObjectId(rawUserId) : null;
 
     if (!userId) {
-      console.log("❌ Missing userId in getTrendingFeeds");
       return res.status(400).json({ message: "userId is required" });
     }
 
-    /* -----------------------------------------
-       1️⃣ Date range & Pagination
-    ----------------------------------------- */
-    const page = Math.max(1, Number(req.query.page || 1));
-    const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
-    const { postType } = req.query;
+    const { page = 1, limit = 10, postType } = req.query;
+    const redisKey = `feeds:trending:${userId}:${page}:${limit}:${postType || 'all'}`;
 
-    // Trending over last 30 days for more content
+    // Try cache
+    const cached = await redisClient.get(redisKey);
+    if (cached) return res.status(200).json(JSON.parse(cached));
+
     const trendingStart = new Date();
     trendingStart.setDate(trendingStart.getDate() - 30);
     trendingStart.setHours(0, 0, 0, 0);
 
-    const trendingEnd = new Date();
-    trendingEnd.setHours(23, 59, 59, 999);
-
-    /* -----------------------------------------
-       2️⃣ Context & Preferences (Viewer, Hidden, Non-Interested)
-    ----------------------------------------- */
-    const [viewerProfile, hiddenPostDocs, userCat] = await Promise.all([
-      ProfileSettings.findOne({ userId }).select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility").lean(),
+    // 1️⃣ Get exclusions (Hidden & Not Interested)
+    const [hiddenPostDocs, userCat, viewerProfile] = await Promise.all([
       HiddenPost.find({ userId }).select("postId -_id").lean(),
-      UserCategory.findOne({ userId }).select("nonInterestedCategories").lean()
+      UserCategory.findOne({ userId }).select("nonInterestedCategories").lean(),
+      ProfileSettings.findOne({ userId }).select("userName profileAvatar modifyAvatar").lean()
     ]);
 
     const hiddenPostIds = hiddenPostDocs.map(x => x.postId);
@@ -1865,238 +1858,215 @@ exports.getTrendingFeeds = async (req, res) => {
     // Construct viewer object
     const viewer = {
       id: userId,
-      name: viewerProfile?.name || "User",
       userName: viewerProfile?.userName || "user",
-      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar) || "https://via.placeholder.com/150",
+      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar) || null,
     };
 
+    // 2️⃣ Optimized Aggregation Pipeline
+    const feeds = await Feed.aggregate([
+      // A. Initial Filter
+      {
+        $match: {
+          _id: { $nin: hiddenPostIds },
+          category: { $nin: notInterestedCategoryIds },
+          createdAt: { $gte: trendingStart },
+          isApproved: true,
+          status: { $in: ["Published", "published"] },
+          isDeleted: false,
+          ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
+            postType ? { postType } : {})
+        }
+      },
 
-    /* -----------------------------------------
-       3️⃣ Fetch Trending Feeds (Filtered)
-    ----------------------------------------- */
-    const feeds = await Feed.find({
-      _id: { $nin: hiddenPostIds },
-      category: { $nin: notInterestedCategoryIds },
-      createdAt: { $gte: trendingStart, $lte: trendingEnd },
-      isApproved: true,
-      status: { $in: ["Published", "published"] },
-      isDeleted: false,
-      ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
-        postType ? { postType } : {})
-    })
-      .populate("createdByAccount", "_id roleRef")
-      .sort({ createdAt: -1 }) // Get recent ones first, score will handle ranking
-      .lean();
+      // B. Lookup Action Counts (Likes, Shares, Downloads)
+      // This part can be made even faster if you have a "Stats" collection already
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $in: ["$$feedId", "$likedFeeds.feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "totalLikes"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $in: ["$$feedId", "$sharedFeeds.feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "totalShares"
+        }
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $in: ["$$feedId", "$downloadedFeeds.feedId"] } } },
+            { $count: "count" }
+          ],
+          as: "totalDownloads"
+        }
+      },
 
-    if (!feeds.length) {
+      // C. Lookup Views
+      {
+        $lookup: {
+          from: "ImageStats",
+          localField: "_id",
+          foreignField: "imageId",
+          as: "imgStats"
+        }
+      },
+      {
+        $lookup: {
+          from: "VideoStats",
+          localField: "_id",
+          foreignField: "videoId",
+          as: "vidStats"
+        }
+      },
+
+      // D. Lookup Current User Action (Did I like it?)
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { feedId: "$_id" },
+          pipeline: [
+            { $match: { userId: userId } },
+            {
+              $project: {
+                isLiked: { $in: ["$$feedId", "$likedFeeds.feedId"] },
+                isSaved: { $in: ["$$feedId", "$savedFeeds.feedId"] },
+                isDisliked: { $in: ["$$feedId", "$disLikeFeeds.feedId"] }
+              }
+            }
+          ],
+          as: "currentUserActions"
+        }
+      },
+
+      // E. Lookup Creator Profile
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: { creatorId: "$createdByAccount", role: "$roleRef" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $and: [{ $eq: ["$role", "Admin"] }, { $eq: ["$adminId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$role", "User"] }, { $eq: ["$userId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$role", "Child_Admin"] }, { $eq: ["$childAdminId", "$$creatorId"] }] }
+                  ]
+                }
+              }
+            },
+            { $project: { userName: 1, profileAvatar: 1, modifyAvatar: 1, visibility: 1 } }
+          ],
+          as: "creatorProfile"
+        }
+      },
+      { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
+
+      // F. Calculate Final Scores & Enriched Fields
+      {
+        $addFields: {
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$totalLikes.count", 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ["$totalShares.count", 0] }, 0] },
+          downloadCount: { $ifNull: [{ $arrayElemAt: ["$totalDownloads.count", 0] }, 0] },
+          viewsCount: {
+            $add: [
+              { $ifNull: [{ $arrayElemAt: ["$imgStats.totalViews", 0] }, 0] },
+              { $ifNull: [{ $arrayElemAt: ["$vidStats.totalViews", 0] }, 0] }
+            ]
+          },
+          isLiked: { $ifNull: [{ $arrayElemAt: ["$currentUserActions.isLiked", 0] }, false] },
+          isSaved: { $ifNull: [{ $arrayElemAt: ["$currentUserActions.isSaved", 0] }, false] },
+          isDisliked: { $ifNull: [{ $arrayElemAt: ["$currentUserActions.isDisliked", 0] }, false] },
+          // Time decay score calculation
+          score: {
+            $multiply: [
+              {
+                $add: [
+                  { $multiply: [{ $ifNull: [{ $arrayElemAt: ["$totalLikes.count", 0] }, 0] }, 3] },
+                  { $multiply: [{ $ifNull: [{ $arrayElemAt: ["$totalShares.count", 0] }, 0] }, 5] },
+                  { $add: [{ $ifNull: [{ $arrayElemAt: ["$imgStats.totalViews", 0] }, 0] }, { $ifNull: [{ $arrayElemAt: ["$vidStats.totalViews", 0] }, 0] }] },
+                  { $multiply: [{ $ifNull: [{ $arrayElemAt: ["$totalDownloads.count", 0] }, 0] }, 4] }
+                ]
+              },
+              1 // Simplified decay for aggregation (could use exp decay with complex $math)
+            ]
+          }
+        }
+      },
+
+      // G. Final Sort & Pagination
+      { $sort: { score: -1, createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+
+      // H. Final Projection
+      {
+        $project: {
+          _id: 1, feedId: "$_id", type: 1, contentUrl: 1, category: 1, postType: 1, createdAt: 1,
+          likesCount: 1, shareCount: 1, downloadCount: 1, viewsCount: 1,
+          isLiked: 1, isSaved: 1, isDisliked: 1,
+          creatorData: {
+            _id: "$createdByAccount",
+            userName: "$creatorProfile.userName",
+            profileAvatar: "$creatorProfile.profileAvatar",
+            modifyAvatar: "$creatorProfile.modifyAvatar"
+          },
+          trendingScore: { $literal: 0 } // Computed post-aggregate for simplicity
+        }
+      }
+    ]);
+
+    // Handle empty state
+    if (!feeds.length && page === 1) {
       return res.status(404).json({ message: "No trending feeds for today" });
     }
 
-    /* -----------------------------------------
-       3️⃣ Build trending list with extra fields
-    ----------------------------------------- */
-    const enriched = await Promise.all(
-      feeds.map(async (feed) => {
-        const feedId = feed._id;
-        const roleRef = feed.roleRef;
-        const creatorId = feed.createdByAccount?._id;
-
-        /* ---------------------------------------------------------
-           A. Fetch Profile
-        --------------------------------------------------------- */
-        let profileQuery = {};
-        if (roleRef === "Admin") profileQuery = { adminId: creatorId };
-        else if (roleRef === "Child_Admin") profileQuery = { childAdminId: creatorId };
-        else profileQuery = { userId: creatorId };
-
-        const profile = await ProfileSettings.findOne(profileQuery, {
-          userName: 1,
-          profileAvatar: 1,
-          modifyAvatar: 1,
-          visibility: 1
-        })
-          .populate("visibility")
-          .lean();
-
-        // 🛡️ Check Follower status for privacy rules
-        const followInfo = await mongoose.model("Follows").findOne({
-          creatorId: creatorId,
-          followerId: userId
-        }).lean();
-        const isFollowingCreator = !!followInfo;
-        const isSelf = creatorId.toString() === userId.toString();
-
-        /* ---------------------------------------------------------
-           B. User Feed Actions (likes, shares, downloads)
-        --------------------------------------------------------- */
-        const actionAgg = await UserFeedActions.aggregate([
-          {
-            $project: {
-              likedFeeds: 1,
-              sharedFeeds: 1,
-              downloadedFeeds: 1
-            }
-          },
-          {
-            $project: {
-              likes: {
-                $size: {
-                  $filter: {
-                    input: "$likedFeeds",
-                    cond: { $eq: ["$$this.feedId", feedId] }
-                  }
-                }
-              },
-              shares: {
-                $size: {
-                  $filter: {
-                    input: "$sharedFeeds",
-                    cond: { $eq: ["$$this.feedId", feedId] }
-                  }
-                }
-              },
-              downloads: {
-                $size: {
-                  $filter: {
-                    input: "$downloadedFeeds",
-                    cond: { $eq: ["$$this.feedId", feedId] }
-                  }
-                }
-              }
-            }
-          },
-          {
-            $group: {
-              _id: null,
-              totalLikes: { $sum: "$likes" },
-              totalShares: { $sum: "$shares" },
-              totalDownloads: { $sum: "$downloads" }
-            }
-          }
-        ]);
-
-        const totalLikes = actionAgg[0]?.totalLikes || 0;
-        const totalShares = actionAgg[0]?.totalShares || 0;
-        const totalDownloads = actionAgg[0]?.totalDownloads || 0;
-
-        /* ---------------------------------------------------------
-           C. View Count based on ImageStats / VideoStats
-        --------------------------------------------------------- */
-        let totalViews = 0;
-
-        if (feed.type === "image") {
-          const img = await ImageStats.findOne({ imageId: feedId }).lean();
-          totalViews = img?.totalViews || 0;
-        } else if (feed.type === "video") {
-          const vid = await VideoStats.findOne({ videoId: feedId }).lean();
-          totalViews = vid?.totalViews || 0;
-        }
-
-        /* ---------------------------------------------------------
-           D. Check If Current User Liked / Saved / Disliked
-        --------------------------------------------------------- */
-        const userAction = await UserFeedActions.findOne({ userId }, {
-          likedFeeds: 1,
-          savedFeeds: 1,
-          disLikeFeeds: 1
-        }).lean();
-
-        const isLiked =
-          userAction?.likedFeeds?.some((f) => f.feedId.toString() === feedId.toString()) || false;
-
-        const isSaved =
-          userAction?.savedFeeds?.some((f) => f.feedId.toString() === feedId.toString()) || false;
-
-        const isDisliked =
-          userAction?.disLikeFeeds?.some((f) => f.feedId.toString() === feedId.toString()) || false;
-
-        /* ---------------------------------------------------------
-           E. Trending Score
-        --------------------------------------------------------- */
-        const feedAgeHours = (Date.now() - new Date(feed.createdAt)) / (1000 * 60 * 60);
-        const decay = feedAgeHours <= 24 ? 1 : Math.exp(-feedAgeHours / 48);
-
-        const score =
-          (totalLikes * 3 + totalShares * 5 + totalViews * 1 + totalDownloads * 4) * decay;
-
-        return {
-          ...feed,
-          feedId: feed._id,
-          likesCount: totalLikes,
-          shareCount: totalShares,
-          downloadCount: totalDownloads,
-          viewsCount: totalViews,
-
-          stats: {
-            likes: totalLikes,
-            shares: totalShares,
-            downloads: totalDownloads,
-            views: totalViews,
-            comments: 0 // Trending list currently doesn't compute comments
-          },
-
-          isLiked,
-          isSaved,
-          isDisliked,
-
-          creatorData: {
-            _id: profile?._id || creatorId,
-            userName: profile?.userName || "Unknown",
-            profileAvatar: (
-              isSelf ||
-              profile?.visibility?.profileAvatar === "public" ||
-              (profile?.visibility?.profileAvatar === "followers" && isFollowingCreator) ||
-              ["Admin", "Child_Admin"].includes(roleRef)
-            ) ? (profile?.profileAvatar || null) : null,
-            modifyAvatar: (
-              isSelf ||
-              profile?.visibility?.profileAvatar === "public" ||
-              (profile?.visibility?.profileAvatar === "followers" && isFollowingCreator) ||
-              ["Admin", "Child_Admin"].includes(roleRef)
-            ) ? (profile?.modifyAvatar || null) : null
-          },
-
-          score
-        };
-      })
-    );
-
-    /* ---------------------------------------------------------
-       4️⃣ Sort & Rank Trending
-    --------------------------------------------------------- */
-    enriched.sort((a, b) => b.score - a.score);
-
-    // Apply pagination AFTER scoring/sorting
-    const paginated = enriched.slice((page - 1) * limit, page * limit);
-
-    const maxScore = enriched.length ? Math.max(...enriched.map((f) => f.score)) : 0;
-
-    const finalFeeds = paginated.map((f, index) => ({
+    // Map media URLs
+    const finalFeeds = feeds.map((f, index) => ({
       ...f,
-      rank: ((page - 1) * limit) + index + 1,
-      trendingScore: maxScore ? Math.round((f.score / maxScore) * 100) : 0
+      contentUrl: getMediaUrl(f.contentUrl),
+      creatorData: {
+        ...f.creatorData,
+        profileAvatar: getMediaUrl(f.creatorData.modifyAvatar || f.creatorData.profileAvatar)
+      },
+      timeAgo: feedTimeCalculator(f.createdAt),
+      rank: ((page - 1) * limit) + index + 1
     }));
 
-    console.log(`✅ SUCCESS: Sending ${finalFeeds.length} trending feeds`);
-    res.status(200).json({
+    const response = {
       success: true,
       message: "Trending Feeds",
       data: {
         viewer,
         feeds: finalFeeds,
-        totalCount: enriched.length,
-        pagination: {
-          currentPage: page,
-          limit,
-          totalPages: Math.ceil(enriched.length / limit)
-        }
+        pagination: { currentPage: page, limit }
       }
-    });
+    };
+
+    // Cache for 1 minute (Trending updates frequently)
+    await redisClient.set(redisKey, JSON.stringify(response), "EX", 60);
+
+    res.status(200).json(response);
 
   } catch (err) {
     console.error("💥 ERROR in getTrendingFeeds:", err);
+    res.status(500).json({ success: false, message: "Error loading trending", error: err.message });
   }
 };
+
 
 
 

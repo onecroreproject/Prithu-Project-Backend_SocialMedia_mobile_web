@@ -1,4 +1,5 @@
 const Users = require("../../models/userModels/userModel.js");
+const redisClient = require("../../Config/redisConfig");
 const { userTimeAgo } = require('../../middlewares/userStatusTimeAgo.js');
 const UserFeedActions = require('../../models/userFeedInterSectionModel');
 const ProfileSettings = require('../../models/profileSettingModel.js');
@@ -159,11 +160,21 @@ exports.getUsersByDate = async (req, res) => {
 
 exports.getAllUserDetails = async (req, res) => {
   try {
-    // 1️⃣ Get all users (online + lastLoginAt directly from User schema)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // 1️⃣ Get total count for pagination metadata
+    const totalUsers = await Users.countDocuments();
+
+    // 2️⃣ Get paginated users
     const allUsers = await Users.find()
       .select(
         "userName _id email lastActiveAt lastLoginAt lastSeenAt createdAt subscription isBlocked isOnline profileSettings trialUsed referralCode referalCode referealCode gender phone phoneNumber"
       )
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
     if (!allUsers || allUsers.length === 0) {
@@ -239,7 +250,15 @@ exports.getAllUserDetails = async (req, res) => {
       isBlocked: user.isBlocked,
     }));
 
-    return res.status(200).json({ users: formattedUsers });
+    return res.status(200).json({
+      users: formattedUsers,
+      pagination: {
+        total: totalUsers,
+        page,
+        limit,
+        totalPages: Math.ceil(totalUsers / limit)
+      }
+    });
   } catch (err) {
     console.error("Error fetching users:", err);
     return res.status(500).json({
@@ -754,9 +773,17 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
 exports.getUserAnalyticalData = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { startDate, endDate, type, tab } = req.query;
-
     if (!userId) return res.status(400).json({ message: "userId is required" });
+
+    const redisKey = `admin:analytics:${userId}`;
+    const cachedData = await redisClient.get(redisKey);
+    if (cachedData) {
+      return res.status(200).json(JSON.parse(cachedData));
+    }
+    let userIdTrimmed = userId.trim(); // Renamed to avoid conflict with const userId
+    const objectId = new mongoose.Types.ObjectId(userIdTrimmed);
+
+    const { startDate, endDate, type, tab } = req.query;
 
     // Build base query for date filtering
     const buildDateQuery = (field) => {
@@ -777,7 +804,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // -------------------------------------------------------------------
     // 1️⃣ BASIC USER PROFILE
     // -------------------------------------------------------------------
-    const userProfile = await ProfileSettings.findOne({ userId })
+    const userProfile = await ProfileSettings.findOne({ userId: userIdTrimmed })
       .select("userName profileAvatar createdAt lastSeen")
       .lean();
 
@@ -792,7 +819,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // 2️⃣ USER POSTS (Full image/video posts with all engagement details)
     // -------------------------------------------------------------------
     const postsQuery = {
-      createdByAccount: userId,
+      createdByAccount: userIdTrimmed,
       roleRef: "User",
       ...buildDateQuery('createdAt'),
       ...(type && type !== 'all' ? { type } : {})
@@ -818,33 +845,45 @@ exports.getUserAnalyticalData = async (req, res) => {
     imageViews.forEach(v => (viewMap[v.imageId.toString()] = v.totalViews || 0));
     videoViews.forEach(v => (viewMap[v.videoId.toString()] = v.totalViews || 0));
 
-    // ----- Fetch like/share/download activity from all users -----
-    const actionsAll = await UserFeedActions.find({})
-      .select("likedFeeds sharedFeeds downloadedFeeds disLikeFeeds")
-      .lean();
+    // ----- Fetch like/share/download activity using AGGREGATION (Scalable) -----
+    const aggregationResult = await UserFeedActions.aggregate([
+      {
+        $facet: {
+          likes: [
+            { $unwind: "$likedFeeds" },
+            { $match: { "likedFeeds.feedId": { $in: postIds } } },
+            { $group: { _id: "$likedFeeds.feedId", count: { $sum: 1 } } }
+          ],
+          shares: [
+            { $unwind: "$sharedFeeds" },
+            { $match: { "sharedFeeds.feedId": { $in: postIds } } },
+            { $group: { _id: "$sharedFeeds.feedId", count: { $sum: 1 } } }
+          ],
+          downloads: [
+            { $unwind: "$downloadedFeeds" },
+            { $match: { "downloadedFeeds.feedId": { $in: postIds } } },
+            { $group: { _id: "$downloadedFeeds.feedId", count: { $sum: 1 } } }
+          ],
+          dislikes: [
+            { $unwind: "$disLikeFeeds" },
+            { $match: { "disLikeFeeds.feedId": { $in: postIds } } },
+            { $group: { _id: "$disLikeFeeds.feedId", count: { $sum: 1 } } }
+          ]
+        }
+      }
+    ]);
+
+    const actionCounts = aggregationResult[0] || { likes: [], shares: [], downloads: [], dislikes: [] };
 
     const likeMap = {};
     const shareMap = {};
     const downloadMap = {};
     const dislikeMap = {};
 
-    actionsAll.forEach(u => {
-      u.likedFeeds?.forEach(l => {
-        likeMap[l.feedId] = (likeMap[l.feedId] || 0) + 1;
-      });
-
-      u.sharedFeeds?.forEach(s => {
-        shareMap[s.feedId] = (shareMap[s.feedId] || 0) + 1;
-      });
-
-      u.downloadedFeeds?.forEach(d => {
-        downloadMap[d.feedId] = (downloadMap[d.feedId] || 0) + 1;
-      });
-
-      u.disLikeFeeds?.forEach(d => {
-        dislikeMap[d.feedId] = (dislikeMap[d.feedId] || 0) + 1;
-      });
-    });
+    actionCounts.likes.forEach(item => (likeMap[item._id.toString()] = item.count));
+    actionCounts.shares.forEach(item => (shareMap[item._id.toString()] = item.count));
+    actionCounts.downloads.forEach(item => (downloadMap[item._id.toString()] = item.count));
+    actionCounts.dislikes.forEach(item => (dislikeMap[item._id.toString()] = item.count));
 
     // ----- Fetch comment counts -----
     const commentCounts = await UserComments.aggregate([
@@ -878,7 +917,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // 3️⃣ FOLLOWERS (Users who follow THIS user) with date filtering
     // -------------------------------------------------------------------
     const followersQuery = {
-      creatorId: userId,
+      creatorId: userIdTrimmed,
       ...buildDateQuery('createdAt')
     };
 
@@ -906,7 +945,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // 4️⃣ FOLLOWING (Who THIS user follows) with date filtering
     // -------------------------------------------------------------------
     const followingQuery = {
-      followerId: userId,
+      followerId: userIdTrimmed,
       ...buildDateQuery('createdAt')
     };
 
@@ -933,7 +972,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // -------------------------------------------------------------------
     // 5️⃣ USER INTERACTIONS (Liked, Shared, Downloaded…) with date filtering
     // -------------------------------------------------------------------
-    const userAction = await UserFeedActions.findOne({ userId })
+    const userAction = await UserFeedActions.findOne({ userId: userIdTrimmed })
       .populate({
         path: 'likedFeeds.feedId',
         select: '_id type contentUrl title description createdAt',
@@ -1037,7 +1076,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // 6️⃣ HIDDEN POSTS with date filtering
     // -------------------------------------------------------------------
     const hiddenQuery = {
-      userId,
+      userId: userIdTrimmed,
       ...buildDateQuery('createdAt')
     };
 
@@ -1075,7 +1114,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // -------------------------------------------------------------------
     // 7️⃣ CATEGORY INTERESTS
     // -------------------------------------------------------------------
-    const categoryData = await UserCategory.findOne({ userId })
+    const categoryData = await UserCategory.findOne({ userId: userIdTrimmed })
       .populate("interestedCategories", "name description")
       .populate("nonInterestedCategories", "name description")
       .lean();
@@ -1096,7 +1135,7 @@ exports.getUserAnalyticalData = async (req, res) => {
     // 8️⃣ USER COMMENTS WITH POST DETAILS with date filtering
     // -------------------------------------------------------------------
     const commentsQuery = {
-      userId,
+      userId: userIdTrimmed,
       ...buildDateQuery('createdAt')
     };
 
@@ -1144,9 +1183,28 @@ exports.getUserAnalyticalData = async (req, res) => {
     // -------------------------------------------------------------------
     // 🔟 FINAL RESPONSE
     // -------------------------------------------------------------------
-    return res.status(200).json({
+    const profile = await ProfileSettings.findOne({ userId: userIdTrimmed }).select("userId userName profileAvatar bio").lean();
+
+    const totalViews = posts.reduce((acc, p) => acc + p.views, 0);
+    const totalLikes = posts.reduce((acc, p) => acc + p.likes, 0);
+    const totalShares = posts.reduce((acc, p) => acc + p.shares, 0);
+    const totalDownloads = posts.reduce((acc, p) => acc + p.downloads, 0);
+
+    const responseData = {
       success: true,
-      selectedUser,
+      user: {
+        userId: profile?.userId || userIdTrimmed,
+        userName: profile?.userName || "Unknown",
+        profileAvatar: profile?.profileAvatar || null,
+        bio: profile?.bio || "",
+      },
+      stats: {
+        totalPosts: postIds.length,
+        totalViews,
+        totalLikes,
+        totalShares,
+        totalDownloads,
+      },
       posts,
       imageCount,
       videoCount,
@@ -1163,14 +1221,18 @@ exports.getUserAnalyticalData = async (req, res) => {
       nonInterested,
       comments: userComments,
       engagementSummary,
-      stats: engagementSummary,
       filters: {
         startDate,
         endDate,
         type,
         applied: !!(startDate || endDate || type)
       }
-    });
+    };
+
+    // Cache results for 5 minutes
+    await redisClient.set(redisKey, JSON.stringify(responseData), "EX", 300);
+
+    return res.status(200).json(responseData);
 
   } catch (err) {
     console.error("Error fetching analytics:", err);
@@ -1250,81 +1312,90 @@ exports.getUserProfileDashboardMetricCount = async (req, res) => {
 
 exports.getReports = async (req, res) => {
   try {
-    // Fetch all reports
-    const reports = await Report.find().lean();
-
-    if (!reports || reports.length === 0) {
-      return res.status(404).json({ message: "No reports found" });
-    }
-
-    // Map reports with extra data
-    const formattedReports = await Promise.all(
-      reports.map(async (report, index) => {
-        // ✅ Report Type
-        const reportType = await ReportType.findById(report.typeId).lean();
-
-        // ✅ Reported By (User info from ProfileSettings)
-        const reporterProfile = await ProfileSettings.findOne({
-          userId: report.reportedBy,
-        }).lean();
-
-        // ✅ Target Feed Info
-        let feedData = null;
-        let creatorProfile = null;
-
-        if (report.targetType === "Feed") {
-          feedData = await Feed.findById(report.targetId).lean();
-
-          if (feedData) {
-            const account = await Account.findById(feedData.createdByAccount).lean();
-
-            if (account) {
-              creatorProfile = await ProfileSettings.findOne({
-                userId: account.userId,
-              }).lean();
-            }
-          }
+    const formattedReports = await Report.aggregate([
+      // 1️⃣ Lookup Report Type
+      {
+        $lookup: {
+          from: "ReportTypes",
+          localField: "typeId",
+          foreignField: "_id",
+          as: "reportType"
         }
+      },
+      { $unwind: { path: "$reportType", preserveNullAndEmptyArrays: true } },
 
-        return {
-          _id: report._id,
-          reportId: index + 1, // convert to 1,2,3,4...
-          type: reportType ? reportType.name : "Unknown",
-          reportedBy: reporterProfile
-            ? {
-              username: reporterProfile.userName || "Unknown",
-              avatar: reporterProfile.profileAvatar || null,
-            }
-            : { username: "Unknown", avatar: null },
+      // 2️⃣ Lookup Reported By Profile
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          localField: "reportedBy",
+          foreignField: "userId",
+          as: "reporterProfile"
+        }
+      },
+      { $unwind: { path: "$reporterProfile", preserveNullAndEmptyArrays: true } },
 
-          target: feedData
-            ? {
-              contentUrl: feedData.contentUrl || null,
-              createdBy: creatorProfile
-                ? {
-                  username: creatorProfile.userName || "Unknown",
-                  avatar: creatorProfile.profileAvatar || null,
+      // 3️⃣ Lookup Target Feed (if applicable)
+      {
+        $lookup: {
+          from: "Feeds",
+          localField: "targetId",
+          foreignField: "_id",
+          as: "feedData"
+        }
+      },
+      { $unwind: { path: "$feedData", preserveNullAndEmptyArrays: true } },
+
+      // 4️⃣ Lookup Creator Account -> Creator Profile
+      {
+        $lookup: {
+          from: "Accounts",
+          localField: "feedData.createdByAccount",
+          foreignField: "_id",
+          as: "creatorAccount"
+        }
+      },
+      { $unwind: { path: "$creatorAccount", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          localField: "creatorAccount.userId",
+          foreignField: "userId",
+          as: "creatorProfile"
+        }
+      },
+      { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
+
+      // 5️⃣ Project final structure
+      {
+        $project: {
+          _id: 1,
+          type: { $ifNull: ["$reportType.name", "Unknown"] },
+          reportedBy: {
+            username: { $ifNull: ["$reporterProfile.userName", "Unknown"] },
+            avatar: { $ifNull: ["$reporterProfile.profileAvatar", null] }
+          },
+          target: {
+            $cond: {
+              if: { $eq: ["$targetType", "Feed"] },
+              then: {
+                contentUrl: { $ifNull: ["$feedData.contentUrl", null] },
+                createdBy: {
+                  username: { $ifNull: ["$creatorProfile.userName", "Unknown"] },
+                  avatar: { $ifNull: ["$creatorProfile.profileAvatar", null] }
                 }
-                : { username: "Unknown", avatar: null },
+              },
+              else: null
             }
-            : null,
-
-          answers:
-            report.answers && report.answers.length > 0
-              ? report.answers.map((a) => ({
-                questionId: a.questionId,
-                questionText: a.questionText,
-                selectedOption: a.selectedOption,
-              }))
-              : "Not Available",
-
-          status: report.status,
-          actionTaken: report.actionTaken,
-          actionDate: report.actionDate,
-          createdAt: report.createdAt,
-        };
-      })
-    );
+          },
+          answers: { $ifNull: ["$answers", "Not Available"] },
+          status: 1,
+          actionTaken: 1,
+          actionDate: 1,
+          createdAt: 1
+        }
+      }
+    ]);
 
     res.status(200).json({ reports: formattedReports });
   } catch (error) {

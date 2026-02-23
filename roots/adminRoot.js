@@ -160,6 +160,13 @@ const {
 } = require('../controllers/profileControllers/profileController');
 
 const {
+    getAllParties,
+    createParty,
+    updateParty,
+    deleteParty,
+} = require('../controllers/adminControllers/adminPartyController');
+
+const {
     fetchUserFeeds,
     fetchUserFollowing,
     fetchUserInterested,
@@ -396,5 +403,17 @@ router.post('/admin/seo/redirects', auth, createRedirect);
 router.delete('/admin/seo/redirects/:id', auth, deleteRedirect);
 router.post('/admin/seo/sitemap', auth, triggerSitemapGeneration);
 router.post('/admin/seo/robots', auth, updateRobotsTxt);
+
+/* --------------------- Admin Party API --------------------- */
+router.get('/admin/parties', auth, getAllParties);
+router.post('/admin/party', auth, adminUploadFeed.fields([
+    { name: 'partyLogo', maxCount: 1 },
+    { name: 'leaderPhotos', maxCount: 10 }
+]), createParty);
+router.put('/admin/party/:id', auth, adminUploadFeed.fields([
+    { name: 'partyLogo', maxCount: 1 },
+    { name: 'leaderPhotos', maxCount: 10 }
+]), updateParty);
+router.delete('/admin/party/:id', auth, deleteParty);
 
 module.exports = router;

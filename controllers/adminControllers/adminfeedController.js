@@ -370,15 +370,17 @@ exports.getFeedWithDesign = async (req, res) => {
     const { feedId } = req.params;
     const userId = req.Id;
 
-    const feed = await Feed.findOne({
-      _id: feedId,
-      $or: [
+    const query = { _id: feedId };
+    if (req.role !== "Admin" && req.role !== "Child_Admin") {
+      query.$or = [
         { audience: "public" },
         { audience: "followers" },
         { createdByAccount: userId },
         { allowedUsers: userId }
-      ]
-    })
+      ];
+    }
+
+    const feed = await Feed.findOne(query)
       .populate('category', 'name icon color')
       .populate('createdByAccount', 'username name profilePic')
       .lean();
@@ -426,7 +428,12 @@ exports.updateFeedDesign = async (req, res) => {
       return res.status(400).json({ success: false, message: "Design or Edit metadata is required" });
     }
 
-    const feed = await Feed.findOne({ _id: feedId, createdByAccount: userId });
+    const query = { _id: feedId };
+    if (req.role !== "Admin" && req.role !== "Child_Admin") {
+      query.createdByAccount = userId;
+    }
+
+    const feed = await Feed.findOne(query);
 
     if (!feed) {
       return res.status(404).json({ success: false, message: "Feed not found or access denied" });

@@ -254,9 +254,7 @@ exports.toggleSaveFeed = async (req, res) => {
 
 // Request a Video Download Job
 // Check Download Limit
-/**
- * Verifies if a user has exceeded their download limit (5 feeds)
- */
+
 exports.checkDownloadLimit = async (req, res) => {
   const userId = req.user?.id || req.query.userId || req.query.uuserId;
 
@@ -265,15 +263,24 @@ exports.checkDownloadLimit = async (req, res) => {
   }
 
   try {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
     const actions = await UserFeedActions.findOne({ userId }).lean();
-    const downloadCount = actions?.downloadedFeeds?.length || 0;
-    const limit = 5;
+
+    // Count downloads for the current day only
+    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
+      const dlDate = new Date(item.downloadedAt || item.addedAt);
+      return dlDate >= startOfDay;
+    });
+
+    const limit = 1;
+    const isProduction = process.env.NODE_ENV === 'production';
 
     return res.json({
       downloadCount,
       limit,
-      isLimitReached: false // TEMPORARILY DISABLED: Always false for testing
-      // isLimitReached: downloadCount >= limit
+      isLimitReached: isProduction && downloadCount >= limit
     });
   } catch (err) {
     console.error("[CheckLimit] Error:", err);
@@ -311,14 +318,21 @@ exports.directDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId);
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
-    // TEMPORARILY DISABLED: Enforce Download Limit (5 Feeds)
-    /*
+    // Enforce Download Limit (1 Feed per Day)
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
     const actions = await UserFeedActions.findOne({ userId }).lean();
-    if (actions && actions.downloadedFeeds && actions.downloadedFeeds.length >= 5) {
-      console.warn(`[DirectDL] Download limit reached for user: ${userId}`);
-      return res.status(403).json({ message: "Download limit reached (Max 5 feeds)" });
+    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
+      const dlDate = new Date(item.downloadedAt || item.addedAt);
+      return dlDate >= startOfDay;
+    });
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction && dailyDownloads.length >= 1) {
+      console.warn(`[DirectDL] Daily download limit reached for user: ${userId}`);
+      return res.status(403).json({ message: "Daily download limit reached (Max 1 feed per day)" });
     }
-    */
 
     const [user, profile] = await Promise.all([
       User.findById(userId).lean(),
@@ -493,13 +507,28 @@ exports.requestDownloadFeed = async (req, res) => {
   if (!feedId) return res.status(400).json({ message: "feedId is required" });
 
   try {
-    // 1. FETCH FEED
+    // 2. CHECK DAILY DOWNLOAD LIMIT
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const actions = await UserFeedActions.findOne({ userId }).lean();
+    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
+      const dlDate = new Date(item.downloadedAt || item.addedAt);
+      return dlDate >= startOfDay;
+    });
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction && dailyDownloads.length >= 1) {
+      return res.status(403).json({ message: "Daily download limit reached (Max 1 feed per day)" });
+    }
+
+    // 3. FETCH FEED
     const feed = await Feeds.findById(feedId).lean();
     if (!feed) {
       return res.status(404).json({ message: "Feed not found" });
     }
 
-    // 2. FETCH VIEWER PROFILE
+    // 4. FETCH VIEWER PROFILE
     const [viewerProfile, userRecord] = await Promise.all([
       ProfileSettings.findOne({ userId: userId }).lean(),
       User.findById(userId).select('email userName').lean()
