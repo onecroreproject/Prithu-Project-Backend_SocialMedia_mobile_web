@@ -293,8 +293,19 @@ exports.checkDownloadLimit = async (req, res) => {
  */
 exports.directDownloadFeed = async (req, res) => {
   const { feedId } = req.params;
-  let userId = req.user?.id || req.query.userId || req.query.uuserId;
-  const queryToken = req.query.token;
+  let userId = req.user?.id || req.body?.userId || req.query?.userId || req.query?.uuserId;
+  const queryToken = req.query?.token || req.body?.token;
+  let customMetadata = req.body?.customMetadata || {};
+
+  // Handle stringified metadata from form submissions
+  if (typeof customMetadata === 'string') {
+    try {
+      customMetadata = JSON.parse(customMetadata);
+    } catch (e) {
+      console.error("[DirectDL] Failed to parse customMetadata:", e.message);
+      customMetadata = {};
+    }
+  }
 
   // Manual JWT verification for query-based tokens (since browser navigations can't send headers easily)
   if (!req.user && queryToken) {
@@ -346,6 +357,43 @@ exports.directDownloadFeed = async (req, res) => {
 
     // deep copy metadata to avoid modifying original or shared object
     designMetadata = JSON.parse(JSON.stringify(designMetadata));
+
+    // MERGE CUSTOM METADATA FROM CLIENT (Avatar positions, etc.)
+    if (customMetadata && Object.keys(customMetadata).length > 0) {
+      console.log(`[DirectDL] Merging custom metadata:`, JSON.stringify(customMetadata));
+
+      // Override Footer Config
+      if (customMetadata.footerConfig) {
+        designMetadata.footerConfig = {
+          ...designMetadata.footerConfig,
+          ...customMetadata.footerConfig,
+          enabled: true
+        };
+      }
+
+      // Add/Override Overlay Elements (Avatars)
+      if (customMetadata.avatarConfigs && Array.isArray(customMetadata.avatarConfigs)) {
+        if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+        // Filter out existing avatars if we are providing a full set from the editor
+        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+
+        customMetadata.avatarConfigs.forEach((av, idx) => {
+          designMetadata.overlayElements.push({
+            id: `manual-avatar-${idx}`,
+            type: 'avatar',
+            xPercent: av.x,
+            yPercent: av.y,
+            wPercent: av.w,
+            hPercent: av.h,
+            visible: true,
+            zIndex: 110,
+            mediaConfig: { url: av.img },
+            avatarConfig: { shape: av.shape || 'circle' },
+            animation: { enabled: true, direction: 'left', speed: 1, delay: 0 }
+          });
+        });
+      }
+    }
 
     const visibility = profile?.visibility || {};
     console.log(`[DirectDL] User privacy/visibility:`, JSON.stringify({

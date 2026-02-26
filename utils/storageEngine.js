@@ -96,8 +96,8 @@ exports.saveFile = async (file, options = {}) => {
 exports.getMediaUrl = (pathOrUrl) => {
     if (!pathOrUrl || typeof pathOrUrl !== 'string') return '';
 
-    // If it's already an absolute URL, return it
-    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    // If it's already an absolute URL or base64 data, return it
+    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://') || pathOrUrl.startsWith('data:')) {
         return pathOrUrl;
     }
 

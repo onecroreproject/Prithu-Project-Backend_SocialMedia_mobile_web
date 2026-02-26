@@ -18,6 +18,29 @@ const ensureDir = (dir) => {
 
 // Helper: Download file from URL
 const downloadFile = async (url, dest) => {
+    if (!url) return false;
+
+    // Handle Base64 Data URLs
+    if (url.startsWith('data:')) {
+        try {
+            const matches = url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                // Try simple split as fallback
+                const parts = url.split(',');
+                if (parts.length < 2) throw new Error('Invalid data URL');
+                const buffer = Buffer.from(parts[1], 'base64');
+                fs.writeFileSync(dest, buffer);
+                return true;
+            }
+            const buffer = Buffer.from(matches[2], 'base64');
+            fs.writeFileSync(dest, buffer);
+            return true;
+        } catch (err) {
+            console.error(`[FS] Failed to process base64 data URL:`, err.message);
+            throw err;
+        }
+    }
+
     let writer;
     try {
         writer = fs.createWriteStream(dest);
@@ -347,9 +370,20 @@ exports.processFeedMedia = async ({
     console.log(`[Processor] Processing ${overlayElements.length} overlay elements...`);
 
     let filterIndex = 1;
+
+    const getFontFile = (family = "") => {
+        const f = family.toLowerCase();
+        if (f.includes('pacifico')) return path.join(__dirname, '../assets/Pacifico.ttf');
+        if (f.includes('dancing script')) return path.join(__dirname, '../assets/DancingScript.ttf');
+        if (f.includes('montserrat')) return path.join(__dirname, '../assets/Montserrat.ttf');
+        if (f.includes('playfair display')) return path.join(__dirname, '../assets/PlayfairDisplay.ttf');
+        if (f.includes('fira code') || f.includes('mono')) return path.join(__dirname, '../assets/RobotoMono.ttf');
+        return path.join(__dirname, '../assets/Outfit.ttf');
+    };
+
     for (const el of overlayElements) {
         let overlayMediaUrl = null;
-        if (el.type === 'avatar') overlayMediaUrl = viewer?.profileAvatar || el.mediaConfig?.url;
+        if (el.type === 'avatar') overlayMediaUrl = el.mediaConfig?.url || viewer?.profileAvatar;
         else if (el.type === "logo") overlayMediaUrl = el.mediaConfig?.url || "/logo/prithulogo.png";
 
         if (overlayMediaUrl) {
@@ -358,13 +392,14 @@ exports.processFeedMedia = async ({
 
             try {
                 await downloadFile(overlayMediaUrl, overlayDest);
-                const xRaw = (el.xPercent / 100) * OUT_W;
-                const yRaw = yOffset + ((el.yPercent / 100) * actualMediaH);
+                const xRaw = ((el.xPercent / 100) * OUT_W)-10;
+                const yRaw = (yOffset + ((el.yPercent / 100) *maxMediaH));
                 const scaleW = Math.max(10, Math.round((el.wPercent || 20) / 100 * OUT_W));
+                const scaleH = el.hPercent ? Math.round((el.hPercent / 100) * maxMediaH)-10 : scaleW;
 
                 let xExpr = `${xRaw}`, yExpr = `${yRaw}`;
-                const dur = Number(el.animation.speed || 1);
-                const delay = Number(el.animation.delay || 0);
+                const dur = Number(el.animation?.speed || 1);
+                const delay = Number(el.animation?.delay || 0);
 
                 if (el.animation?.enabled && el.animation.direction !== "none") {
                     const dir = el.animation.direction;
@@ -391,30 +426,31 @@ exports.processFeedMedia = async ({
 
                 // Create a "soft bottom" mask using SVG gradient
                 // Fades from white (opaque) to transparent at the bottom (starting at 70%)
+                // Dynamic SVG dimensions and path mapping
                 const maskSvg = Buffer.from(isRound
-                    ? `<svg width="${scaleW}" height="${scaleW}">
+                    ? `<svg width="${scaleW}" height="${scaleH}">
                         <defs>
                           <linearGradient id="fade" x1="0%" y1="0%" x2="0%" y2="100%">
                             <stop offset="70%" stop-color="white" />
                             <stop offset="100%" stop-color="transparent" />
                           </linearGradient>
                         </defs>
-                        <circle cx="${scaleW / 2}" cy="${scaleW / 2}" r="${scaleW / 2}" fill="url(#fade)"/>
+                        <ellipse cx="${scaleW / 2}" cy="${scaleH / 2}" rx="${scaleW / 2}" ry="${scaleH / 2}" fill="url(#fade)"/>
                       </svg>`
-                    : `<svg width="${scaleW}" height="${scaleW}">
+                    : `<svg width="${scaleW}" height="${scaleH}">
                         <defs>
                           <linearGradient id="fade" x1="0%" y1="0%" x2="0%" y2="100%">
                             <stop offset="70%" stop-color="white" />
                             <stop offset="100%" stop-color="transparent" />
                           </linearGradient>
                         </defs>
-                        <rect x="0" y="0" width="${scaleW}" height="${scaleW}" fill="url(#fade)"/>
+                        <rect x="0" y="0" width="${scaleW}" height="${scaleH}" fill="url(#fade)"/>
                       </svg>`
                 );
 
                 if (el.type === 'avatar') {
                     await sharp(overlayDest)
-                        .resize(scaleW, scaleW, { fit: 'cover' })
+                        .resize(scaleW, scaleH, { fit: 'cover' })
                         .composite([{ input: maskSvg, blend: 'dest-in' }])
                         .png()
                         .toFile(maskedAvatarPath);
@@ -426,8 +462,8 @@ exports.processFeedMedia = async ({
 
                 overlayInputIndex++;
 
-                if (!isRound) {
-                    combinedFilters.push({ filter: 'scale', options: el.type === 'avatar' ? `${scaleW}:${scaleW}` : `w=${scaleW}:h=-1`, inputs: currentOverlayInput, outputs: rawLabel });
+                if (!isRound && el.type !== 'avatar') {
+                    combinedFilters.push({ filter: 'scale', options: `w=${scaleW}:h=-1`, inputs: currentOverlayInput, outputs: rawLabel });
                     currentOverlayInput = rawLabel;
                 }
 
@@ -451,8 +487,8 @@ exports.processFeedMedia = async ({
 
                 let xExpr = `${Math.round(xRaw)}`, yExpr = `${Math.round(yRaw)}`;
                 if (el.animation?.enabled && el.animation.direction !== "none") {
-                    const dur = Number(el.animation.speed || 1);
-                    const delay = Number(el.animation.delay || 0);
+                    const dur = Number(el.animation?.speed || 1);
+                    const delay = Number(el.animation?.delay || 0);
                     const dir = el.animation.direction;
                     const scaleW = fontSize * content.length * 0.6; // Rough estimate of text width for animation bounds
 
@@ -511,9 +547,13 @@ exports.processFeedMedia = async ({
         const textColor = normalizeFfmpegColor(adaptiveTextColor); // Force automatic contrast
         const shadowColor = normalizeFfmpegColor(footerStyle.shadowColor || adaptiveShadowColor);
 
+        // Map font family
+        const ACTIVE_FONT = getFontFile(footerConfig.fontFamily).replace(/\\/g, "/").replace(/([:])/, "\\\\$1");
+
         if (showElements.name && viewer.userName) {
+            const nameSize = Math.round(footerStyle.nameSize * (footerConfig.usernameScale || 1));
             const nameLabel = `footer_name`;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.userName), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_1_Y - (footerStyle.nameSize / 2)), fontsize: footerStyle.nameSize, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: nameLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.userName), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_1_Y - (nameSize / 2)), fontsize: nameSize, fontcolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: nameLabel });
             currentBase = nameLabel;
         }
 
@@ -544,14 +584,16 @@ exports.processFeedMedia = async ({
         }
 
         if (showElements.email && viewer.email) {
+            const emailSize = Math.round(footerStyle.emailSize * (footerConfig.emailScale || 1));
             const emailLabel = `footer_email`;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.email), x: Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_2_Y - (footerStyle.emailSize / 2)), fontsize: footerStyle.emailSize, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: emailLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.email), x: Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_2_Y - (emailSize / 2)), fontsize: emailSize, fontcolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: emailLabel });
             currentBase = emailLabel;
         }
         if (showElements.phone && (viewer.phone || viewer.phoneNumber)) {
+            const phoneSize = Math.round(footerStyle.phoneSize * (footerConfig.phoneScale || 1));
             const phoneLabel = `footer_phone`;
             const phoneText = viewer.phone || viewer.phoneNumber;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(phoneText), x: `${Math.round(paddingX + actualMediaW - footerStyle.paddingRight)}-text_w`, y: Math.round(ROW_2_Y - (footerStyle.phoneSize / 2)), fontsize: footerStyle.phoneSize, fontcolor: textColor, fontfile: `'${FONT_PATH}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: phoneLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(phoneText), x: `${Math.round(paddingX + actualMediaW - footerStyle.paddingRight)}-text_w`, y: Math.round(ROW_2_Y - (phoneSize / 2)), fontsize: phoneSize, fontcolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: phoneLabel });
             currentBase = phoneLabel;
         }
     }

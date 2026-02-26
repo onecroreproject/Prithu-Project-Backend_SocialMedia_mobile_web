@@ -341,7 +341,7 @@ router.get('/user/feed/share-link/:feedId', generateShareLink);
 router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
 router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
 router.get('/user/feed/check-limit', auth, checkDownloadLimit);
-router.get('/user/feed/:feedId/direct-download', directDownloadFeed);
+router.post('/user/feed/:feedId/direct-download', directDownloadFeed);
 
 /* --------------------- Categories --------------------- */
 router.get('/categories/all', auth, getUserContentCategories);
