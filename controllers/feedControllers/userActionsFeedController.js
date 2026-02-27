@@ -256,7 +256,7 @@ exports.toggleSaveFeed = async (req, res) => {
 // Check Download Limit
 
 exports.checkDownloadLimit = async (req, res) => {
-  const userId = req.user?.id || req.query.userId || req.query.uuserId;
+  const userId = req.Id || req.user?.id || req.query.userId || req.query.uuserId;
 
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
     return res.status(401).json({ message: "Invalid user session" });
@@ -275,12 +275,12 @@ exports.checkDownloadLimit = async (req, res) => {
     });
 
     const limit = 1;
-    const isProduction = process.env.NODE_ENV === 'production';
+    const downloadCount = dailyDownloads.length;
 
     return res.json({
       downloadCount,
       limit,
-      isLimitReached: isProduction && downloadCount >= limit
+      isLimitReached: downloadCount >= limit
     });
   } catch (err) {
     console.error("[CheckLimit] Error:", err);
@@ -339,8 +339,7 @@ exports.directDownloadFeed = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction && dailyDownloads.length >= 1) {
+    if (dailyDownloads.length >= 1) {
       console.warn(`[DirectDL] Daily download limit reached for user: ${userId}`);
       return res.status(403).json({ message: "Daily download limit reached (Max 1 feed per day)" });
     }
@@ -565,8 +564,7 @@ exports.requestDownloadFeed = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction && dailyDownloads.length >= 1) {
+    if (dailyDownloads.length >= 1) {
       return res.status(403).json({ message: "Daily download limit reached (Max 1 feed per day)" });
     }
 
