@@ -150,6 +150,7 @@ const {
     creatorUnSelectCategory,
 } = require('../controllers/creatorControllers/creatorCategoryController');
 const { getPageBySlug } = require('../controllers/staticPageController');
+const { getAllBlogs, getBlogBySlug } = require('../controllers/blogController');
 
 const {
     getCommentsByFeed,
@@ -458,5 +459,7 @@ router.get("/footer", getFooterConfig);
 
 
 router.get('/static-page/:slug', getPageBySlug);
+router.get('/blogs/all', getAllBlogs);
+router.get('/blogs/:slug', getBlogBySlug);
 
 module.exports = router;

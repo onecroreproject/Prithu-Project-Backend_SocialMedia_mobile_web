@@ -137,6 +137,13 @@ const {
 const { getAllUserFeedback, updateFeedbackStatus, getAllSupportQueries, updateSupportQueryStatus } = require('../controllers/feedBackController');
 const { updateFooterConfig } = require('../controllers/footerController');
 const { updatePageBySlug } = require('../controllers/staticPageController');
+const {
+    getAllBlogsAdmin,
+    createBlog,
+    updateBlog,
+    deleteBlog,
+    toggleBlogStatus
+} = require('../controllers/blogController');
 
 const {
     getSeoDashboardStats,
@@ -415,5 +422,12 @@ router.put('/admin/party/:id', auth, adminUploadFeed.fields([
     { name: 'leaderPhotos', maxCount: 10 }
 ]), updateParty);
 router.delete('/admin/party/:id', auth, deleteParty);
+
+/* --------------------- Admin Blog Management --------------------- */
+router.get('/admin/blogs/all', auth, getAllBlogsAdmin);
+router.post('/admin/blogs/create', auth, createBlog);
+router.put('/admin/blogs/update/:id', auth, updateBlog);
+router.delete('/admin/blogs/delete/:id', auth, deleteBlog);
+router.patch('/admin/blogs/toggle-status/:id', auth, toggleBlogStatus);
 
 module.exports = router;
