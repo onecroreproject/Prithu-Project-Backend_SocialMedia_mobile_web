@@ -23,6 +23,7 @@ const { getMediaUrl } = require("../../utils/storageEngine");
 const idToString = (id) => (id ? id.toString() : null);
 const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
+const { processPosterMedia } = require("../../utils/posterMediaProcessor");
 
 
 
@@ -274,7 +275,7 @@ exports.checkDownloadLimit = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    const limit = 1;
+    const limit = 100; // 🔓 TEMPORARY: Increased for testing
     const downloadCount = dailyDownloads.length;
 
     return res.json({
@@ -339,9 +340,10 @@ exports.directDownloadFeed = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    if (dailyDownloads.length >= 1) {
+    const DOWNLOAD_LIMIT = 100; // 🔓 TEMPORARY: Increased for testing
+    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
       console.warn(`[DirectDL] Daily download limit reached for user: ${userId}`);
-      return res.status(403).json({ message: "Daily download limit reached (Max 1 feed per day)" });
+      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
     }
 
     const [user, profile] = await Promise.all([
@@ -546,6 +548,201 @@ exports.directDownloadFeed = async (req, res) => {
   }
 };
 
+/* ------------------------------------------------------------------
+   🎂 BIRTHDAY POSTER DOWNLOAD
+   POST /api/user/feed/:feedId/birthday-download
+   Body: { token, userId, customMetadata: { avatarConfigs, textOverlays, footerConfig } }
+   Response: raw .mp4 blob streamed directly to client
+------------------------------------------------------------------- */
+exports.birthdayDownloadFeed = async (req, res) => {
+  const { feedId } = req.params;
+  let userId = req.Id || req.user?.id || req.body?.userId;
+  const queryToken = req.body?.token || req.query?.token;
+  let customMetadata = req.body?.customMetadata || {};
+
+  if (typeof customMetadata === 'string') {
+    try { customMetadata = JSON.parse(customMetadata); }
+    catch (e) { customMetadata = {}; }
+  }
+
+  // Manual JWT fallback (browser fetch sends token in body)
+  if (!req.Id && !req.user && queryToken) {
+    try {
+      const decoded = jwt.verify(queryToken, process.env.JWT_SECRET || "your_secret_key");
+      userId = decoded.userId || decoded.id;
+    } catch {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+  }
+
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ message: "Invalid user session" });
+  }
+
+  if (!feedId || !mongoose.Types.ObjectId.isValid(feedId)) {
+    return res.status(400).json({ message: "Invalid feed ID" });
+  }
+
+  const tempDir = require('path').join(
+    __dirname, "../../uploads/temp_birthday",
+    `bdl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  );
+
+  const cleanup = () => {
+    try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) { }
+  };
+
+  try {
+    console.log(`[BirthdayDL] feedId=${feedId} userId=${userId}`);
+
+    const feed = await Feed.findById(feedId).lean();
+    if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    const [user, profile] = await Promise.all([
+      User.findById(userId).lean(),
+      ProfileSettings.findOne({ userId }).populate('visibility').lean(),
+    ]);
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    const visibility = profile?.visibility || {};
+
+    const viewer = {
+      id: user._id,
+      userName:
+        visibility.userName === 'public' || visibility.displayName === 'public'
+          ? profile?.userName || profile?.name || user.userName || 'User'
+          : 'User',
+      email: visibility.email === 'public' ? user.email || profile?.email || null : null,
+      phoneNumber:
+        visibility.phoneNumber === 'public'
+          ? profile?.phoneNumber || user.phoneNumber || null
+          : null,
+      profileAvatar:
+        visibility.profileAvatar === 'public'
+          ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
+          : null,
+    };
+
+    // ── Build designMetadata from feed + merge client customMetadata ──
+    let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
+    if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+
+    // 1️⃣  Avatar overlays — replace existing avatar slots with editor values
+    if (Array.isArray(customMetadata.avatarConfigs) && customMetadata.avatarConfigs.length > 0) {
+      designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+      customMetadata.avatarConfigs.forEach((av, idx) => {
+        designMetadata.overlayElements.push({
+          id: `birthday-avatar-${idx}`,
+          type: 'avatar',
+          xPercent: av.x,
+          yPercent: av.y,
+          wPercent: av.w,
+          hPercent: av.h,
+          visible: true,
+          zIndex: 110 + idx,
+          mediaConfig: { url: av.img },
+          avatarConfig: { shape: av.shape || 'circle' },
+        });
+      });
+    }
+
+    // 2️⃣  Text overlays — replace existing text/username slots with editor values
+    if (Array.isArray(customMetadata.textOverlays) && customMetadata.textOverlays.length > 0) {
+      designMetadata.overlayElements = designMetadata.overlayElements.filter(
+        el => el.type !== 'text' && el.type !== 'username'
+      );
+      customMetadata.textOverlays.forEach((ov, idx) => {
+        designMetadata.overlayElements.push({
+          id: ov.id || `birthday-text-${idx}`,
+          type: ov.type || 'text',
+          xPercent: ov.x,
+          yPercent: ov.y,
+          wPercent: ov.w,
+          hPercent: ov.h,
+          visible: ov.visible !== false,
+          zIndex: 120 + idx,
+          textConfig: {
+            content: ov.content || '',
+            fontSize: ov.style?.fontSize || 24,
+            color: ov.style?.color || '#ffffff',
+            fontFamily: ov.style?.fontFamily || 'Inter',
+            fontWeight: ov.style?.fontWeight || 'bold',
+            align: ov.style?.align || 'center',
+          },
+        });
+      });
+    }
+
+    // 3️⃣  Footer config - Explicitly disable for birthday posters
+    designMetadata.hasFooter = false;
+    delete designMetadata.footerConfig;
+
+
+    // ── FFmpeg Processing via processPosterMedia ──
+    const { ffmpegCommand, tempSourcePath } = await processPosterMedia({
+      feed: { ...feed, mediaUrl: getMediaUrl(feed.mediaUrl) },
+      viewer,
+      designMetadata,
+      tempDir,
+    });
+
+    const finalOutputPath = path.join(tempDir, `birthday_${feedId}.mp4`);
+    const filename = `birthday_poster_${feedId.slice(-4)}.mp4`;
+
+    req.on('close', () => console.warn(`[BirthdayDL] Client disconnected early`));
+
+    ffmpegCommand
+      .on('start', (cmd) => console.log(`[BirthdayDL] FFmpeg start: ${cmd}`))
+      .on('stderr', (line) => {
+        if (/error|invalid|failed/i.test(line)) console.error(`[BirthdayDL] STDERR: ${line}`);
+      })
+      .on('error', (err) => {
+        console.error('[BirthdayDL] FFmpeg error:', err.message);
+        if (!res.headersSent) res.status(500).json({ error: 'Video processing failed' });
+        cleanup();
+      })
+      .on('end', async () => {
+        console.log('[BirthdayDL] Encoding done. Sending file...');
+        if (!fs.existsSync(finalOutputPath)) {
+          if (!res.headersSent) res.status(500).json({ error: 'Output file missing' });
+          return cleanup();
+        }
+
+        res.download(finalOutputPath, filename, async (err) => {
+          if (err) {
+            console.error('[BirthdayDL] Stream error:', err.message);
+          } else {
+            // Record download action
+            try {
+              await UserFeedActions.findOneAndUpdate(
+                { userId },
+                { $push: { downloadedFeeds: { feedId, downloadedAt: new Date() } } },
+                { upsert: true }
+              );
+              await logUserActivity({
+                userId,
+                actionType: 'DOWNLOAD_POST',
+                targetId: feedId,
+                targetModel: 'Feed',
+                metadata: { platform: 'web', type: 'birthday' },
+              });
+            } catch (e) {
+              console.error('[BirthdayDL] Activity record error:', e.message);
+            }
+          }
+          cleanup();
+        });
+      })
+      .save(finalOutputPath);
+
+  } catch (err) {
+    console.error('[BirthdayDL] System error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    cleanup();
+  }
+};
+
 exports.requestDownloadFeed = async (req, res) => {
   const userId = req.Id || req.body.userId || req.query.userId;
   const feedId = req.params.feedId;
@@ -564,8 +761,9 @@ exports.requestDownloadFeed = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    if (dailyDownloads.length >= 1) {
-      return res.status(403).json({ message: "Daily download limit reached (Max 1 feed per day)" });
+    const DOWNLOAD_LIMIT = 100; // 🔓 TEMPORARY: Increased for testing
+    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
     }
 
     // 3. FETCH FEED

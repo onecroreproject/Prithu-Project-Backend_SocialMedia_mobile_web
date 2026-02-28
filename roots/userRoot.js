@@ -36,6 +36,7 @@ const {
     deleteFeed,
     getFeedsByHashtag,
     singleFeedById,
+    getBirthdayFeeds,
 } = require('../controllers/feedControllers/feedsController');
 
 const {
@@ -110,6 +111,7 @@ const {
     checkDownloadLimit,
     directDownloadFeed,
     getUserLikedFeedsForSaved,
+    birthdayDownloadFeed,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 const {
@@ -341,6 +343,7 @@ router.get('/user/feed/share-link/:feedId', generateShareLink);
 router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
 router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
 router.get('/user/feed/check-limit', auth, checkDownloadLimit);
+router.post('/user/feed/:feedId/birthday-download', birthdayDownloadFeed); // 🎂 Birthday poster download
 router.post('/user/feed/:feedId/direct-download', directDownloadFeed);
 
 /* --------------------- Categories --------------------- */
@@ -384,6 +387,7 @@ router.get("/get/feed/category", getCategoriesWithFeeds);
 router.get('/get/feed/:feedId', auth, getSingleFeedById);
 router.get('/get/feeds/by/creator/:feedId', auth, getFeedsByCreator);
 router.get('/get/feeds/by/hashtag/:tag', auth, getFeedsByHashtag);
+router.get('/get/feeds/birthday', auth, getBirthdayFeeds); // 🎂 Birthday category feeds
 router.post('/user/watching/vidoes', auth, userVideoViewCount);
 router.post('/feed/view/video/:id', auth, userVideoViewCount); // Alias
 router.post('/user/image/view/count', auth, userImageViewCount);

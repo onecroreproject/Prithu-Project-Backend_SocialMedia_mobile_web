@@ -135,10 +135,7 @@ const downloadSocialIcon = async (platform, dest, color = 'white', size = 48) =>
     } catch (err) { return false; }
 };
 
-/**
- * Specialized Poster Media Processor:
- * Handles Birthday, Anniversary, and Politics categories with specific overlay handling.
- */
+
 exports.processPosterMedia = async ({
     feed,
     viewer,
@@ -151,9 +148,34 @@ exports.processPosterMedia = async ({
 
     const getEscapedFontPath = (fileName) => {
         const absolutePath = path.resolve(__dirname, "..", "assets", fileName);
+        if (!fs.existsSync(absolutePath)) return null;
         return absolutePath.replace(/\\/g, "/").replace(/([:])/, "\\\\$1");
     };
-    const FONT_PATH = getEscapedFontPath("Outfit.ttf");
+
+    // 🚀 NEW: Robust Font Resolver
+    const getFontPath = (family = "", weight = "normal", style = "normal") => {
+        const f = family.toLowerCase();
+        const isBold = weight === "bold" || weight === "700";
+        const isItalic = style === "italic";
+
+        // Mapping frontend names to backend assets
+        let baseName = "Outfit.ttf"; // Default
+        if (f.includes("dancing")) baseName = "DancingScript.ttf";
+        else if (f.includes("oswald")) baseName = "Montserrat.ttf"; // Fallback Clean
+        else if (f.includes("montserrat")) baseName = "Montserrat.ttf";
+        else if (f.includes("playfair")) baseName = "PlayfairDisplay.ttf";
+        else if (f.includes("pacifico")) baseName = "Pacifico.ttf";
+        else if (f.includes("roboto")) baseName = "RobotoMono.ttf";
+        else if (f.includes("inter")) baseName = "Outfit.ttf"; // Fallback Modern
+
+        // Check for specific variants if they existed (e.g. Montserrat-Bold.ttf)
+        // Since we only have base files, we'll use the base and maybe simulate bold if needed
+        // but for now, we just resolve the best available file.
+        const resolved = getEscapedFontPath(baseName) || getEscapedFontPath("Outfit.ttf");
+        return resolved;
+    };
+
+    const DEFAULT_FONT = getFontPath("Outfit");
 
     ensureDir(tempDir);
 
@@ -238,11 +260,11 @@ exports.processPosterMedia = async ({
                     await downloadFile(getMediaUrl(url), overlayDest);
                 }
 
-                // Frame-Centric Coordinates (Relative to 720px wide frame)
-                const xRaw = Math.round((el.xPercent / 100) * OUT_W);
-                const yRaw = Math.round((el.yPercent / 100) * actualMediaH);
-                const scaleW = Math.max(10, Math.round((el.wPercent || 22) / 100 * OUT_W));
-                const scaleH = el.hPercent ? Math.round((el.hPercent / 100) * actualMediaH) : scaleW;
+                // 🚀 FIX: Use actualMediaW (visible frame) and add paddingX offset
+                const xRaw = Math.round(paddingX + ((el.xPercent ?? el.x ?? 10) / 100) * actualMediaW);
+                const yRaw = Math.round(((el.yPercent ?? el.y ?? 10) / 100) * actualMediaH);
+                const scaleW = Math.max(10, Math.round(((el.wPercent ?? el.w ?? 22)) / 100 * actualMediaW));
+                const scaleH = el.type === 'avatar' ? scaleW : Math.round(((el.hPercent ?? el.h ?? el.wPercent ?? el.w ?? 22)) / 100 * actualMediaH);
 
                 const fmtLabel = `fmt${filterIndex}`, overlayLabel = `over${filterIndex}`;
                 let currentOverlayInput = `${overlayInputIndex}:v`;
@@ -256,12 +278,12 @@ exports.processPosterMedia = async ({
                     const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
 
                     const maskSvg = Buffer.from(isRound
-                        ? `<svg width="${scaleW}" height="${scaleH}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><ellipse cx="${scaleW / 2}" cy="${scaleH / 2}" rx="${scaleW / 2}" ry="${scaleH / 2}" fill="url(#f)"/></svg>`
-                        : `<svg width="${scaleW}" height="${scaleH}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><rect x="0" y="0" width="${scaleW}" height="${scaleH}" fill="url(#f)"/></svg>`
+                        ? `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><ellipse cx="${scaleW / 2}" cy="${scaleW / 2}" rx="${scaleW / 2}" ry="${scaleW / 2}" fill="url(#f)"/></svg>`
+                        : `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><rect x="0" y="0" width="${scaleW}" height="${scaleW}" fill="url(#f)"/></svg>`
                     );
 
                     await sharp(overlayDest)
-                        .resize(scaleW, scaleH, { fit: 'cover' })
+                        .resize(scaleW, scaleW, { fit: 'cover' }) // Force scaleH=scaleW for avatars
                         .composite([{ input: maskSvg, blend: 'dest-in' }])
                         .png().toFile(maskedAvatarPath);
 
@@ -280,13 +302,24 @@ exports.processPosterMedia = async ({
         }
 
         if (el.type === 'username' || el.type === 'text') {
-            const content = el.type === 'username' ? viewer?.userName : el.textConfig?.content;
+            const textStyle = el.style || el.textConfig || {};
+            const content = el.content || textStyle.content || (el.type === 'username' ? viewer?.userName : "");
+
             if (content) {
-                const xRaw = Math.round((el.xPercent / 100) * OUT_W);
-                const yRaw = Math.round((el.yPercent / 100) * actualMediaH);
-                const boxW = Math.round((el.wPercent / 100) * OUT_W);
-                const boxH = Math.round((el.hPercent / 100) * actualMediaH);
-                const fontSize = Math.round((el.textConfig?.fontSize || 24) * 2.0);
+                // 🚀 FIX: Use 1.8 multiplier for pixel parity (720 / 400 = 1.8)
+                const xRaw = Math.round(paddingX + ((el.xPercent ?? el.x ?? 10) / 100) * actualMediaW);
+                const yRaw = Math.round(((el.yPercent ?? el.y ?? 10) / 100) * actualMediaH);
+                const boxW = Math.round(((el.wPercent ?? el.w ?? 40) / 100) * actualMediaW);
+                const boxH = Math.round(((el.hPercent ?? el.h ?? 10) / 100) * actualMediaH);
+                const fontSize = Math.round((textStyle.fontSize || 24) * 1.8);
+
+                // 🚀 Resolve Font Path dynamically
+                const activeFontPath = getFontPath(
+                    textStyle.fontFamily,
+                    textStyle.fontWeight,
+                    textStyle.fontStyle
+                );
+
                 const textLabel = `text${filterIndex}`;
 
                 combinedFilters.push({
@@ -296,8 +329,8 @@ exports.processPosterMedia = async ({
                         x: `(${Math.round(xRaw)}) + ((${boxW}-tw)/2)`,
                         y: `(${Math.round(yRaw)}) + ((${boxH}-th)/2)`,
                         fontsize: fontSize,
-                        fontcolor: normalizeFfmpegColor(el.textConfig?.color || "white"),
-                        fontfile: FONT_PATH,
+                        fontcolor: normalizeFfmpegColor(textStyle.color || "white"),
+                        fontfile: activeFontPath,
                         shadowcolor: 'black@0.8', shadowx: 2, shadowy: 2
                     },
                     inputs: currentBase, outputs: textLabel
@@ -322,11 +355,8 @@ exports.processPosterMedia = async ({
         const ROW_1_Y = footerY + Math.round(15 * 1.8);
         const ROW_2_Y = footerY + Math.round(45 * 1.8);
 
-        let activeFontPath = FONT_PATH;
-        const family = footerConfig?.fontFamily || "";
-        if (family.includes('Dancing Script')) activeFontPath = getEscapedFontPath("DancingScript.ttf");
-        else if (family.includes('Pacifico')) activeFontPath = getEscapedFontPath("Pacifico.ttf");
-        else if (family.includes('Montserrat')) activeFontPath = getEscapedFontPath("Montserrat.ttf");
+        // 🚀 Use uniform Font Resolver for footer too
+        const activeFontPath = getFontPath(footerConfig?.fontFamily);
 
         if (showElements.name && viewer.userName) {
             const truncated = viewer.userName.length > 25 ? viewer.userName.substring(0, 22) + "..." : viewer.userName;

@@ -470,6 +470,291 @@ exports.getAllFeedsByUserId = async (req, res) => {
 };
 
 
+/* ------------------------------------------------
+   🎂 GET BIRTHDAY FEEDS
+   GET /web/api/get/feeds/birthday?page=1&limit=10
+   Category ID: 6990071590a65cd9632b2327
+--------------------------------------------------- */
+exports.getBirthdayFeeds = async (req, res) => {
+  console.log("🎂 START: getBirthdayFeeds");
+
+  const BIRTHDAY_CATEGORY_ID = new mongoose.Types.ObjectId("6990071590a65cd9632b2327");
+
+  let hiddenPostIds = [];
+  const canShow = (rule) => rule === "public";
+
+  try {
+    const rawUserId = req.Id || req.body.userId;
+    if (!rawUserId) return res.status(404).json({ message: "User ID Required" });
+    const userId = new mongoose.Types.ObjectId(rawUserId);
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
+    const { postType } = req.query;
+
+    /* ── 1. VIEWER PROFILE ────────────────────────────── */
+    const viewerProfile = await ProfileSettings.findOne({ userId })
+      .select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility")
+      .lean();
+
+    let viewerVisibility = null;
+    if (viewerProfile?.visibility) {
+      viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
+    }
+
+    const viewerUser = await User.findById(userId).select("email").lean();
+
+    let viewerSocialIcons = [];
+    if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
+      viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
+        .map(([platform, url]) => ({ platform, url: typeof url === "string" ? url.trim() : "", visible: true }))
+        .filter((i) => i.url);
+    }
+
+    const safeSocialLinks = viewerSocialIcons.filter((icon) => {
+      const rule = viewerVisibility?.socialLinks || "private";
+      return canShow(rule) && icon.visible !== false && !!icon.url;
+    });
+
+    const footerVisibilityConfig = {
+      showElements: {
+        name: canShow(viewerVisibility?.name || "public"),
+        userName: canShow(viewerVisibility?.userName || "public"),
+        email: canShow(viewerVisibility?.email || "private"),
+        phone: canShow(viewerVisibility?.phoneNumber || "private"),
+        socialIcons: safeSocialLinks.length > 0,
+      },
+      socialIcons: safeSocialLinks.map((icon) => ({ platform: icon.platform, visible: true, urlTemplate: icon.url })),
+    };
+
+    const viewer = {
+      id: userId,
+      name: canShow(viewerVisibility?.name || "public") ? viewerProfile?.name || "User" : "Private User",
+      userName: canShow(viewerVisibility?.userName || "public") ? viewerProfile?.userName || "user" : "private_user",
+      email: canShow(viewerVisibility?.email || "private") ? viewerUser?.email || null : null,
+      phoneNumber: canShow(viewerVisibility?.phoneNumber || "private") ? viewerProfile?.phoneNumber || null : null,
+      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar) || "https://via.placeholder.com/150",
+      socialLinks: safeSocialLinks,
+    };
+
+    /* ── 2. HIDDEN POSTS & NOT-INTERESTED CATEGORIES ─── */
+    const hiddenPosts = await HiddenPost.find({ userId }).select("postId -_id").lean();
+    hiddenPostIds = hiddenPosts.map((h) => h.postId);
+
+    /* ── 3. AGGREGATION (Birthday category hardcoded) ── */
+    const feeds = await Feed.aggregate([
+      {
+        $match: {
+          _id: { $nin: hiddenPostIds },
+          category: BIRTHDAY_CATEGORY_ID,
+          $or: [
+            { isScheduled: { $ne: true } },
+            { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] },
+          ],
+          isApproved: true,
+          isDeleted: false,
+          status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
+          ...(postType === "image"
+            ? { postType: { $in: ["image", "image+audio"] } }
+            : postType
+              ? { postType }
+              : {}),
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+
+      { $addFields: { effectiveCreatorId: { $ifNull: ["$postedBy.userId", "$createdByAccount"] } } },
+      { $lookup: { from: "Admin", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "admin" } },
+      { $lookup: { from: "Child_Admin", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "childAdmin" } },
+      { $lookup: { from: "User", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "userAccount" } },
+
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          let: { creatorId: "$effectiveCreatorId", role: "$roleRef" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $and: [{ $eq: ["$$role", "Admin"] }, { $eq: ["$adminId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$$role", "Child_Admin"] }, { $eq: ["$childAdminId", "$$creatorId"] }] },
+                    { $and: [{ $eq: ["$$role", "User"] }, { $eq: ["$userId", "$$creatorId"] }] },
+                  ],
+                },
+              },
+            },
+            { $project: { name: 1, userName: 1, profileAvatar: 1, modifyAvatar: 1, visibility: 1 } },
+          ],
+          as: "creatorProfile",
+        },
+      },
+      { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "ProfileVisibility", localField: "creatorProfile.visibility", foreignField: "_id", as: "fieldVisibility" } },
+      { $unwind: { path: "$fieldVisibility", preserveNullAndEmptyArrays: true } },
+
+      { $lookup: { from: "UserFeedActions", let: { fid: "$_id" }, pipeline: [{ $unwind: "$likedFeeds" }, { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$fid"] } } }, { $count: "count" }], as: "likesCountArr" } },
+      { $lookup: { from: "UserFeedActions", let: { fid: "$_id" }, pipeline: [{ $unwind: "$sharedFeeds" }, { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$fid"] } } }, { $count: "count" }], as: "sharesCountArr" } },
+      { $lookup: { from: "UserFeedActions", let: { fid: "$_id" }, pipeline: [{ $unwind: "$downloadedFeeds" }, { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$fid"] } } }, { $count: "count" }], as: "downloadsCountArr" } },
+      { $lookup: { from: "UserComments", let: { fid: "$_id" }, pipeline: [{ $match: { $expr: { $eq: ["$feedId", "$$fid"] } } }, { $count: "count" }], as: "commentsCountArr" } },
+      { $lookup: { from: "ImageStats", localField: "_id", foreignField: "imageId", as: "imageStats" } },
+      { $lookup: { from: "VideoStats", localField: "_id", foreignField: "videoId", as: "videoStats" } },
+      {
+        $addFields: {
+          viewsCountArr: {
+            $cond: {
+              if: { $eq: ["$postType", "image"] },
+              then: [{ count: { $ifNull: [{ $arrayElemAt: ["$imageStats.totalViews", 0] }, 0] } }],
+              else: [{ count: { $ifNull: [{ $arrayElemAt: ["$videoStats.totalViews", 0] }, 0] } }],
+            },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$userId", userId] } } },
+            {
+              $project: {
+                isLiked: { $in: ["$$fid", { $map: { input: "$likedFeeds", as: "i", in: "$$i.feedId" } }] },
+                isSaved: { $in: ["$$fid", { $map: { input: "$savedFeeds", as: "i", in: "$$i.feedId" } }] },
+                isDisliked: { $in: ["$$fid", { $map: { input: "$disLikeFeeds", as: "i", in: "$$i.feedId" } }] },
+              },
+            },
+          ],
+          as: "userActions",
+        },
+      },
+      {
+        $lookup: {
+          from: "Follows",
+          let: { creatorId: "$effectiveCreatorId" },
+          pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$creatorId", "$$creatorId"] }, { $eq: ["$followerId", userId] }] } } }, { $limit: 1 }],
+          as: "followInfo",
+        },
+      },
+      {
+        $addFields: {
+          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCountArr.count", 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCountArr.count", 0] }, 0] },
+          downloadCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCountArr.count", 0] }, 0] },
+          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCountArr.count", 0] }, 0] },
+          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCountArr.count", 0] }, 0] },
+          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
+          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
+          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
+          isFollowing: { $gt: [{ $size: "$followInfo" }, 0] },
+          creatorData: {
+            $let: {
+              vars: {
+                rawAccount: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ["$roleRef", "Admin"] }, then: { $arrayElemAt: ["$admin", 0] } },
+                      { case: { $eq: ["$roleRef", "Child_Admin"] }, then: { $arrayElemAt: ["$childAdmin", 0] } },
+                      { case: { $eq: ["$roleRef", "User"] }, then: { $arrayElemAt: ["$userAccount", 0] } },
+                    ],
+                    default: null,
+                  },
+                },
+              },
+              in: {
+                id: "$effectiveCreatorId",
+                userName: { $ifNull: ["$creatorProfile.userName", "$$rawAccount.userName", "unknown"] },
+                name: { $ifNull: ["$creatorProfile.name", "$$rawAccount.name", "User"] },
+                avatar: {
+                  $cond: {
+                    if: {
+                      $or: [
+                        { $eq: ["$effectiveCreatorId", userId] },
+                        { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                        { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] },
+                        { $eq: ["$roleRef", "Admin"] },
+                        { $eq: ["$roleRef", "Child_Admin"] },
+                      ],
+                    },
+                    then: { $ifNull: ["$creatorProfile.modifyAvatar", "$creatorProfile.profileAvatar", "https://via.placeholder.com/150"] },
+                    else: "https://via.placeholder.com/150",
+                  },
+                },
+                role: "$roleRef",
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          admin: 0, childAdmin: 0, userAccount: 0, creatorProfile: 0,
+          postedBy: 0, createdByAccount: 0, effectiveCreatorId: 0, fileHash: 0, __v: 0,
+        },
+      },
+    ]);
+
+    /* ── 4. POST-PROCESSING ─────────────────────────── */
+    const enrichedFeeds = feeds.map((feed) => {
+      const isTemplateMode = feed.uploadType === "template";
+      const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
+
+      let designState = null;
+      if (isTemplateMode && feed.designMetadata) {
+        designState = {
+          elements: feed.designMetadata.overlayElements || [],
+          mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
+          audioConfig: feed.designMetadata.audioConfig || null,
+          themeColors: themeColor,
+        };
+      }
+
+      return {
+        ...feed,
+        feedId: feed._id,
+        uploadType: feed.uploadType || "normal",
+        mediaUrl: getMediaUrl(feed.mediaUrl),
+        creatorData: { ...feed.creatorData, avatar: getMediaUrl(feed.creatorData?.avatar) },
+        footerDisplay: isTemplateMode
+          ? { ...(feed.designMetadata?.footerConfig || {}), ...footerVisibilityConfig, colors: themeColor }
+          : { enabled: false },
+        designState,
+        stats: {
+          likes: feed.likesCount || 0,
+          views: feed.viewsCount || 0,
+          comments: feed.commentsCount || 0,
+          shares: feed.shareCount || 0,
+          downloads: feed.downloadCount || 0,
+        },
+      };
+    });
+
+    const total = await Feed.countDocuments({
+      _id: { $nin: hiddenPostIds },
+      category: BIRTHDAY_CATEGORY_ID,
+      $or: [
+        { isScheduled: { $ne: true } },
+        { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] },
+      ],
+      isApproved: true,
+      isDeleted: false,
+      status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
+      ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } : postType ? { postType } : {}),
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        viewer,
+        feeds: enrichedFeeds,
+        pagination: { page, limit, total },
+      },
+    });
+  } catch (err) {
+    console.error("❌ getBirthdayFeeds ERROR:", err.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 
 
