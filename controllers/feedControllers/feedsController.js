@@ -2119,7 +2119,9 @@ exports.getTrendingFeeds = async (req, res) => {
       return res.status(400).json({ message: "userId is required" });
     }
 
-    const { page = 1, limit = 10, postType } = req.query;
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
+    const { postType } = req.query;
     const redisKey = `feeds:trending:${userId}:${page}:${limit}:${postType || 'all'}`;
 
     // Try cache
