@@ -2302,7 +2302,9 @@ exports.getTrendingFeeds = async (req, res) => {
       // H. Final Projection
       {
         $project: {
-          _id: 1, feedId: "$_id", type: 1, contentUrl: 1, category: 1, postType: 1, createdAt: 1,
+          _id: 1, feedId: "$_id", type: 1, mediaUrl: 1, contentUrl: 1, category: 1, postType: 1, createdAt: 1,
+          uploadType: 1, uploadMode: 1, caption: 1, hasFooter: { $ifNull: ["$hasFooter", false] },
+          designMetadata: 1,
           likesCount: 1, shareCount: 1, downloadCount: 1, viewsCount: 1,
           isLiked: 1, isSaved: 1, isDisliked: 1,
           creatorData: {
@@ -2324,10 +2326,23 @@ exports.getTrendingFeeds = async (req, res) => {
     // Map media URLs
     const finalFeeds = feeds.map((f, index) => ({
       ...f,
-      contentUrl: getMediaUrl(f.contentUrl),
-      creatorData: {
-        ...f.creatorData,
-        profileAvatar: getMediaUrl(f.creatorData.modifyAvatar || f.creatorData.profileAvatar)
+      contentUrl: getMediaUrl(f.mediaUrl || f.contentUrl),
+      type: f.postType || f.type || 'image',
+      postedBy: {
+        id: f.creatorData?._id,
+        name: f.creatorData?.userName || "user",
+        avatar: getMediaUrl(f.creatorData?.modifyAvatar || f.creatorData?.profileAvatar)
+      },
+      stats: {
+        likes: f.likesCount || 0,
+        shares: f.shareCount || 0,
+        downloads: f.downloadCount || 0,
+        views: f.viewsCount || 0
+      },
+      userInteractions: {
+        isLiked: f.isLiked || false,
+        isSaved: f.isSaved || false,
+        isDisliked: f.isDisliked || false
       },
       timeAgo: feedTimeCalculator(f.createdAt),
       rank: ((page - 1) * limit) + index + 1
