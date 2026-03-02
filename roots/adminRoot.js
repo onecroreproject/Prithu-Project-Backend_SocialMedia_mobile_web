@@ -146,6 +146,11 @@ const {
 } = require('../controllers/blogController');
 
 const {
+    blogUpload,
+    processBlogImage
+} = require('../middlewares/services/blogUpload');
+
+const {
     getSeoDashboardStats,
     getSeoConfig,
     updateSeoConfig,
@@ -425,8 +430,8 @@ router.delete('/admin/party/:id', auth, deleteParty);
 
 /* --------------------- Admin Blog Management --------------------- */
 router.get('/admin/blogs/all', auth, getAllBlogsAdmin);
-router.post('/admin/blogs/create', auth, createBlog);
-router.put('/admin/blogs/update/:id', auth, updateBlog);
+router.post('/admin/blogs/create', auth, blogUpload, processBlogImage, createBlog);
+router.put('/admin/blogs/update/:id', auth, blogUpload, processBlogImage, updateBlog);
 router.delete('/admin/blogs/delete/:id', auth, deleteBlog);
 router.patch('/admin/blogs/toggle-status/:id', auth, toggleBlogStatus);
 

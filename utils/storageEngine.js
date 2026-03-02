@@ -59,6 +59,9 @@ exports.saveFile = async (file, options = {}) => {
         case 'temp':
             targetDir = path.join(BASE_MEDIA_DIR, 'temp', jobId || 'default');
             break;
+        case 'blog':
+            targetDir = path.join(BASE_MEDIA_DIR, 'blogs');
+            break;
         default:
             targetDir = path.join(BASE_MEDIA_DIR, 'uploads', 'others');
     }

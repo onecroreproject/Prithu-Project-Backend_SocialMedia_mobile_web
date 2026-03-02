@@ -37,11 +37,19 @@ const {
     getFeedsByHashtag,
     singleFeedById,
     getBirthdayFeeds,
+    getAnniversaryFeeds,
+    getPoliticsFeeds,
 } = require('../controllers/feedControllers/feedsController');
 
 const {
     getAllPublicFeeds
 } = require('../controllers/feedControllers/publicFeedController');
+
+const {
+    getStates,
+    getPartiesByState,
+    getLeadersByParty,
+} = require('../controllers/feedControllers/publicPartyController');
 
 const {
     getUserDetailWithId,
@@ -112,6 +120,8 @@ const {
     directDownloadFeed,
     getUserLikedFeedsForSaved,
     birthdayDownloadFeed,
+    anniversaryDownloadFeed,
+    politicsDownloadFeed,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 const {
@@ -345,6 +355,8 @@ router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
 router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
 router.get('/user/feed/check-limit', auth, checkDownloadLimit);
 router.post('/user/feed/:feedId/birthday-download', birthdayDownloadFeed); // 🎂 Birthday poster download
+router.post('/user/feed/:feedId/anniversary-download', anniversaryDownloadFeed); // 💍 Anniversary poster download
+router.post('/user/feed/:feedId/politics-download', politicsDownloadFeed); // 🗳️ Politics poster download
 router.post('/user/feed/:feedId/direct-download', directDownloadFeed);
 
 /* --------------------- Categories --------------------- */
@@ -389,6 +401,8 @@ router.get('/get/feed/:feedId', auth, getSingleFeedById);
 router.get('/get/feeds/by/creator/:feedId', auth, getFeedsByCreator);
 router.get('/get/feeds/by/hashtag/:tag', auth, getFeedsByHashtag);
 router.get('/get/feeds/birthday', auth, getBirthdayFeeds); // 🎂 Birthday category feeds
+router.get('/get/feeds/anniversary', auth, getAnniversaryFeeds); // 💍 Anniversary category feeds
+router.get('/get/feeds/politics', auth, getPoliticsFeeds); // 🗳️ Politics category feeds
 router.post('/user/watching/vidoes', auth, userVideoViewCount);
 router.post('/feed/view/video/:id', auth, userVideoViewCount); // Alias
 router.post('/user/image/view/count', auth, userImageViewCount);
@@ -461,5 +475,10 @@ router.get("/footer", getFooterConfig);
 router.get('/static-page/:slug', getPageBySlug);
 router.get('/blogs/all', getAllBlogs);
 router.get('/blogs/:slug', getBlogBySlug);
+
+/* --------------------- Politics / Parties (Public) --------------------- */
+router.get('/parties/states', getStates);
+router.get('/parties/by-state/:state', getPartiesByState);
+router.get('/parties/:partyId/leaders', getLeadersByParty);
 
 module.exports = router;

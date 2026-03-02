@@ -113,14 +113,30 @@ const normalizeFfmpegColor = (c) => {
     return "black";
 };
 
-const getBrightness = (hex) => {
-    if (!hex) return 0;
-    const cleanHex = hex.replace('#', '');
-    if (cleanHex.length !== 6) return 0;
-    const r = parseInt(cleanHex.substring(0, 2), 16);
-    const g = parseInt(cleanHex.substring(2, 4), 16);
-    const b = parseInt(cleanHex.substring(4, 6), 16);
-    return (r * 299 + g * 587 + b * 114) / 1000;
+const getBrightness = (color) => {
+    if (!color) return 0;
+    const s = String(color).trim();
+    // Handle rgb() / rgba()
+    const rgbMatch = s.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    if (rgbMatch) {
+        const r = parseInt(rgbMatch[1]), g = parseInt(rgbMatch[2]), b = parseInt(rgbMatch[3]);
+        return (r * 299 + g * 587 + b * 114) / 1000;
+    }
+    // Handle hex
+    const cleanHex = s.replace('#', '');
+    if (cleanHex.length === 3) {
+        const r = parseInt(cleanHex[0] + cleanHex[0], 16);
+        const g = parseInt(cleanHex[1] + cleanHex[1], 16);
+        const b = parseInt(cleanHex[2] + cleanHex[2], 16);
+        return (r * 299 + g * 587 + b * 114) / 1000;
+    }
+    if (cleanHex.length === 6) {
+        const r = parseInt(cleanHex.substring(0, 2), 16);
+        const g = parseInt(cleanHex.substring(2, 4), 16);
+        const b = parseInt(cleanHex.substring(4, 6), 16);
+        return (r * 299 + g * 587 + b * 114) / 1000;
+    }
+    return 0;
 };
 
 const downloadSocialIcon = async (platform, dest, color = 'white', size = 48) => {
@@ -219,9 +235,15 @@ exports.processPosterMedia = async ({
     const maxMediaH = (footerEnabled) ? (OUT_H - footerH) : OUT_H;
     const scaleFactor = Math.min(OUT_W / sourceMeta.width, maxMediaH / sourceMeta.height);
     const actualMediaW = Math.round(sourceMeta.width * scaleFactor);
-    const actualMediaH = Math.round(sourceMeta.height * scaleFactor);
+    let actualMediaH = Math.round(sourceMeta.height * scaleFactor);
+
+    // 🚀 FFmpeg libx264 requires even dimensions for yuv420p. 
+    // Ensure height is even to avoid "Error while opening encoder"
+    if (actualMediaH % 2 !== 0) actualMediaH += 1;
+
     const paddingX = (OUT_W - actualMediaW) / 2;
-    const finalOUT_H = actualMediaH + footerH;
+    let finalOUT_H = actualMediaH + footerH;
+    if (finalOUT_H % 2 !== 0) finalOUT_H += 1;
     const footerY = actualMediaH;
 
     const footerBgColor = normalizeFfmpegColor(footerConfig?.backgroundColor || "#1a1a1a");
@@ -275,11 +297,18 @@ exports.processPosterMedia = async ({
                 if (el.type === 'avatar') {
                     const shape = el.avatarConfig?.shape || 'circle';
                     const isRound = shape === 'circle' || shape === 'round';
+                    const noFade = !!el.noFade; // leaders/party-logos skip the bottom fade
                     const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
 
-                    const maskSvg = Buffer.from(isRound
-                        ? `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><ellipse cx="${scaleW / 2}" cy="${scaleW / 2}" rx="${scaleW / 2}" ry="${scaleW / 2}" fill="url(#f)"/></svg>`
-                        : `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><rect x="0" y="0" width="${scaleW}" height="${scaleW}" fill="url(#f)"/></svg>`
+                    // Sharp clip (no fade) for leaders; gradient fade for profile avatars
+                    const maskSvg = Buffer.from(
+                        noFade
+                            ? (isRound
+                                ? `<svg width="${scaleW}" height="${scaleW}"><ellipse cx="${scaleW / 2}" cy="${scaleW / 2}" rx="${scaleW / 2}" ry="${scaleW / 2}" fill="white"/></svg>`
+                                : `<svg width="${scaleW}" height="${scaleW}"><rect x="0" y="0" width="${scaleW}" height="${scaleW}" rx="${Math.round(scaleW * 0.1)}" ry="${Math.round(scaleW * 0.1)}" fill="white"/></svg>`)
+                            : (isRound
+                                ? `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><ellipse cx="${scaleW / 2}" cy="${scaleW / 2}" rx="${scaleW / 2}" ry="${scaleW / 2}" fill="url(#f)"/></svg>`
+                                : `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><rect x="0" y="0" width="${scaleW}" height="${scaleW}" fill="url(#f)"/></svg>`)
                     );
 
                     await sharp(overlayDest)
@@ -341,10 +370,9 @@ exports.processPosterMedia = async ({
         }
     }
 
-    // Footer
+    // Footer background — spans media content width only (not the black side padding)
     if (footerEnabled) {
-        // Footer background should span full OUT_W (720px) to match card preview
-        combinedFilters.push({ filter: "drawbox", options: { x: 0, y: footerY, w: OUT_W, h: footerH, c: footerBgColor, t: "fill" }, inputs: currentBase, outputs: "footer_bg" });
+        combinedFilters.push({ filter: "drawbox", options: { x: Math.round(paddingX), y: footerY, w: actualMediaW, h: footerH, c: footerBgColor, t: "fill" }, inputs: currentBase, outputs: "footer_bg" });
         currentBase = "footer_bg";
 
         const showElements = footerConfig?.showElements || {};
@@ -364,7 +392,7 @@ exports.processPosterMedia = async ({
                 filter: "drawtext",
                 options: {
                     text: escapeDrawText(truncated),
-                    x: (showElements.socialIcons) ? Math.round(20) : '(w-text_w)/2',
+                    x: (showElements.socialIcons) ? Math.round(paddingX + 20) : `(${Math.round(paddingX)} + (${actualMediaW}-text_w)/2)`,
                     y: ROW_1_Y,
                     fontsize: Math.round(14 * 1.8 * (footerConfig.usernameScale || 1)),
                     fontcolor: textColor, fontfile: `'${activeFontPath}'`,
@@ -378,7 +406,7 @@ exports.processPosterMedia = async ({
         if (showElements.socialIcons && footerConfig.socialIcons?.length > 0) {
             const visible = footerConfig.socialIcons.filter(s => s.visible);
             const size = Math.round(26 * 1.2 * (footerConfig.socialScale || 1));
-            let curX = OUT_W - Math.round(20 * 1.8) - size;
+            let curX = Math.round(paddingX + actualMediaW) - Math.round(20 * 1.8) - size;
             for (let i = 0; i < visible.length; i++) {
                 const iPath = path.join(tempDir, `soc_${i}.png`);
                 if (await downloadSocialIcon(visible[i].platform, iPath, iconColor, size)) {
@@ -400,7 +428,7 @@ exports.processPosterMedia = async ({
                 filter: "drawtext",
                 options: {
                     text: escapeDrawText(viewer.email),
-                    x: Math.round(20), y: Math.round(ROW_2_Y - (eSize / 2)),
+                    x: Math.round(paddingX + 20), y: Math.round(ROW_2_Y - (eSize / 2)),
                     fontsize: eSize, fontcolor: textColor, fontfile: `'${activeFontPath}'`
                 },
                 inputs: currentBase, outputs: "fem"
@@ -413,7 +441,7 @@ exports.processPosterMedia = async ({
                 filter: "drawtext",
                 options: {
                     text: escapeDrawText(viewer.phone || viewer.phoneNumber),
-                    x: `${Math.round(OUT_W - 20)}-text_w`,
+                    x: `${Math.round(paddingX + actualMediaW - 20)}-text_w`,
                     y: Math.round(ROW_2_Y - (pSize / 2)),
                     fontsize: pSize, fontcolor: textColor, fontfile: `'${activeFontPath}'`
                 },

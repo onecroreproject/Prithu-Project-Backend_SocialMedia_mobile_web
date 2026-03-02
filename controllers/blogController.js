@@ -45,9 +45,9 @@ exports.createBlog = async (req, res) => {
         const newBlog = new Blog({
             title,
             content,
-            image,
+            image: req.blogImage ? req.blogImage.dbPath : image,
             slug,
-            isPublished: isPublished !== undefined ? isPublished : true
+            isPublished: isPublished !== undefined ? (isPublished === 'true' || isPublished === true) : true
         });
 
         await newBlog.save();
@@ -78,8 +78,15 @@ exports.updateBlog = async (req, res) => {
         }
 
         if (content) blog.content = content;
-        if (image) blog.image = image;
-        if (isPublished !== undefined) blog.isPublished = isPublished;
+        if (req.blogImage) {
+            blog.image = req.blogImage.dbPath;
+        } else if (image) {
+            blog.image = image;
+        }
+
+        if (isPublished !== undefined) {
+            blog.isPublished = isPublished === 'true' || isPublished === true;
+        }
 
         await blog.save();
         res.status(200).json({ message: "Blog updated successfully", blog });

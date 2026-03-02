@@ -743,6 +743,399 @@ exports.birthdayDownloadFeed = async (req, res) => {
   }
 };
 
+/* ------------------------------------------------------------------
+   💍 ANNIVERSARY POSTER DOWNLOAD
+   POST /api/user/feed/:feedId/anniversary-download
+   Body: { token, userId, customMetadata: { avatarConfigs, textOverlays, footerConfig } }
+   Response: raw .mp4 blob streamed directly to client
+------------------------------------------------------------------- */
+exports.anniversaryDownloadFeed = async (req, res) => {
+  const { feedId } = req.params;
+  let userId = req.Id || req.user?.id || req.body?.userId;
+  const queryToken = req.body?.token || req.query?.token;
+  let customMetadata = req.body?.customMetadata || {};
+
+  if (typeof customMetadata === 'string') {
+    try { customMetadata = JSON.parse(customMetadata); }
+    catch (e) { customMetadata = {}; }
+  }
+
+  // Manual JWT fallback (browser fetch sends token in body)
+  if (!req.Id && !req.user && queryToken) {
+    try {
+      const decoded = jwt.verify(queryToken, process.env.JWT_SECRET || "your_secret_key");
+      userId = decoded.userId || decoded.id;
+    } catch {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+  }
+
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ message: "Invalid user session" });
+  }
+
+  if (!feedId || !mongoose.Types.ObjectId.isValid(feedId)) {
+    return res.status(400).json({ message: "Invalid feed ID" });
+  }
+
+  const tempDir = require('path').join(
+    __dirname, "../../uploads/temp_anniversary",
+    `adl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  );
+
+  const cleanup = () => {
+    try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) { }
+  };
+
+  try {
+    console.log(`[AnniversaryDL] feedId=${feedId} userId=${userId}`);
+
+    const feed = await Feed.findById(feedId).lean();
+    if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    const [user, profile] = await Promise.all([
+      User.findById(userId).lean(),
+      ProfileSettings.findOne({ userId }).populate('visibility').lean(),
+    ]);
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    const visibility = profile?.visibility || {};
+
+    const viewer = {
+      id: user._id,
+      userName:
+        visibility.userName === 'public' || visibility.displayName === 'public'
+          ? profile?.userName || profile?.name || user.userName || 'User'
+          : 'User',
+      email: visibility.email === 'public' ? user.email || profile?.email || null : null,
+      phoneNumber:
+        visibility.phoneNumber === 'public'
+          ? profile?.phoneNumber || user.phoneNumber || null
+          : null,
+      profileAvatar:
+        visibility.profileAvatar === 'public'
+          ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
+          : null,
+    };
+
+    // ── Build designMetadata from feed + merge client customMetadata ──
+    let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
+    if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+
+    // 1️⃣  Avatar overlays — replace existing avatar slots with editor values
+    if (Array.isArray(customMetadata.avatarConfigs) && customMetadata.avatarConfigs.length > 0) {
+      designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+      customMetadata.avatarConfigs.forEach((av, idx) => {
+        designMetadata.overlayElements.push({
+          id: `anniversary-avatar-${idx}`,
+          type: 'avatar',
+          xPercent: av.x,
+          yPercent: av.y,
+          wPercent: av.w,
+          hPercent: av.h,
+          visible: true,
+          zIndex: 110 + idx,
+          mediaConfig: { url: av.img },
+          avatarConfig: { shape: av.shape || 'circle' },
+        });
+      });
+    }
+
+    // 2️⃣  Text overlays — replace existing text/username slots with editor values
+    if (Array.isArray(customMetadata.textOverlays) && customMetadata.textOverlays.length > 0) {
+      designMetadata.overlayElements = designMetadata.overlayElements.filter(
+        el => el.type !== 'text' && el.type !== 'username'
+      );
+      customMetadata.textOverlays.forEach((ov, idx) => {
+        designMetadata.overlayElements.push({
+          id: ov.id || `anniversary-text-${idx}`,
+          type: ov.type || 'text',
+          xPercent: ov.x,
+          yPercent: ov.y,
+          wPercent: ov.w,
+          hPercent: ov.h,
+          visible: ov.visible !== false,
+          zIndex: 120 + idx,
+          textConfig: {
+            content: ov.content || '',
+            fontSize: ov.style?.fontSize || 24,
+            color: ov.style?.color || '#ffffff',
+            fontFamily: ov.style?.fontFamily || 'Inter',
+            fontWeight: ov.style?.fontWeight || 'bold',
+            align: ov.style?.align || 'center',
+          },
+        });
+      });
+    }
+
+    // 3️⃣  Footer config - Explicitly disable for anniversary posters
+    designMetadata.hasFooter = false;
+    delete designMetadata.footerConfig;
+
+    // ── FFmpeg Processing via processPosterMedia ──
+    const { ffmpegCommand, tempSourcePath } = await processPosterMedia({
+      feed: { ...feed, mediaUrl: getMediaUrl(feed.mediaUrl) },
+      viewer,
+      designMetadata,
+      tempDir,
+    });
+
+    const finalOutputPath = path.join(tempDir, `anniversary_${feedId}.mp4`);
+    const filename = `anniversary_poster_${feedId.slice(-4)}.mp4`;
+
+    req.on('close', () => console.warn(`[AnniversaryDL] Client disconnected early`));
+
+    ffmpegCommand
+      .on('start', (cmd) => console.log(`[AnniversaryDL] FFmpeg start: ${cmd}`))
+      .on('stderr', (line) => {
+        if (/error|invalid|failed/i.test(line)) console.error(`[AnniversaryDL] STDERR: ${line}`);
+      })
+      .on('error', (err) => {
+        console.error('[AnniversaryDL] FFmpeg error:', err.message);
+        if (!res.headersSent) res.status(500).json({ error: 'Video processing failed' });
+        cleanup();
+      })
+      .on('end', async () => {
+        console.log('[AnniversaryDL] Encoding done. Sending file...');
+        if (!fs.existsSync(finalOutputPath)) {
+          if (!res.headersSent) res.status(500).json({ error: 'Output file missing' });
+          return cleanup();
+        }
+
+        res.download(finalOutputPath, filename, async (err) => {
+          if (err) {
+            console.error('[AnniversaryDL] Stream error:', err.message);
+          } else {
+            // Record download action
+            try {
+              await UserFeedActions.findOneAndUpdate(
+                { userId },
+                { $push: { downloadedFeeds: { feedId, downloadedAt: new Date() } } },
+                { upsert: true }
+              );
+              await logUserActivity({
+                userId,
+                actionType: 'DOWNLOAD_POST',
+                targetId: feedId,
+                targetModel: 'Feed',
+                metadata: { platform: 'web', type: 'anniversary' },
+              });
+            } catch (e) {
+              console.error('[AnniversaryDL] Activity record error:', e.message);
+            }
+          }
+          cleanup();
+        });
+      })
+      .save(finalOutputPath);
+
+  } catch (err) {
+    console.error('[AnniversaryDL] System error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    cleanup();
+  }
+};
+
+/* ------------------------------------------------------------------
+   🗳️  POLITICS POSTER DOWNLOAD
+   POST /web/api/user/feed/:feedId/politics-download
+   Body: { token, userId, customMetadata: { avatarConfigs, leaderOverlays, footerConfig } }
+   Response: raw .mp4 blob streamed directly to client
+------------------------------------------------------------------- */
+exports.politicsDownloadFeed = async (req, res) => {
+  const { feedId } = req.params;
+  let userId = req.Id || req.user?.id || req.body?.userId;
+  const queryToken = req.body?.token || req.query?.token;
+  let customMetadata = req.body?.customMetadata || {};
+
+  if (typeof customMetadata === 'string') {
+    try { customMetadata = JSON.parse(customMetadata); }
+    catch (e) { customMetadata = {}; }
+  }
+
+  // Manual JWT fallback
+  if (!req.Id && !req.user && queryToken) {
+    try {
+      const decoded = jwt.verify(queryToken, process.env.JWT_SECRET || "your_secret_key");
+      userId = decoded.userId || decoded.id;
+    } catch {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+  }
+
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(401).json({ message: "Invalid user session" });
+  }
+
+  if (!feedId || !mongoose.Types.ObjectId.isValid(feedId)) {
+    return res.status(400).json({ message: "Invalid feed ID" });
+  }
+
+  const tempDir = require('path').join(
+    __dirname, "../../uploads/temp_direct",
+    `pdl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+  );
+
+  const cleanup = () => {
+    try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) { }
+  };
+
+  try {
+    console.log(`[PoliticsDL] feedId=${feedId} userId=${userId}`);
+
+    const feed = await Feed.findById(feedId).lean();
+    if (!feed) return res.status(404).json({ message: "Feed not found" });
+
+    const [user, profile] = await Promise.all([
+      User.findById(userId).lean(),
+      ProfileSettings.findOne({ userId }).populate('visibility').lean(),
+    ]);
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    const visibility = profile?.visibility || {};
+
+    const viewer = {
+      id: user._id,
+      userName:
+        visibility.userName === 'public' || visibility.displayName === 'public'
+          ? profile?.userName || profile?.name || user.userName || 'User'
+          : 'User',
+      email: visibility.email === 'public' ? user.email || profile?.email || null : null,
+      phoneNumber:
+        visibility.phoneNumber === 'public'
+          ? profile?.phoneNumber || user.phoneNumber || null
+          : null,
+      profileAvatar:
+        visibility.profileAvatar === 'public'
+          ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
+          : null,
+    };
+
+    // ── Build designMetadata from feed + merge client customMetadata ──
+    let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
+    if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+
+    // 1️⃣  Avatar overlays (profile photo)
+    if (Array.isArray(customMetadata.avatarConfigs) && customMetadata.avatarConfigs.length > 0) {
+      designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+      customMetadata.avatarConfigs.forEach((av, idx) => {
+        designMetadata.overlayElements.push({
+          id: `politics-avatar-${idx}`,
+          type: 'avatar',
+          xPercent: av.x,
+          yPercent: av.y,
+          wPercent: av.w,
+          hPercent: av.h,
+          visible: true,
+          zIndex: 110 + idx,
+          mediaConfig: { url: av.img },
+          avatarConfig: { shape: av.shape || 'circle' },
+        });
+      });
+    }
+
+    // 2️⃣  Leader / party-logo overlays — treated as circle-avatar overlays, no fade
+    if (Array.isArray(customMetadata.leaderOverlays) && customMetadata.leaderOverlays.length > 0) {
+      customMetadata.leaderOverlays.forEach((ov, idx) => {
+        designMetadata.overlayElements.push({
+          id: ov.id || `politics-leader-${idx}`,
+          type: 'avatar',
+          xPercent: ov.x,
+          yPercent: ov.y,
+          wPercent: ov.w,
+          hPercent: ov.h,
+          visible: true,
+          zIndex: ov.zIndex || (140 + idx),
+          mediaConfig: { url: ov.img },
+          avatarConfig: { shape: ov.type === 'party-logo' ? 'square' : 'circle' },
+          noFade: true, // skip bottom gradient — use clean circle/rect mask
+        });
+      });
+    }
+
+    // 3️⃣  Footer config — only apply if user enabled it
+    if (customMetadata.footerConfig?.showFooter) {
+      designMetadata.hasFooter = true;
+      designMetadata.footerConfig = {
+        ...designMetadata.footerConfig,
+        ...customMetadata.footerConfig,
+        enabled: true,
+      };
+      // Show email/phone only if public
+      if (designMetadata.footerConfig.showElements) {
+        if (!viewer.email) designMetadata.footerConfig.showElements.email = false;
+        if (!viewer.phoneNumber) designMetadata.footerConfig.showElements.phone = false;
+      }
+    } else {
+      designMetadata.hasFooter = false;
+      delete designMetadata.footerConfig;
+    }
+
+    // ── FFmpeg Processing ──
+    const { ffmpegCommand, tempSourcePath } = await processPosterMedia({
+      feed: { ...feed, mediaUrl: getMediaUrl(feed.mediaUrl) },
+      viewer,
+      designMetadata,
+      tempDir,
+    });
+
+    const finalOutputPath = path.join(tempDir, `politics_${feedId}.mp4`);
+    const filename = `politics_poster_${feedId.slice(-4)}.mp4`;
+
+    req.on('close', () => console.warn(`[PoliticsDL] Client disconnected early`));
+
+    ffmpegCommand
+      .on('start', (cmd) => console.log(`[PoliticsDL] FFmpeg start: ${cmd}`))
+      .on('stderr', (line) => {
+        if (/error|invalid|failed/i.test(line)) console.error(`[PoliticsDL] STDERR: ${line}`);
+      })
+      .on('error', (err) => {
+        console.error('[PoliticsDL] FFmpeg error:', err.message);
+        if (!res.headersSent) res.status(500).json({ error: 'Video processing failed' });
+        cleanup();
+      })
+      .on('end', async () => {
+        console.log('[PoliticsDL] Encoding done. Sending file...');
+        if (!fs.existsSync(finalOutputPath)) {
+          if (!res.headersSent) res.status(500).json({ error: 'Output file missing' });
+          return cleanup();
+        }
+
+        res.download(finalOutputPath, filename, async (err) => {
+          if (err) {
+            console.error('[PoliticsDL] Stream error:', err.message);
+          } else {
+            try {
+              await UserFeedActions.findOneAndUpdate(
+                { userId },
+                { $push: { downloadedFeeds: { feedId, downloadedAt: new Date() } } },
+                { upsert: true }
+              );
+              await logUserActivity({
+                userId,
+                actionType: 'DOWNLOAD_POST',
+                targetId: feedId,
+                targetModel: 'Feed',
+                metadata: { platform: 'web', type: 'politics' },
+              });
+            } catch (e) {
+              console.error('[PoliticsDL] Activity record error:', e.message);
+            }
+          }
+          cleanup();
+        });
+      })
+      .save(finalOutputPath);
+
+  } catch (err) {
+    console.error('[PoliticsDL] System error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+    cleanup();
+  }
+};
+
 exports.requestDownloadFeed = async (req, res) => {
   const userId = req.Id || req.body.userId || req.query.userId;
   const feedId = req.params.feedId;
