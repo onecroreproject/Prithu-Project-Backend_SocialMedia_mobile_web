@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { prithuDB } = require('../../database');
 
 const userUpdateStatusSchema = new mongoose.Schema({
     userId: {
@@ -28,4 +29,4 @@ userUpdateStatusSchema.index({ userId: 1, updateId: 1 }, { unique: true });
 // Index for fast unread count calculation
 userUpdateStatusSchema.index({ userId: 1, isRead: 1 });
 
-module.exports = mongoose.model('UserUpdateStatus', userUpdateStatusSchema);
+module.exports = prithuDB.model('UserUpdateStatus', userUpdateStatusSchema);

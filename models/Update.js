@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { prithuDB } = require('../database');
 
 const updateSchema = new mongoose.Schema({
     title: {
@@ -32,4 +33,4 @@ const updateSchema = new mongoose.Schema({
     timestamps: true
 });
 
-module.exports = mongoose.model('Update', updateSchema);
+module.exports = prithuDB.model('Update', updateSchema);

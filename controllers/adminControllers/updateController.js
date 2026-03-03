@@ -1,4 +1,6 @@
 const Update = require('../../models/Update');
+const User = require('../../models/userModels/userModel');
+const UserUpdateStatus = require('../../models/userModels/userUpdateStatusModel');
 const { saveFile, getMediaUrl } = require('../../utils/storageEngine');
 const fs = require('fs');
 const path = require('path');
@@ -78,9 +80,27 @@ exports.createUpdate = async (req, res) => {
 
 exports.getAllUpdatesAdmin = async (req, res) => {
     try {
-        const updates = await Update.find().sort({ createdAt: -1 });
-        res.status(200).json({ success: true, updates });
+        const updates = await Update.find().sort({ createdAt: -1 }).lean();
+
+        // Fetch total active users for percentage calculation
+        const totalUsers = await User.countDocuments({ isActive: true });
+
+        // Fetch read stats for each update
+        const updatesWithStats = await Promise.all(updates.map(async (u) => {
+            const readCount = await UserUpdateStatus.countDocuments({
+                updateId: u._id,
+                isRead: true
+            });
+            return {
+                ...u,
+                readCount,
+                totalUsers
+            };
+        }));
+
+        res.status(200).json({ success: true, updates: updatesWithStats });
     } catch (error) {
+        console.error("Get updates error:", error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -111,6 +131,21 @@ exports.updateUpdate = async (req, res) => {
         }
 
         await update.save();
+
+        // Real-time notification for the update edit
+        const io = getIO();
+        if (io) {
+            const payload = {
+                updateId: update._id,
+                title: update.title,
+                targetRole: update.targetRole
+            };
+            if (update.targetRole === 'all') {
+                io.emit('new-update', payload);
+            } else {
+                io.to(update.targetRole).emit('new-update', payload);
+            }
+        }
 
         res.status(200).json({
             success: true,
