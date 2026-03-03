@@ -66,6 +66,8 @@ exports.createBlog = async (req, res) => {
             content: normalizedContent,
             image: req.blogImage ? req.blogImage.url : (typeof image === 'string' ? image : ""),
             slug,
+            author: req.Id,
+            roleRef: req.role || "Admin",
             isPublished: isPublished !== undefined ? (isPublished === 'true' || isPublished === true) : true
         });
 
@@ -106,6 +108,12 @@ exports.updateBlog = async (req, res) => {
 
         if (isPublished !== undefined) {
             blog.isPublished = isPublished === 'true' || isPublished === true;
+        }
+
+        // Always update who last modified it
+        if (req.Id) {
+            blog.author = req.Id;
+            blog.roleRef = req.role || "Admin";
         }
 
         await blog.save();

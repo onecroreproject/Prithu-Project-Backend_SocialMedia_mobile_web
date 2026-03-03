@@ -147,17 +147,34 @@ exports.getAllFeedsByUserId = async (req, res) => {
           category: categoryId
             ? new mongoose.Types.ObjectId(categoryId)
             : { $nin: notInterestedCategoryIds },
-          $or: [
-            { createdByAccount: userId },
-            { "postedBy.userId": userId }
-          ],
-          $or: [
-            { isScheduled: { $ne: true } },
-            { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
+          // ✅ Filter 1: Only the user's own feeds (creator match)
+          // ✅ Filter 2: Visibility — only published feeds where schedule has elapsed
+          // ✅ Using $and to avoid duplicate $or keys (JS object key overwrite bug)
+          $and: [
+            // Creator filter — feeds belonging to this user
+            {
+              $or: [
+                { createdByAccount: userId },
+                { "postedBy.userId": userId }
+              ]
+            },
+            // Schedule visibility filter
+            // • Non-scheduled published feeds: always visible
+            // • Scheduled + published + scheduleDate already passed: visible
+            // • Scheduled + future scheduleDate: HIDDEN
+            {
+              $or: [
+                { status: "published", isScheduled: { $ne: true } },
+                {
+                  status: "published",
+                  isScheduled: true,
+                  scheduleDate: { $lte: new Date() }
+                }
+              ]
+            }
           ],
           isApproved: true,
           isDeleted: false,
-          status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
           ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
             postType ? { postType } : {})
         },

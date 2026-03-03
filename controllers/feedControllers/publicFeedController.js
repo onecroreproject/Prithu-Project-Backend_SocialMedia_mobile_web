@@ -27,12 +27,23 @@ exports.getAllPublicFeeds = async (req, res) => {
         }
 
 
+        const now = new Date();
         const matchStage = {
             isApproved: true,
             isDeleted: false,
-            status: { $in: ["Published", "published"] },
-            isScheduled: { $ne: true },
-            audience: "public" // 🔒 Only public-intent posts
+            audience: "public", // 🔒 Only public-intent posts
+            // ✅ Visibility rule: only return feeds that are currently live
+            //   • status='published' + not scheduled → always visible
+            //   • status='published' + scheduled + scheduleDate elapsed → visible
+            //   • status='scheduled' + future date → HIDDEN (never returned to users)
+            $or: [
+                { status: "published", isScheduled: { $ne: true } },
+                {
+                    status: "published",
+                    isScheduled: true,
+                    scheduleDate: { $lte: now }
+                }
+            ]
         };
 
         if (categoryId) {

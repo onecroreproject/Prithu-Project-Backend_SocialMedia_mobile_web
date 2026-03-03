@@ -487,6 +487,15 @@ feedSchema.index({
   },
   name: 'feed_text_search'
 });
+// ✅ isPublished virtual — true when the feed is live and visible to users
+feedSchema.virtual('isPublished').get(function () {
+  return (
+    this.status === 'published' &&
+    !this.isDeleted &&
+    (!this.isScheduled || (this.scheduleDate && this.scheduleDate <= new Date()))
+  );
+});
+
 // Middleware for Auto-Logic
 feedSchema.pre("save", function (next) {
   // Auto-set uploadType if missing but design metadata suggests template
@@ -502,6 +511,18 @@ feedSchema.pre("save", function (next) {
     } else if (this.files?.some(f => f.type === 'image')) {
       this.postType = 'image';
     }
+  }
+  // ✅ AUTO-EXTRACT HASHTAGS from caption whenever caption changes
+  if (this.isModified('caption') && this.caption) {
+    const rawTags = this.caption.match(/#([\w]+)/g) || [];
+    const cleaned = rawTags.map(tag =>
+      tag.replace(/^#/, '')          // remove leading #
+        .toLowerCase()              // lowercase
+        .replace(/[^a-z0-9_]/g, '') // remove special chars
+        .trim()
+    ).filter(Boolean);
+    // Deduplicate
+    this.hashtags = [...new Set(cleaned)];
   }
   next();
 });

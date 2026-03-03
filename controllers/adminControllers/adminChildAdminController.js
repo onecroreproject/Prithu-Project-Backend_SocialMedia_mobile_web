@@ -241,3 +241,114 @@ exports.deleteChildAdmin = async (req, res) => {
   }
 };
 
+
+// ✅ Update child admin profile details, social links, and avatar
+exports.updateChildAdminProfileById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      userName,
+      email,
+      phoneNumber,
+      bio,
+      gender,
+      displayName,
+      socialLinks
+    } = req.body;
+    const { role: currentUserRole, Id: currentUserId } = req;
+
+    // 0️⃣ Authorization check: Admin can update anyone, Child Admin can only update themselves
+    const isSelf = currentUserId === id;
+    if (currentUserRole !== "Admin" && !isSelf) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. You can only update your own profile."
+      });
+    }
+
+    // 1️⃣ Find Child Admin
+    const childAdmin = await ChildAdmin.findById(id);
+    if (!childAdmin) {
+      return res.status(404).json({ success: false, message: "Child admin not found" });
+    }
+
+    // 2️⃣ Check for duplicate email if email is changing
+    if (email && email !== childAdmin.email) {
+      const existingEmail = await ChildAdmin.findOne({ email });
+      if (existingEmail) {
+        return res.status(400).json({ success: false, message: "Email already in use" });
+      }
+      childAdmin.email = email;
+    }
+
+    // 3️⃣ Update ChildAdmin basic info
+    if (userName) childAdmin.userName = userName;
+    await childAdmin.save();
+
+    // 4️⃣ Find or Create Profile Settings
+    let profile = await ProfileSettings.findOne({ childAdminId: id });
+    if (!profile) {
+      profile = new ProfileSettings({ childAdminId: id });
+    }
+
+    // 5️⃣ Update Profile Details
+    if (phoneNumber) profile.phoneNumber = phoneNumber;
+    if (bio) profile.bio = bio;
+    if (gender) profile.gender = gender;
+    if (displayName) profile.displayName = displayName;
+    if (userName) profile.userName = userName;
+
+    // 6️⃣ Handle Social Links
+    if (socialLinks) {
+      try {
+        const parsedLinks = typeof socialLinks === 'string' ? JSON.parse(socialLinks) : socialLinks;
+        profile.socialLinks = {
+          ...profile.socialLinks,
+          ...parsedLinks
+        };
+      } catch (err) {
+        console.warn("⚠️ Invalid socialLinks format:", err.message);
+      }
+    }
+
+    // 7️⃣ Handle Avatar Upload (Local Storage with Absolute URL)
+    if (req.childAdminAvatar) {
+      // 🧹 Delete old profile avatar if it exists
+      if (profile.profileAvatarFilename) {
+        try {
+          const { BASE_MEDIA_DIR } = require("../../utils/storageEngine");
+          const oldAvatarPath = path.join(BASE_MEDIA_DIR, 'child-admins', id, 'avatar', profile.profileAvatarFilename);
+          if (require('fs').existsSync(oldAvatarPath)) {
+            require('fs').unlinkSync(oldAvatarPath);
+          }
+        } catch (err) {
+          console.error("❌ Failed to delete old avatar:", err.message);
+        }
+      }
+
+      profile.profileAvatar = req.childAdminAvatar.url;
+      profile.profileAvatarFilename = req.childAdminAvatar.filename;
+    }
+
+    await profile.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Child Admin profile updated successfully",
+      data: {
+        _id: childAdmin._id,
+        userName: childAdmin.userName,
+        email: childAdmin.email,
+        profile: profile
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating child admin profile:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while updating child admin profile",
+      error: error.message
+    });
+  }
+};

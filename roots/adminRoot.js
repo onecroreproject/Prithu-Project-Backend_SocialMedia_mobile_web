@@ -103,6 +103,7 @@ const {
     getChildAdminById,
     blockChildAdmin,
     deleteChildAdmin,
+    updateChildAdminProfileById,
 } = require('../controllers/adminControllers/adminChildAdminController');
 
 const {
@@ -150,6 +151,11 @@ const {
     blogUpload,
     processBlogImage
 } = require('../middlewares/services/blogUpload');
+
+const {
+    childAdminAvatarUpload,
+    processChildAdminAvatar
+} = require('../middlewares/services/childAdminUpload');
 
 const {
     getSeoDashboardStats,
@@ -233,6 +239,7 @@ router.post(
 router.get("/admin/get/all/feed", auth, checkPermission('canManageFeeds'), getAllFeedAdmin);
 router.get("/admin/feed/:feedId/design", auth, getFeedWithDesign);
 router.put("/admin/feed/:feedId/design", auth, updateFeedDesign);
+router.patch("/admin/feed/:feedId/schedule", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/adminfeedController').updateFeedSchedule);
 router.get("/admin/get/trending/creator", adminGetTrendingFeeds); // Match key ADMIN_GET_TRENDING_CREATOR
 router.delete("/admin/delete/feed", deleteFeed);
 router.delete("/admin/feed/:feedId/category/:categoryId", removeFeedCategory);
@@ -357,6 +364,7 @@ router.delete("/admin/delete/childadmin/:id", auth, checkPermission('canManageCh
 router.get("/child/admin/:id", getChildAdminById);
 router.delete("/delete/child/admin/:id", deleteChildAdmin);
 router.patch("/block/child/admin/:id", blockChildAdmin);
+router.put("/child/admin/profile/update/:id", auth, childAdminAvatarUpload, processChildAdminAvatar, updateChildAdminProfileById);
 
 /* --------------------- Admin Driver API ---------------------- */
 router.get("/admin/drive/dashboard", auth, getDriveDashboard);
