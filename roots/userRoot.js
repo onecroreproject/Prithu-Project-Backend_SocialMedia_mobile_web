@@ -280,6 +280,12 @@ const { submitUserFeedback, getMyFeedbackAndReports, submitSupportQuery, getMySu
 const { getFooterConfig } = require('../controllers/footerController');
 const { getUpcomingBirthdays } = require('../controllers/adminControllers/adminUserControllers');
 
+const {
+    getUpdatesForUser,
+    getUnreadCount,
+    markAsRead
+} = require('../controllers/userControllers/userUpdateController');
+
 /* --------------------- User Authentication --------------------- */
 router.post('/auth/user/register', createNewUser);
 router.post('/register', createNewUser); // Alias
@@ -480,5 +486,10 @@ router.get('/blogs/:slug', getBlogBySlug);
 router.get('/parties/states', getStates);
 router.get('/parties/by-state/:state', getPartiesByState);
 router.get('/parties/:partyId/leaders', getLeadersByParty);
+
+/* --------------------- User Updates (What's New) --------------------- */
+router.get('/user/updates/all', auth, getUpdatesForUser);
+router.get('/user/updates/unread-count', auth, getUnreadCount);
+router.post('/user/updates/mark-read/:updateId', auth, markAsRead);
 
 module.exports = router;

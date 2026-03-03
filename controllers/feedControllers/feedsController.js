@@ -124,7 +124,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
        ✅ 2️⃣ FETCH HIDDEN POSTS & BLOCKED CATEGORIES & WATCHED FEEDS
     ------------------------------------------------------*/
     const hiddenPosts = await HiddenPost.find({ userId }).select("postId -_id").lean();
-    let hiddenPostIds = hiddenPosts.map(h => h.postId);
+    hiddenPostIds = hiddenPosts.map(h => h.postId);
 
     const userCategories = await UserCategory.findOne({ userId }).select("nonInterestedCategories").lean();
     notInterestedCategoryIds = userCategories?.nonInterestedCategories || [];
@@ -137,6 +137,12 @@ exports.getAllFeedsByUserId = async (req, res) => {
     // const excludeIds = [...hiddenPostIds, ...watchedFeedIds];
     const excludeIds = [...hiddenPostIds];
 
+    const EXCLUDED_CATEGORY_IDS = [
+      new mongoose.Types.ObjectId("699ee0e420120ebc1d3e7725"),
+      new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b"),
+      new mongoose.Types.ObjectId("6990071590a65cd9632b2327")
+    ];
+
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE
     ------------------------------------------------------*/
@@ -146,7 +152,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
           _id: { $nin: excludeIds },
           category: categoryId
             ? new mongoose.Types.ObjectId(categoryId)
-            : { $nin: notInterestedCategoryIds },
+            : { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
           // ✅ Filter 1: Only the user's own feeds (creator match)
           // ✅ Filter 2: Visibility — only published feeds where schedule has elapsed
           // ✅ Using $and to avoid duplicate $or keys (JS object key overwrite bug)
@@ -465,11 +471,15 @@ exports.getAllFeedsByUserId = async (req, res) => {
             _id: { $nin: excludeIds },
             ...(categoryId
               ? { category: new mongoose.Types.ObjectId(categoryId) }
-              : { category: { $nin: notInterestedCategoryIds } }
+              : { category: { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] } }
             ),
-            $or: [
-              { isScheduled: { $ne: true } },
-              { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
+            $and: [
+              {
+                $or: [
+                  { isScheduled: { $ne: true } },
+                  { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
+                ]
+              }
             ],
             isApproved: true,
             isDeleted: false,
@@ -2738,13 +2748,19 @@ exports.getTrendingFeeds = async (req, res) => {
       profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar) || null,
     };
 
+    const EXCLUDED_CATEGORY_IDS = [
+      new mongoose.Types.ObjectId("699ee0e420120ebc1d3e7725"),
+      new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b"),
+      new mongoose.Types.ObjectId("6990071590a65cd9632b2327")
+    ];
+
     // 2️⃣ Optimized Aggregation Pipeline
     const feeds = await Feed.aggregate([
       // A. Initial Filter
       {
         $match: {
           _id: { $nin: hiddenPostIds },
-          category: { $nin: notInterestedCategoryIds },
+          category: { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
           createdAt: { $gte: trendingStart },
           isApproved: true,
           status: { $in: ["Published", "published"] },

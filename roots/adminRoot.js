@@ -148,6 +148,13 @@ const {
 } = require('../controllers/blogController');
 
 const {
+    getAllUpdatesAdmin,
+    createUpdate,
+    updateUpdate,
+    deleteUpdate
+} = require('../controllers/adminControllers/updateController');
+
+const {
     blogUpload,
     processBlogImage
 } = require('../middlewares/services/blogUpload');
@@ -250,7 +257,7 @@ router.delete('/admin/feed/category/:id', auth, checkPermission('canManageCatego
 router.delete('/admin/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category', auth, checkPermission('canManageCategories'), deleteCategory); // For body-based ID
-router.get('/admin/get/feed/category', auth, checkPermission('canManageCategories'), getAllCategories);
+router.get('/admin/get/feed/category', auth, getAllCategories);
 router.put('/admin/update/category', auth, checkPermission('canManageCategories'), updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
@@ -444,5 +451,11 @@ router.post('/admin/blogs/create', auth, checkPermission('canManageBlogAdd'), bl
 router.put('/admin/blogs/update/:id', auth, checkPermission('canManageBlogs'), blogUpload, processBlogImage, updateBlog);
 router.delete('/admin/blogs/delete/:id', auth, checkPermission('canManageBlogs'), deleteBlog);
 router.patch('/admin/blogs/toggle-status/:id', auth, checkPermission('canManageBlogs'), toggleBlogStatus);
+
+/* --------------------- Admin Update API ------------------- */
+router.get('/admin/updates/all', auth, checkPermission('canManageUpdates'), getAllUpdatesAdmin);
+router.post('/admin/updates/create', auth, checkPermission('canManageUpdates'), adminUploadFeed.single('media'), createUpdate);
+router.put('/admin/updates/update/:id', auth, checkPermission('canManageUpdates'), adminUploadFeed.single('media'), updateUpdate);
+router.delete('/admin/updates/delete/:id', auth, checkPermission('canManageUpdates'), deleteUpdate);
 
 module.exports = router;

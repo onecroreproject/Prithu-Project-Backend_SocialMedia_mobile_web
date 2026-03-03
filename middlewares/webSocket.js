@@ -42,6 +42,12 @@ const initSocket = (server) => {
     // ➕ Join personal room
     socket.join(socket.userId);
 
+    // ➕ Join role-based and global rooms for updates
+    socket.join('all');
+    if (socket.role) {
+      socket.join(socket.role);
+    }
+
     // -----------------------------
     // 👤 HANDLE END USERS
     // -----------------------------
