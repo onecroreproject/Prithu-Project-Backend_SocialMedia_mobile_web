@@ -64,7 +64,7 @@ exports.createBlog = async (req, res) => {
         const newBlog = new Blog({
             title,
             content: normalizedContent,
-            image: req.blogImage ? req.blogImage.dbPath : (typeof image === 'string' ? image : ""),
+            image: req.blogImage ? req.blogImage.url : (typeof image === 'string' ? image : ""),
             slug,
             isPublished: isPublished !== undefined ? (isPublished === 'true' || isPublished === true) : true
         });
@@ -99,7 +99,7 @@ exports.updateBlog = async (req, res) => {
 
         if (normalizedContent !== undefined) blog.content = normalizedContent;
         if (req.blogImage) {
-            blog.image = req.blogImage.dbPath;
+            blog.image = req.blogImage.url;
         } else if (image && typeof image === 'string' && image.trim() !== '') {
             blog.image = image;
         }
