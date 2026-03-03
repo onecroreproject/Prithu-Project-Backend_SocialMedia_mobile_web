@@ -33,6 +33,7 @@
     "get-video-duration": "^4.1.0",
     "googleapis": "^171.4.0",
     "ioredis": "^5.7.0",
+    "isomorphic-dompurify": "^3.0.0",
     "jimp": "^1.6.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.2",

@@ -1,4 +1,22 @@
 const Blog = require("../models/Blog");
+const DOMPurify = require("isomorphic-dompurify");
+
+/**
+ * Normalizes blog content by stripping &nbsp;, fixing spacing, and ensuring safe HTML structure.
+ */
+const normalizeBlogContent = (content) => {
+    if (!content || typeof content !== 'string') return content;
+
+    // Replace all &nbsp; with standard spaces
+    let normalized = content.replace(/&nbsp;/g, ' ');
+
+    // Normalize multiple spaces between words (but be careful not to break HTML)
+    // We mainly want to clean up trailing/leading spaces inside tags and around text nodes
+    normalized = normalized.replace(/\s+/g, ' ');
+
+    // Sanitize and fix nesting (isomorphic-dompurify works on Node.js)
+    return DOMPurify.sanitize(normalized);
+};
 
 /**
  * Get all published blogs
@@ -32,6 +50,7 @@ exports.getAllBlogsAdmin = async (req, res) => {
 exports.createBlog = async (req, res) => {
     try {
         const { title, content, image, isPublished } = req.body;
+        const normalizedContent = normalizeBlogContent(content);
 
         // Generate slug from title
         const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -44,8 +63,8 @@ exports.createBlog = async (req, res) => {
 
         const newBlog = new Blog({
             title,
-            content,
-            image: req.blogImage ? req.blogImage.dbPath : image,
+            content: normalizedContent,
+            image: req.blogImage ? req.blogImage.dbPath : (typeof image === 'string' ? image : ""),
             slug,
             isPublished: isPublished !== undefined ? (isPublished === 'true' || isPublished === true) : true
         });
@@ -65,6 +84,7 @@ exports.updateBlog = async (req, res) => {
     try {
         const { id } = req.params;
         const { title, content, image, isPublished } = req.body;
+        const normalizedContent = content ? normalizeBlogContent(content) : undefined;
 
         const blog = await Blog.findById(id);
         if (!blog) {
@@ -77,10 +97,10 @@ exports.updateBlog = async (req, res) => {
             blog.slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
         }
 
-        if (content) blog.content = content;
+        if (normalizedContent !== undefined) blog.content = normalizedContent;
         if (req.blogImage) {
             blog.image = req.blogImage.dbPath;
-        } else if (image) {
+        } else if (image && typeof image === 'string' && image.trim() !== '') {
             blog.image = image;
         }
 

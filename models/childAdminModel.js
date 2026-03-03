@@ -67,7 +67,6 @@ const childAdminSchema = new mongoose.Schema(
     menuPermissions: { type: [menuPermissionSchema], default: [] },
 
     grantedPermissions: { type: [String], default: [] },
-    ungrantedPermissions: { type: [String], default: [] },
 
     isActive: { type: Boolean, default: true },
     isApprovedByParent: { type: Boolean, default: false },

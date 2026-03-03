@@ -1,5 +1,6 @@
 const ChildAdmin = require('../../models/childAdminModel');
 const ProfileSettings = require("../../models/profileSettingModel");
+const { ALL_PERMISSIONS } = require("../../Config/permissions");
 
 
 exports.getChildAdmins = async (req, res) => {
@@ -34,38 +35,6 @@ exports.getChildAdminPermissions = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Child Admin ID is required' });
     }
 
-    const ALL_PERMISSIONS = [
-      // Top Level
-      'canManageUsers',
-      'canManageCreators',
-      'canManageFeedInfo',
-      'canManageFeeds',
-      'canManageReport',
-      'canManageSettings',
-      'canManageChildAdmins',
-
-      // Sub Level
-      'canManageUsersDetail',
-      'canTrendingCreators',
-      'canManageTrendingFeeds',
-      'canManageUserFeedRequest',
-      'canManageUpload',
-      'canManageCategories',
-      'canManageUsersFeedReports',
-      'canManageDrive',
-      'canManageChildAdminsCreation',
-      'canManageSettingsSubscriptions',
-      'canManageSalesDashboard',
-      'canFaqManagement',
-      'canManageUserFeedbacks',
-      'canViewBilling',
-      'canManagePlans',
-      'canManageAddReport',
-      'canViewSystemLogs',
-      'canManageAdminRoles',
-      'canManagePermissions',
-      'canManageStudio'
-    ];
 
     const childAdmin = await ChildAdmin.findById(childAdminId)
       .select('childAdminId userName email grantedPermissions ungrantedPermissions customPermissions menuPermissions isApprovedByParent')
@@ -75,10 +44,8 @@ exports.getChildAdminPermissions = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Child admin not found' });
     }
 
-    // Compute ungrantedPermissions if not available
-    let ungrantedPermissions = Array.isArray(childAdmin.ungrantedPermissions) && childAdmin.ungrantedPermissions.length > 0
-      ? [...childAdmin.ungrantedPermissions]
-      : ALL_PERMISSIONS.filter(perm => !childAdmin.grantedPermissions.includes(perm));
+    // Compute ungrantedPermissions on the fly
+    let ungrantedPermissions = ALL_PERMISSIONS.filter(perm => !childAdmin.grantedPermissions.includes(perm));
 
     return res.status(200).json({
       success: true,
@@ -113,38 +80,6 @@ exports.updateChildAdminPermissions = async (req, res) => {
     }
 
     // ✅ List of all defined system permissions
-    const ALL_PERMISSIONS = [
-      // Top Level
-      'canManageUsers',
-      'canManageCreators',
-      'canManageFeedInfo',
-      'canManageFeeds',
-      'canManageReport',
-      'canManageSettings',
-      'canManageChildAdmins',
-
-      // Sub Level
-      'canManageUsersDetail',
-      'canTrendingCreators',
-      'canManageTrendingFeeds',
-      'canManageUserFeedRequest',
-      'canManageUpload',
-      'canManageCategories',
-      'canManageUsersFeedReports',
-      'canManageDrive',
-      'canManageChildAdminsCreation',
-      'canManageSettingsSubscriptions',
-      'canManageSalesDashboard',
-      'canFaqManagement',
-      'canManageUserFeedbacks',
-      'canViewBilling',
-      'canManagePlans',
-      'canManageAddReport',
-      'canViewSystemLogs',
-      'canManageAdminRoles',
-      'canManagePermissions',
-      'canManageStudio'
-    ];
 
     // Compute ungranted permissions
     const ungrantedPermissions = ALL_PERMISSIONS.filter(p => !grantedPermissions.includes(p));
@@ -154,7 +89,6 @@ exports.updateChildAdminPermissions = async (req, res) => {
       id,
       {
         grantedPermissions,
-        ungrantedPermissions,
         customPermissions,
         menuPermissions,
 
@@ -173,7 +107,6 @@ exports.updateChildAdminPermissions = async (req, res) => {
       childAdmin: {
         childAdminId: updatedAdmin.childAdminId,
         grantedPermissions: updatedAdmin.grantedPermissions,
-        ungrantedPermissions: updatedAdmin.ungrantedPermissions,
         customPermissions: updatedAdmin.customPermissions,
         menuPermissions: updatedAdmin.menuPermissions,
       },
@@ -193,36 +126,6 @@ exports.getChildAdminById = async (req, res) => {
   try {
     const { id } = req.params || req.body;
 
-    // ✅ All possible permissions
-    const ALL_PERMISSIONS = [
-      // Top Level
-      'canManageUsers',
-      'canManageCreators',
-      'canManageFeedInfo',
-      'canManageFeeds',
-      'canManageReport',
-      'canManageSettings',
-      'canManageChildAdmins',
-
-      // Sub Level
-      'canManageUsersDetail',
-      'canTrendingCreators',
-      'canManageTrendingFeeds',
-      'canManageUserFeedRequest',
-      'canManageUpload',
-      'canManageCategories',
-      'canManageUsersFeedReports',
-      'canManageDrive',
-      'canManageChildAdminsCreation',
-      'canManageSettingsSubscriptions',
-      'canManageSalesDashboard',
-      'canFaqManagement',
-      'canManageUserFeedbacks',
-      'canViewBilling',
-      'canManagePlans',
-      'canManageAddReport',
-      'canViewSystemLogs'
-    ];
 
     // 1️⃣ Fetch ChildAdmin basic details (excluding password), populate parent
     const childAdmin = await ChildAdmin.findById(id)
@@ -245,11 +148,9 @@ exports.getChildAdminById = async (req, res) => {
       .lean();
 
     // 3️⃣ Determine ungranted permissions
-    let ungrantedPermissions = Array.isArray(childAdmin.ungrantedPermissions) && childAdmin.ungrantedPermissions.length > 0
-      ? [...childAdmin.ungrantedPermissions]
-      : ALL_PERMISSIONS.filter(
-        (perm) => !childAdmin.grantedPermissions.includes(perm)
-      );
+    let ungrantedPermissions = ALL_PERMISSIONS.filter(
+      (perm) => !childAdmin.grantedPermissions.includes(perm)
+    );
 
 
 

@@ -20,6 +20,7 @@ exports.auth = (req, res, next) => {
     req.role = decoded.role;
     req.accountId = decoded.accountId;
     req.userName = decoded.userName;
+    req.grantedPermissions = decoded.grantedPermissions || [];
 
     return next();
   } catch (err) {
@@ -28,8 +29,8 @@ exports.auth = (req, res, next) => {
       err.name === "TokenExpiredError"
         ? "Your session expired, please login again."
         : err.name === "JsonWebTokenError"
-        ? "Invalid token, please login again."
-        : "Token verification failed.";
+          ? "Invalid token, please login again."
+          : "Token verification failed.";
 
     return res.status(401).json({ message });
   }

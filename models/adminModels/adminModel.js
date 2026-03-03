@@ -29,16 +29,6 @@ const adminSchema = new mongoose.Schema({
     index: true
   },
 
-  permissions: {
-    canManageUsers: { type: Boolean, default: false },
-    canManageCreators: { type: Boolean, default: false },
-    canManageBusinesses: { type: Boolean, default: false },
-    canManageFeeds: { type: Boolean, default: false },
-    canManageCategories: { type: Boolean, default: false },
-    canManageReports: { type: Boolean, default: false },
-    canManageSettings: { type: Boolean, default: false },
-    canViewAnalytics: { type: Boolean, default: false }
-  },
 
   profileSettings: { type: mongoose.Schema.Types.ObjectId, ref: "ProfileSettings" },
 

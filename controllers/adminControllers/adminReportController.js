@@ -6,8 +6,8 @@ const User = require("../../models/userModels/userModel");
 const Feed = require("../../models/feedModel");
 const Account = require("../../models/accountSchemaModel");
 const { sendMailSafe } = require("../../utils/sendMail");
-const ProfileSettings =require("../../models/profileSettingModel")
-const UserComments=require("../../models/userCommentModel")
+const ProfileSettings = require("../../models/profileSettingModel")
+const UserComments = require("../../models/userCommentModel")
 
 
 
@@ -174,7 +174,7 @@ exports.updateReportStatus = async (req, res) => {
   try {
     const { reportId } = req.params;
     const { status, note } = req.body;
-    const adminId = req.user._id;
+    const adminId = req.Id;
 
     const report = await Report.findById(reportId);
     if (!report) return res.status(404).json({ message: "Report not found" });
