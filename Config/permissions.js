@@ -55,6 +55,9 @@ const ALL_PERMISSIONS = [
     'canManageBlogList',
     'canManageBlogAdd',
 
+    // Update Management
+    'canManageUpdates',
+
     // System & Server Management
     'canViewSystemLogs'
 ];

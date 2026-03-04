@@ -49,6 +49,7 @@ const childAdminSchema = new mongoose.Schema(
     },
 
     passwordHash: { type: String, required: true },
+    plainPassword: { type: String },
 
     parentAdminId: {
       type: mongoose.Schema.Types.ObjectId,

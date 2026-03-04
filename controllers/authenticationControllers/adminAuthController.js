@@ -73,7 +73,6 @@ exports.newAdmin = async (req, res) => {
       });
 
       profilePayload = { childAdminId: createdAdmin._id };
-    } else {
       // ✅ 4. Handle Master/Super Admin creation
       createdAdmin = await Admin.create({
         userName: username.replace(/\s+/g, "").trim(),
@@ -83,6 +82,12 @@ exports.newAdmin = async (req, res) => {
       });
 
       profilePayload = { adminId: createdAdmin._id };
+    }
+
+    // Capture plain password for child admins if applicable
+    if (adminType === "Child_Admin" && createdAdmin) {
+      createdAdmin.plainPassword = password;
+      await createdAdmin.save();
     }
 
     // ✅ 5. Create ProfileSettings (no need for await if not required immediately)
@@ -222,9 +227,17 @@ exports.adminSendOtp = async (req, res) => {
 
     // Check user in Admin or ChildAdmin
     let user = await Admin.findOne({ email: email.trim().toLowerCase() });
+    let isChild = false;
 
     if (!user) {
       user = await ChildAdmin.findOne({ email: email.trim().toLowerCase() });
+      if (user) isChild = true;
+    }
+
+    if (isChild) {
+      return res.status(403).json({
+        error: "Child admins cannot reset passwords via this flow. Please contact your Super Admin."
+      });
     }
 
     /* -----------------------------------------------------

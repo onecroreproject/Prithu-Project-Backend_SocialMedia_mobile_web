@@ -17,10 +17,27 @@ const ensureDir = (dirPath) => {
  */
 const generateFilename = (originalName) => {
     const now = new Date();
-    const timestamp = now.toISOString().replace(/[-:T]/g, '').split('.')[0]; // YYYYMMDDHHMMSS
-    const random = Math.random().toString(36).substring(2, 8);
-    const ext = path.extname(originalName);
-    return `${timestamp}_${random}${ext}`;
+
+    // Format: YYYYMMDD_HHMMSS
+    const dateStr = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0');
+
+    const timeStr = String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0') +
+        String(now.getSeconds()).padStart(2, '0') +
+        String(now.getMilliseconds()).padStart(3, '0');
+
+    // Sanitize and limit original name
+    const baseName = path.parse(originalName).name
+        .replace(/[^a-z0-9]/gi, '_')
+        .toLowerCase()
+        .substring(0, 30);
+
+    const random = Math.random().toString(36).substring(2, 7);
+    const ext = path.extname(originalName) || '.jpg';
+
+    return `${baseName}_${dateStr}_${timeStr}_${random}${ext}`;
 };
 
 /**

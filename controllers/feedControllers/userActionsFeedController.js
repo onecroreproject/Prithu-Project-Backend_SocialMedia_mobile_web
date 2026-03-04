@@ -25,6 +25,11 @@ const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
 const { processPosterMedia } = require("../../utils/posterMediaProcessor");
 
+// 🔓 Helper to get dynamic download limit based on environment
+const getDownloadLimit = () => {
+  return process.env.NODE_ENV === 'production' ? 1 : 1000;
+};
+
 
 
 
@@ -275,7 +280,7 @@ exports.checkDownloadLimit = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    const limit = 100; // 🔓 TEMPORARY: Increased for testing
+    const limit = getDownloadLimit(); // 🛡️ Dynamic limit based on environment
     const downloadCount = dailyDownloads.length;
 
     return res.json({
@@ -340,7 +345,7 @@ exports.directDownloadFeed = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    const DOWNLOAD_LIMIT = 100; // 🔓 TEMPORARY: Increased for testing
+    const DOWNLOAD_LIMIT = getDownloadLimit(); // 🛡️ Dynamic limit based on environment
     if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
       console.warn(`[DirectDL] Daily download limit reached for user: ${userId}`);
       return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
@@ -598,6 +603,22 @@ exports.birthdayDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
+    // 🛡️ Enforce Download Limit (1 Feed per Day in Production)
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const actions = await UserFeedActions.findOne({ userId }).lean();
+    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
+      const dlDate = new Date(item.downloadedAt || item.addedAt);
+      return dlDate >= startOfDay;
+    });
+
+    const DOWNLOAD_LIMIT = getDownloadLimit();
+    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+      console.warn(`[BirthdayDL] Daily download limit reached for user: ${userId}`);
+      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+    }
+
     const [user, profile] = await Promise.all([
       User.findById(userId).lean(),
       ProfileSettings.findOne({ userId }).populate('visibility').lean(),
@@ -793,6 +814,22 @@ exports.anniversaryDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
+    // 🛡️ Enforce Download Limit (1 Feed per Day in Production)
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const actions = await UserFeedActions.findOne({ userId }).lean();
+    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
+      const dlDate = new Date(item.downloadedAt || item.addedAt);
+      return dlDate >= startOfDay;
+    });
+
+    const DOWNLOAD_LIMIT = getDownloadLimit();
+    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+      console.warn(`[AnniversaryDL] Daily download limit reached for user: ${userId}`);
+      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+    }
+
     const [user, profile] = await Promise.all([
       User.findById(userId).lean(),
       ProfileSettings.findOne({ userId }).populate('visibility').lean(),
@@ -987,6 +1024,22 @@ exports.politicsDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
+    // 🛡️ Enforce Download Limit (1 Feed per Day in Production)
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const actions = await UserFeedActions.findOne({ userId }).lean();
+    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
+      const dlDate = new Date(item.downloadedAt || item.addedAt);
+      return dlDate >= startOfDay;
+    });
+
+    const DOWNLOAD_LIMIT = getDownloadLimit();
+    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+      console.warn(`[PoliticsDL] Daily download limit reached for user: ${userId}`);
+      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+    }
+
     const [user, profile] = await Promise.all([
       User.findById(userId).lean(),
       ProfileSettings.findOne({ userId }).populate('visibility').lean(),
@@ -1154,7 +1207,7 @@ exports.requestDownloadFeed = async (req, res) => {
       return dlDate >= startOfDay;
     });
 
-    const DOWNLOAD_LIMIT = 100; // 🔓 TEMPORARY: Increased for testing
+    const DOWNLOAD_LIMIT = getDownloadLimit(); // 🛡️ Dynamic limit based on environment
     if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
       return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
     }

@@ -1,6 +1,7 @@
 const ChildAdmin = require('../../models/childAdminModel');
 const ProfileSettings = require("../../models/profileSettingModel");
 const { ALL_PERMISSIONS } = require("../../Config/permissions");
+const mongoose = require('mongoose');
 
 
 exports.getChildAdmins = async (req, res) => {
@@ -10,10 +11,74 @@ exports.getChildAdmins = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Admin ID not found' });
     }
 
-    const childAdmins = await ChildAdmin.find(
-      { parentAdminId },
-      'userName email childAdminId childAdminType isApprovedByParent createdAt'
-    ).sort({ createdAt: -1 });
+    const today = new Date().toISOString().split('T')[0];
+
+    // Use aggregation to get admins, their profiles, and today's activity stats
+    const childAdmins = await ChildAdmin.aggregate([
+      { $match: { parentAdminId: new mongoose.Types.ObjectId(parentAdminId) } },
+      {
+        $lookup: {
+          from: "ProfileSettings",
+          localField: "_id",
+          foreignField: "childAdminId",
+          as: "profile"
+        }
+      },
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "ChildAdminActivities",
+          let: { adminId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$childAdminId", "$$adminId"] },
+                    { $eq: ["$date", today] },
+                    { $eq: ["$status", "Online"] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: "todayActivities"
+        }
+      },
+      {
+        $addFields: {
+          profileAvatar: "$profile.profileAvatar",
+          todayDurationMs: {
+            $sum: {
+              $map: {
+                input: "$todayActivities",
+                as: "act",
+                in: {
+                  $subtract: [
+                    { $ifNull: ["$$act.logoutTime", new Date()] },
+                    "$$act.loginTime"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          userName: 1,
+          email: 1,
+          childAdminId: 1,
+          childAdminType: 1,
+          isApprovedByParent: 1,
+          isOnline: 1,
+          createdAt: 1,
+          profileAvatar: 1,
+          onlineHoursToday: { $divide: ["$todayDurationMs", 3600000] } // Convert ms to hours
+        }
+      },
+      { $sort: { createdAt: -1 } }
+    ]);
 
     return res.status(200).json({ success: true, admins: childAdmins });
   } catch (error) {
@@ -157,8 +222,9 @@ exports.getChildAdminById = async (req, res) => {
     // 4️⃣ Combine both data sources
     const combinedData = {
       _id: childAdmin._id,
-      email: childAdmin.email,
       userName: childAdmin.userName,
+      email: childAdmin.email,
+      plainPassword: childAdmin.plainPassword,
       parentAdmin: childAdmin.parentAdminId,
       menuPermissions: childAdmin.menuPermissions,
       grantedPermissions: childAdmin.grantedPermissions,
@@ -248,7 +314,8 @@ exports.updateChildAdminProfileById = async (req, res) => {
     const { id } = req.params;
     const {
       userName,
-      email,
+      email: newEmail,
+      password: newPassword,
       phoneNumber,
       bio,
       gender,
@@ -272,13 +339,19 @@ exports.updateChildAdminProfileById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Child admin not found" });
     }
 
-    // 2️⃣ Check for duplicate email if email is changing
-    if (email && email !== childAdmin.email) {
-      const existingEmail = await ChildAdmin.findOne({ email });
-      if (existingEmail) {
+    // 2️⃣ Handle Email and Password (Only for Admin or self where allowed)
+    if (newEmail && newEmail !== childAdmin.email) {
+      const existingEmail = await ChildAdmin.findOne({ email: newEmail });
+      if (existingEmail && existingEmail._id.toString() !== id) {
         return res.status(400).json({ success: false, message: "Email already in use" });
       }
-      childAdmin.email = email;
+      childAdmin.email = newEmail;
+    }
+
+    if (newPassword && currentUserRole === "Admin") {
+      const bcrypt = require('bcrypt');
+      childAdmin.passwordHash = await bcrypt.hash(newPassword, 10);
+      childAdmin.plainPassword = newPassword;
     }
 
     // 3️⃣ Update ChildAdmin basic info
