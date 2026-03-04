@@ -3,7 +3,7 @@ const path = require("path");
 const User = require("../../models/userModels/userModel");
 const promotionalEmailQueue = require("../../queue/promotionalEmailQueue");
 const { triggerTaskManually } = require("../../corn/index");
-const redisClient = require("../../config/redisConfig");
+const redisClient = require("../../Config/redisConfig");
 
 const BASE_TEMPLATE_DIR = path.join(__dirname, "../../utils/templates");
 const CAMPAIGN_PAUSE_KEY = "promo_campaign_paused";

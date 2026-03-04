@@ -11,7 +11,7 @@ const subscriptionReminderQueue = require("../queue/subscriptionReminderQueue");
 const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
 const promotionalEmailQueue = require("../queue/promotionalEmailQueue");
 const cleanupInactiveSessions = require("../scripts/sessionCleanup");
-const redisClient = require("../config/redisConfig");
+const redisClient = require("../Config/redisConfig");
 
 const CAMPAIGN_PAUSE_KEY = "promo_campaign_paused";
 
