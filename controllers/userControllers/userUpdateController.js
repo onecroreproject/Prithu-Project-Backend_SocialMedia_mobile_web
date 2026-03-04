@@ -108,3 +108,23 @@ exports.markAsRead = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+/**
+ * Fetch updates for public view (landing page)
+ * No read status, only active updates for 'all' or 'User' role
+ */
+exports.getPublicUpdates = async (req, res) => {
+    try {
+        const updates = await Update.find({
+            isActive: true,
+            targetRole: { $in: ['all', 'User'] }
+        }).sort({ createdAt: -1 }).limit(10).lean();
+
+        res.status(200).json({
+            success: true,
+            updates
+        });
+    } catch (error) {
+        console.error("Get public updates error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

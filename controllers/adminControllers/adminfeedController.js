@@ -11,6 +11,8 @@ const { prithuDB } = require("../../database");
 const notificationQueue = require("../../queue/notificationQueue");
 const feedPostQueue = require("../../queue/feedPostQueue");
 const fs = require("fs");
+const redisClient = require("../../Config/redisConfig");
+const { clearFeedsCache } = require("../feedControllers/feedsController");
 
 // ✅ Helper delete local file
 const deleteLocalAdminFile = (filePath) => {
@@ -262,6 +264,10 @@ exports.adminFeedUpload = async (req, res) => {
                 uploadErrors.push({ file: file.originalname, error: err.message });
             }
         }
+
+        // 🟢 Invalidate User Feeds Cache
+        await clearFeedsCache();
+
         res.status(201).json({ success: true, uploaded: uploadedFeeds, errors: uploadErrors.length ? uploadErrors : undefined });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -382,6 +388,9 @@ exports.bulkFeedUpload = async (req, res) => {
             }
         }
 
+        // 🟢 Invalidate User Feeds Cache
+        await clearFeedsCache();
+
         return res.status(200).json({
             success: true,
             message: "Bulk upload to local storage completed",
@@ -482,6 +491,10 @@ exports.updateFeedDesign = async (req, res) => {
         await feed.saveEditHistory(userId, 'Feed design/edit metadata updated');
         await feed.save();
 
+        // 🟢 Invalidate User Feeds Cache
+        await clearFeedsCache();
+
+        // 2. Reschedule Bull Job
         return res.status(200).json({
             success: true,
             message: "Design updated successfully",
@@ -589,6 +602,9 @@ exports.duplicateFeedWithDesign = async (req, res) => {
 
         const duplicateFeed = new Feed(duplicateData);
         await duplicateFeed.save();
+
+        // 🟢 Invalidate User Feeds Cache
+        await clearFeedsCache();
 
         if (duplicateFeed.category && duplicateFeed.category.length) {
             await Category.updateMany(
@@ -721,6 +737,9 @@ exports.removeFeedCategory = async (req, res) => {
             { $pull: { feedIds: feedId } }
         );
 
+        // 🟢 Invalidate User Feeds Cache
+        await clearFeedsCache();
+
         res.status(200).json({ success: true, message: "Category removed from feed successfully" });
     } catch (error) {
         console.error("❌ REMOVE FEED CATEGORY ERROR:", error);
@@ -752,6 +771,9 @@ exports.updateFeedSchedule = async (req, res) => {
         feed.isScheduled = true;
         feed.status = "scheduled"; // Ensure it's marked as scheduled
         await feed.save();
+
+        // 🟢 Invalidate User Feeds Cache
+        await clearFeedsCache();
 
         // 2. Reschedule Bull Job
         const jobId = `feed-publish-${feedId}`;

@@ -1,5 +1,21 @@
 const Blog = require("../models/Blog");
 const DOMPurify = require("isomorphic-dompurify");
+const redisClient = require('../Config/redisConfig');
+
+const BLOGS_CACHE_KEY = 'public_blogs_all';
+
+/**
+ * Helper to clear public blogs cache
+ */
+const clearBlogsCache = async () => {
+    if (redisClient && redisClient.status === 'ready') {
+        try {
+            await redisClient.del(BLOGS_CACHE_KEY);
+        } catch (err) {
+            console.warn("⚠️ Redis Delete Error:", err.message);
+        }
+    }
+};
 
 /**
  * Normalizes blog content by stripping &nbsp;, fixing spacing, and ensuring safe HTML structure.
@@ -23,7 +39,29 @@ const normalizeBlogContent = (content) => {
  */
 exports.getAllBlogs = async (req, res) => {
     try {
+        // 🟢 Caching Logic
+        if (redisClient && redisClient.status === 'ready') {
+            try {
+                const cachedData = await redisClient.get(BLOGS_CACHE_KEY);
+                if (cachedData) {
+                    return res.status(200).json(JSON.parse(cachedData));
+                }
+            } catch (err) {
+                console.warn("⚠️ Redis Get Error:", err.message);
+            }
+        }
+
         const blogs = await Blog.find({ isPublished: true }).sort({ createdAt: -1 });
+
+        // 🟢 Store in Redis for 1 hour
+        if (redisClient && redisClient.status === 'ready') {
+            try {
+                await redisClient.setex(BLOGS_CACHE_KEY, 3600, JSON.stringify(blogs));
+            } catch (err) {
+                console.warn("⚠️ Redis Set Error:", err.message);
+            }
+        }
+
         res.status(200).json(blogs);
     } catch (error) {
         console.error("Error fetching blogs:", error);
@@ -72,6 +110,10 @@ exports.createBlog = async (req, res) => {
         });
 
         await newBlog.save();
+
+        // 🟢 Invalidate Cache
+        await clearBlogsCache();
+
         res.status(201).json({ message: "Blog created successfully", blog: newBlog });
     } catch (error) {
         console.error("Error creating blog:", error);
@@ -117,6 +159,10 @@ exports.updateBlog = async (req, res) => {
         }
 
         await blog.save();
+
+        // 🟢 Invalidate Cache
+        await clearBlogsCache();
+
         res.status(200).json({ message: "Blog updated successfully", blog });
     } catch (error) {
         console.error("Error updating blog:", error);
@@ -134,6 +180,10 @@ exports.deleteBlog = async (req, res) => {
         if (!blog) {
             return res.status(404).json({ message: "Blog not found" });
         }
+
+        // 🟢 Invalidate Cache
+        await clearBlogsCache();
+
         res.status(200).json({ message: "Blog deleted successfully" });
     } catch (error) {
         console.error("Error deleting blog:", error);
@@ -154,6 +204,9 @@ exports.toggleBlogStatus = async (req, res) => {
 
         blog.isPublished = !blog.isPublished;
         await blog.save();
+
+        // 🟢 Invalidate Cache
+        await clearBlogsCache();
 
         res.status(200).json({
             message: `Blog ${blog.isPublished ? 'published' : 'unpublished'} successfully`,

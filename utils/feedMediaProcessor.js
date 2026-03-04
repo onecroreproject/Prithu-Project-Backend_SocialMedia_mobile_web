@@ -393,9 +393,9 @@ exports.processFeedMedia = async ({
             try {
                 await downloadFile(overlayMediaUrl, overlayDest);
                 const xRaw = ((el.xPercent / 100) * OUT_W);
-                const yRaw = (yOffset + ((el.yPercent / 100) *maxMediaH));
+                const yRaw = (yOffset + ((el.yPercent / 100) * actualMediaH));
                 const scaleW = Math.max(10, Math.round((el.wPercent || 20) / 100 * OUT_W));
-                const scaleH = el.hPercent ? Math.round((el.hPercent / 100) * maxMediaH) : scaleW;
+                const scaleH = el.hPercent ? Math.round((el.hPercent / 100) * actualMediaH) : scaleW;
 
                 let xExpr = `${xRaw}`, yExpr = `${yRaw}`;
                 const dur = Number(el.animation?.speed || 1);

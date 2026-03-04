@@ -11,6 +11,10 @@ const updateSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Update description is required']
     },
+    version: {
+        type: String,
+        trim: true
+    },
     media: {
         type: String, // Full public URL
         default: null

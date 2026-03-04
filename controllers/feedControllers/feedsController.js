@@ -24,6 +24,31 @@ const path = require("path");
 const ProfileVisibility = require("../../models/profileVisibilitySchema.js")
 const { getMediaUrl } = require("../../utils/storageEngine");
 
+const FEEDS_CACHE_PREFIX = 'user_feeds:';
+
+/**
+ * Helper to clear all user feed caches (prefix-based)
+ */
+const clearFeedsCache = async () => {
+  if (redisClient && redisClient.status === 'ready') {
+    try {
+      let cursor = '0';
+      do {
+        const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', `${FEEDS_CACHE_PREFIX}*`, 'COUNT', 100);
+        cursor = nextCursor;
+        if (keys.length > 0) {
+          await redisClient.del(...keys);
+        }
+      } while (cursor !== '0');
+      // console.log("🧹 Redis: User feeds cache cleared (prefix-based)");
+    } catch (err) {
+      console.warn("⚠️ Redis Prefix Delete Error:", err.message);
+    }
+  }
+};
+
+exports.clearFeedsCache = clearFeedsCache;
+
 
 
 exports.getAllFeedsByUserId = async (req, res) => {
@@ -42,6 +67,19 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
     const { categoryId, postType } = req.query;
+
+    // 🟢 Redis Caching
+    const cacheKey = `${FEEDS_CACHE_PREFIX}${userId}:${page}:${limit}:${categoryId || 'all'}:${postType || 'all'}`;
+    if (redisClient && redisClient.status === 'ready') {
+      try {
+        const cachedFeeds = await redisClient.get(cacheKey);
+        if (cachedFeeds) {
+          return res.status(200).json(JSON.parse(cachedFeeds));
+        }
+      } catch (err) {
+        console.warn("⚠️ Redis Get Error:", err.message);
+      }
+    }
 
     /* -----------------------------------------------------
        ✅ 1️⃣ FETCH VIEWER PROFILE (LOGGED-IN USER)
@@ -451,7 +489,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
       };
     });
 
-    res.status(200).json({
+    const responseData = {
       success: true,
       data: {
         viewer,
@@ -481,7 +519,18 @@ exports.getAllFeedsByUserId = async (req, res) => {
           })
         }
       }
-    });
+    };
+
+    // 🟢 Store in Redis for 1 hour
+    if (redisClient && redisClient.status === 'ready') {
+      try {
+        await redisClient.setex(cacheKey, 3600, JSON.stringify(responseData));
+      } catch (err) {
+        console.warn("⚠️ Redis Set Error:", err.message);
+      }
+    }
+
+    res.status(200).json(responseData);
   } catch (err) {
     console.error("❌ ERROR:", err.message);
     res.status(500).json({ success: false, message: "Server error" });
@@ -3108,6 +3157,9 @@ exports.deleteFeed = async (req, res) => {
        5️⃣ EXECUTE ALL
     -------------------------------------------------- */
     await Promise.all(deleteTasks);
+
+    // 🟢 Invalidate Cache
+    await clearFeedsCache();
 
     return res.status(200).json({
       success: true,

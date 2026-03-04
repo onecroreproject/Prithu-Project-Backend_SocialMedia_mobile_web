@@ -2,6 +2,7 @@ const Categories = require('../../models/categorySchema');
 const { v2: cloudinary } = require("cloudinary");
 const Feed = require('../../models/feedModel');
 const { clearCategoryCache } = require('../categoriesController');
+const { clearFeedsCache } = require('../feedControllers/feedsController');
 
 
 
@@ -100,6 +101,7 @@ exports.deleteCategory = async (req, res) => {
     await Categories.findByIdAndDelete(id);
 
     clearCategoryCache(); // 👈 Clear cache for instant UI update
+    await clearFeedsCache(); // 👈 Clear feeds cache since feeds were deleted
 
     return res.status(200).json({
       message: "Category and related feeds deleted successfully",

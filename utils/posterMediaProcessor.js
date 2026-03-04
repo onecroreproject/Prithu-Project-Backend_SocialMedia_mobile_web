@@ -282,11 +282,23 @@ exports.processPosterMedia = async ({
                     await downloadFile(getMediaUrl(url), overlayDest);
                 }
 
-                // 🚀 FIX: Use actualMediaW (visible frame) and add paddingX offset
-                const xRaw = Math.round(paddingX + ((el.xPercent ?? el.x ?? 10) / 100) * actualMediaW);
-                const yRaw = Math.round(((el.yPercent ?? el.y ?? 10) / 100) * actualMediaH);
-                const scaleW = Math.max(10, Math.round(((el.wPercent ?? el.w ?? 22)) / 100 * actualMediaW));
-                const scaleH = el.type === 'avatar' ? scaleW : Math.round(((el.hPercent ?? el.h ?? el.wPercent ?? el.w ?? 22)) / 100 * actualMediaH);
+                // 🚀 FIX: Map from 9:16 Editor Coords (Canvas-relative) to Media-Relative FFmpeg Coords
+                // The specialized editor (birthday, etc.) uses a fixed 9:16 box (720x1280 virtual)
+                const VIRTUAL_CANVAS_W = 720;
+                const VIRTUAL_CANVAS_H = 1280; // 9:16 relative to 720w
+
+                const xCanvas = ((el.xPercent ?? el.x ?? 10) / 100) * VIRTUAL_CANVAS_W;
+                const yCanvas = ((el.yPercent ?? el.y ?? 10) / 100) * VIRTUAL_CANVAS_H;
+
+                const mediaTopInCanvas = (VIRTUAL_CANVAS_H - actualMediaH) / 2;
+                const mediaLeftInCanvas = (VIRTUAL_CANVAS_W - actualMediaW) / 2;
+
+                // xRaw: relative to output frame (720w), matching the xCanvas if centered properly
+                const xRaw = Math.round(xCanvas - mediaLeftInCanvas + paddingX);
+                const yRaw = Math.round(yCanvas - mediaTopInCanvas);
+
+                const scaleW = Math.max(10, Math.round(((el.wPercent ?? el.w ?? 22)) / 100 * VIRTUAL_CANVAS_W));
+                const scaleH = el.type === 'avatar' ? scaleW : Math.round(((el.hPercent ?? el.h ?? el.wPercent ?? el.w ?? 22)) / 100 * VIRTUAL_CANVAS_H);
 
                 const fmtLabel = `fmt${filterIndex}`, overlayLabel = `over${filterIndex}`;
                 let currentOverlayInput = `${overlayInputIndex}:v`;
@@ -335,11 +347,20 @@ exports.processPosterMedia = async ({
             const content = el.content || textStyle.content || (el.type === 'username' ? viewer?.userName : "");
 
             if (content) {
-                // 🚀 FIX: Use 1.8 multiplier for pixel parity (720 / 400 = 1.8)
-                const xRaw = Math.round(paddingX + ((el.xPercent ?? el.x ?? 10) / 100) * actualMediaW);
-                const yRaw = Math.round(((el.yPercent ?? el.y ?? 10) / 100) * actualMediaH);
-                const boxW = Math.round(((el.wPercent ?? el.w ?? 40) / 100) * actualMediaW);
-                const boxH = Math.round(((el.hPercent ?? el.h ?? 10) / 100) * actualMediaH);
+                // 🚀 FIX: Map from 9:16 Editor Coords to Media-Relative FFmpeg Coords
+                const VIRTUAL_CANVAS_W = 720;
+                const VIRTUAL_CANVAS_H = 1280;
+
+                const xCanvas = ((el.xPercent ?? el.x ?? 10) / 100) * VIRTUAL_CANVAS_W;
+                const yCanvas = ((el.yPercent ?? el.y ?? 10) / 100) * VIRTUAL_CANVAS_H;
+
+                const mediaTopInCanvas = (VIRTUAL_CANVAS_H - actualMediaH) / 2;
+                const mediaLeftInCanvas = (VIRTUAL_CANVAS_W - actualMediaW) / 2;
+
+                const xRaw = Math.round(xCanvas - mediaLeftInCanvas + paddingX);
+                const yRaw = Math.round(yCanvas - mediaTopInCanvas);
+                const boxW = Math.round(((el.wPercent ?? el.w ?? 40) / 100) * VIRTUAL_CANVAS_W);
+                const boxH = Math.round(((el.hPercent ?? el.h ?? 10) / 100) * VIRTUAL_CANVAS_H);
                 const fontSize = Math.round((textStyle.fontSize || 24) * 1.8);
 
                 // 🚀 Resolve Font Path dynamically

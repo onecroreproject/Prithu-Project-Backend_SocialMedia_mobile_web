@@ -2,6 +2,7 @@ const SEOConfig = require('../../models/SEOConfig');
 const Redirect = require('../../models/Redirect');
 const StaticPage = require('../../models/StaticPage');
 const Feed = require('../../models/feedModel');
+const { clearFeedsCache } = require('../feedControllers/feedsController');
 const { generateSitemap } = require('../../utils/sitemapGenerator');
 const GoogleSeoApi = require('../../utils/googleApi');
 const { calculateSeoScore } = require('../../utils/seoScorer');
@@ -109,6 +110,10 @@ exports.updateFeedSeo = async (req, res) => {
     try {
         const { seoMetadata } = req.body;
         const feed = await Feed.findByIdAndUpdate(req.params.id, { seoMetadata }, { new: true });
+
+        // 🟢 Invalidate User Feeds Cache
+        await clearFeedsCache();
+
         res.status(200).json({ success: true, data: feed });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

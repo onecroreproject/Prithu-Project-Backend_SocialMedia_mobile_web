@@ -27,7 +27,7 @@ const deleteMediaFile = (mediaUrl) => {
 
 exports.createUpdate = async (req, res) => {
     try {
-        const { title, description, targetRole } = req.body;
+        const { title, description, targetRole, version } = req.body;
         const adminId = req.Id;
         const file = req.file;
 
@@ -40,6 +40,7 @@ exports.createUpdate = async (req, res) => {
         const newUpdate = new Update({
             title,
             description,
+            version,
             targetRole: targetRole || 'all',
             media: mediaUrl,
             createdBy: adminId
@@ -108,7 +109,7 @@ exports.getAllUpdatesAdmin = async (req, res) => {
 exports.updateUpdate = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, targetRole, isActive } = req.body;
+        const { title, description, targetRole, isActive, version } = req.body;
         const file = req.file;
 
         const update = await Update.findById(id);
@@ -118,6 +119,7 @@ exports.updateUpdate = async (req, res) => {
 
         if (title) update.title = title;
         if (description) update.description = description;
+        if (version !== undefined) update.version = version;
         if (targetRole) update.targetRole = targetRole;
         if (isActive !== undefined) update.isActive = isActive;
 

@@ -282,6 +282,7 @@ const { getUpcomingBirthdays } = require('../controllers/adminControllers/adminU
 
 const {
     getUpdatesForUser,
+    getPublicUpdates,
     getUnreadCount,
     markAsRead
 } = require('../controllers/userControllers/userUpdateController');
@@ -488,6 +489,7 @@ router.get('/parties/by-state/:state', getPartiesByState);
 router.get('/parties/:partyId/leaders', getLeadersByParty);
 
 /* --------------------- User Updates (What's New) --------------------- */
+router.get('/user/updates/public', getPublicUpdates);
 router.get('/user/updates/all', auth, getUpdatesForUser);
 router.get('/user/updates/unread-count', auth, getUnreadCount);
 router.post('/user/updates/mark-read/:updateId', auth, markAsRead);

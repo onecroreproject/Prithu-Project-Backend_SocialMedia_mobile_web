@@ -469,7 +469,8 @@ exports.directDownloadFeed = async (req, res) => {
     console.log(`[DirectDL] Media processing configured. Source: ${tempSourcePath}`);
 
     const finalOutputPath = path.join(tempDir, `final_output_${feedId}.mp4`);
-    const filename = feed.caption ? `${feed.caption.slice(0, 30).replace(/[^a-z0-9]/gi, '_')}.mp4` : `video_${feedId.slice(-4)}.mp4`;
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
+    const filename = `prithu${randomSuffix}.mp4`;
 
     // Monitor for client disconnects
     req.on('close', () => {
@@ -709,7 +710,8 @@ exports.birthdayDownloadFeed = async (req, res) => {
     });
 
     const finalOutputPath = path.join(tempDir, `birthday_${feedId}.mp4`);
-    const filename = `birthday_poster_${feedId.slice(-4)}.mp4`;
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
+    const filename = `prithu${randomSuffix}.mp4`;
 
     req.on('close', () => console.warn(`[BirthdayDL] Client disconnected early`));
 
@@ -919,7 +921,8 @@ exports.anniversaryDownloadFeed = async (req, res) => {
     });
 
     const finalOutputPath = path.join(tempDir, `anniversary_${feedId}.mp4`);
-    const filename = `anniversary_poster_${feedId.slice(-4)}.mp4`;
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
+    const filename = `prithu${randomSuffix}.mp4`;
 
     req.on('close', () => console.warn(`[AnniversaryDL] Client disconnected early`));
 
@@ -1135,7 +1138,8 @@ exports.politicsDownloadFeed = async (req, res) => {
     });
 
     const finalOutputPath = path.join(tempDir, `politics_${feedId}.mp4`);
-    const filename = `politics_poster_${feedId.slice(-4)}.mp4`;
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
+    const filename = `prithu${randomSuffix}.mp4`;
 
     req.on('close', () => console.warn(`[PoliticsDL] Client disconnected early`));
 
