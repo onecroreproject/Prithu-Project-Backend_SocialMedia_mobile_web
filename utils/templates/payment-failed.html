@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prithu Payment Failed</title>
+    <style>
+        /* ----- base & reset (unified off-white) ----- */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f7;
+            font-family: Arial, sans-serif;
+            line-height: 1.4;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #f9f9f7;
+            box-shadow: 2px 6px 30px rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        /* ----- HEADER: logo + name always side by side ----- */
+        .header {
+            background-color: #f9f9f7;
+            color: #064d3b;
+            padding: 40px 20px 20px;
+            text-align: center;
+        }
+
+        .logo-text-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            font-family: serif;
+            flex-wrap: nowrap;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .header img.logo {
+            width: 65px;
+            height: auto;
+            animation: spin 4s linear infinite;
+            display: block;
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0, 50, 30, 0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 37px;
+            color: #064d3b;
+            white-space: nowrap;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        /* ----- content area ----- */
+        .content {
+            padding: 0 40px;
+            background-color: #f9f9f7;
+            color: black;
+            text-align: left;
+        }
+
+        .content h2 {
+            font-size: 19px;
+            margin: 0 0 12px 0;
+            color: #d32f2f;
+            /* Alert red for failure */
+            font-weight: 600;
+        }
+
+        .content p {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #000;
+            line-height: 1.5;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: #4169E1;
+            color: #ffffff !important;
+            padding: 16px 38px;
+            text-decoration: none;
+            border-radius: 60px;
+            font-size: 18px;
+            font-weight: 500;
+            margin: 20px 0 15px 0;
+            box-shadow: 0 8px 16px rgba(65, 105, 225, 0.25);
+            border: 1px solid #2e4db3;
+            transition: background 0.2s ease, transform 0.2s ease;
+            line-height: 1.2;
+        }
+
+        .cta-button:hover {
+            background-color: #365fc0;
+            transform: translateY(-2px);
+        }
+
+        .footer {
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #064d3b;
+            background-color: #f9f9f7;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .footer a {
+            color: #000000;
+            text-decoration: none;
+            font-weight: 500;
+            border-bottom: 1px dotted #7a9c8c;
+        }
+
+        .footer p {
+            margin: 8px 0;
+            color: black;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .header {
+                padding: 30px 15px 15px;
+            }
+
+            .header img.logo {
+                width: 42px !important;
+            }
+
+            .header h1 {
+                font-size: 28px !important;
+            }
+
+            .content {
+                padding: 0 25px;
+            }
+
+            .cta-button {
+                padding: 14px 30px;
+                font-size: 17px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo-text-container">
+                <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg"
+                    alt="Prithu Logo" class="logo" />
+                <h1>Prithu</h1>
+            </div>
+        </div>
+
+        <div class="content">
+            <h2>Oops! Payment Failed</h2>
+            <p>Hi {userName},</p>
+            <p>We encountered an issue while processing your payment for the <strong>{planName}</strong> plan.</p>
+            <p>Don't worry, your account is still secure. You can try renewing your subscription again by clicking the
+                button below.</p>
+
+            <p style="text-align:center;">
+                <a href="https://www.prithu.app/home/subscriptions" class="cta-button">Retry Payment →</a>
+            </p>
+
+            <p>If you have any questions or the issue persists, feel free to reach out to our support team.</p>
+            <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+        </div>
+
+        <div class="footer">
+            <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+            <p>Need help? <a href="https://www.prithu.app/contact">Contact Support</a></p>
+        </div>
+    </div>
+</body>
+
+</html>

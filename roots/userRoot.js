@@ -135,6 +135,8 @@ const {
     createSubscriptionOrder,
     verifySubscriptionPayment,
     recordPaymentFailure,
+    recordPaymentCancel,
+    downloadInvoice,
     getUserInvoices,
 } = require('../controllers/userControllers/userSubscriptionController');
 
@@ -434,6 +436,8 @@ router.post('/subscription/create-order', auth, createSubscriptionOrder);
 router.post('/user/subscription/create-order', auth, createSubscriptionOrder); // Alias for frontend consistency
 router.post('/subscription/verify-payment', auth, verifySubscriptionPayment);
 router.post('/subscription/payment-failure', auth, recordPaymentFailure);
+router.post('/subscription/payment-cancel', auth, recordPaymentCancel);
+router.get('/subscription/invoice/download/:invoiceId', auth, downloadInvoice);
 router.get('/subscription/invoices', auth, getUserInvoices);
 
 

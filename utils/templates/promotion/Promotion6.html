@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Grow Together, Earn Together – Prithu's Rewards!</title>
+    <style>
+        /* ... STYLES (same) ... */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f7;
+            font-family: Arial, sans-serif;
+            line-height: 1.4;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #f9f9f7;
+            box-shadow: 2px 6px 30px rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #f9f9f7;
+            color: #064d3b;
+            padding: 40px 20px 20px;
+            text-align: center;
+        }
+
+        .logo-text-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            font-family: serif;
+            flex-wrap: nowrap;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .header img.logo {
+            width: 65px;
+            height: auto;
+            animation: spin 4s linear infinite;
+            display: block;
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0, 50, 30, 0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 37px;
+            color: #064d3b;
+            white-space: nowrap;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .content {
+            padding: 0 40px;
+            background-color: #f9f9f7;
+            color: black;
+            text-align: left;
+        }
+
+        .content h2 {
+            font-size: 22px;
+            margin: 0 0 12px 0;
+            color: #064d3b;
+            font-weight: 600;
+        }
+
+        .content p {
+            font-size: 17px;
+            margin-bottom: 20px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .stats-card {
+            background: linear-gradient(135deg, #064d3b 0%, #0a7a5e 100%);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 30px 0;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            padding: 10px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 800;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            opacity: 0.8;
+        }
+
+        .benefit-item {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .benefit-emoji {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: #4169E1;
+            color: #ffffff !important;
+            padding: 16px 38px;
+            text-decoration: none;
+            border-radius: 60px;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 25px 0;
+            box-shadow: 0 8px 16px rgba(65, 105, 225, 0.25);
+        }
+
+        .footer {
+            padding: 30px 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            background-color: #f0f0ed;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .footer a {
+            color: #064d3b;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .content {
+                padding: 0 25px;
+            }
+
+            .header h1 {
+                font-size: 28px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo-text-container">
+                <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg"
+                    alt="Prithu Logo" class="logo" />
+                <h1>Prithu</h1>
+            </div>
+        </div>
+
+        <div class="content">
+            <h2 style="text-align: center; margin-bottom: 25px;">🎁 Share the Joy, Multiply the Happiness</h2>
+
+            <p>Hi {username},</p>
+            <p>At Prithu, we believe the more, the merrier. That's why we've built a rewarding referral system just for
+                you. Your emotions + Prithu's creativity = Memories that last forever.✨</p>
+
+            <!-- Stats -->
+            <div class="stats-card">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-value">{totalUsers}</span>
+                        <span class="stat-label">Friends Invited</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">₹100</span>
+                        <span class="stat-label">Reward Per Friend</span>
+                    </div>
+                </div>
+            </div>
+
+            <h2>🚀 Grow Together. Earn Together.</h2>
+
+            <div class="benefit-item">
+                <span class="benefit-emoji">💰</span>
+                <div>
+                    <strong>Exciting Rewards</strong><br>
+                    <span style="font-size: 14px; color: #666;">Earn ₹100 for every friend who joins Prithu's creative
+                        family.</span>
+                </div>
+            </div>
+
+            <div class="benefit-item">
+                <span class="benefit-emoji">💬</span>
+                <div>
+                    <strong>Spread the Love</strong><br>
+                    <span style="font-size: 14px; color: #666;">Sharing the joy of creativity has never been more
+                        rewarding!</span>
+                </div>
+            </div>
+
+            <p style="text-align:center; margin-top: 30px;">
+                <a href="https://www.prithu.app/home/referral" class="cta-button">Invite Friends & Earn →</a>
+            </p>
+
+            <p style="text-align: center; font-size: 15px; color: #666;">
+                It's a win-win! Your friends get a fantastic platform to express themselves, and you get rewarded.
+            </p>
+
+            <p style="text-align: center; margin-top: 40px;"><strong>Success,<br>The Prithu Team</strong></p>
+        </div>
+
+        <div class="footer">
+            <p>📧 info@prithu.in | 🌐 <a href="https://www.prithu.app">www.prithu.app</a></p>
+            <p>If you wish to unsubscribe, <a href="#">let us know</a>.</p>
+            <p>&copy; 2026 Prithu. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+
+</html>

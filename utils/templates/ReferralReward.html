@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prithu Referral Reward</title>
   <style>
+    /* ----- base & reset (unified off-white) ----- */
     body {
       margin: 0;
       padding: 0;
@@ -22,48 +24,59 @@
       overflow: hidden;
     }
 
+    /* ----- HEADER: logo + name always side by side (no stacking) ----- */
     .header {
       background-color: #f9f9f7;
       color: #064d3b;
       padding: 40px 20px 20px;
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
     }
 
     .logo-text-container {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 15px;
+      /* consistent gap */
       font-family: serif;
+      flex-wrap: nowrap;
+      /* force no wrap */
     }
 
-    /* Add rotation animation */
-   @keyframes spin {
-    from {
-    transform: rotate(0deg);
-        }
-    to {
-     transform: rotate(360deg);
+    /* spin animation (identical to all previous) */
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
       }
     }
 
-      * Apply the animation to your logo */
-       .header img.logo {
-        width: 65px;
-        height: auto;
-        animation: spin 4s linear infinite; 
-        }
-		
-   .header h1 {
-      margin: 0;
-      font-size: 37px;
-      color: #064d3b;
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+      display: block;
+      border-radius: 50%;
+      /* soft roundness */
+      box-shadow: 0 4px 10px rgba(0, 50, 30, 0.1);
     }
 
+    .header h1 {
+      margin: 0;
+      font-size: 37px;
+      /* matches previous style */
+      color: #064d3b;
+      /* prithu green */
+      white-space: nowrap;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    /* ----- content area (left aligned text) ----- */
     .content {
       padding: 0 40px;
       background-color: #f9f9f7;
@@ -72,37 +85,50 @@
     }
 
     .content h2 {
-      font-size: 18px;
-      margin-bottom: 10px;
+      font-size: 19px;
+      margin: 0 0 12px 0;
+      color: #064d3b;
+      font-weight: 600;
     }
 
     .content p {
       font-size: 18px;
       margin-bottom: 15px;
+      color: #000;
+      line-height: 1.5;
     }
 
     .content a {
       color: #4169E1;
+      /* fallback for inline links, but button uses its own */
       text-decoration: none;
     }
 
- .cta-button {
-  display: inline-block;
-  background-color: #4169E1;
-  color: white !important; /* Use !important to ensure precedence */
-  padding: 15px 30px;
-  text-decoration: none;
-  border-radius: 5px;
-  font-size: 18px;
-  margin: 20px 0;
-  transition: background 0.3s ease, transform 0.2s ease;
-}
+    /* ----- BUTTON : exact pill design from registration email ----- */
+    .cta-button {
+      display: inline-block;
+      background-color: #4169E1;
+      color: #ffffff !important;
+      /* white text, override any inheritance */
+      padding: 16px 38px;
+      text-decoration: none;
+      border-radius: 60px;
+      /* pill shape */
+      font-size: 18px;
+      font-weight: 500;
+      margin: 20px 0 15px 0;
+      box-shadow: 0 8px 16px rgba(65, 105, 225, 0.25);
+      border: 1px solid #2e4db3;
+      transition: background 0.2s ease, transform 0.2s ease;
+      line-height: 1.2;
+    }
+
     .cta-button:hover {
       background-color: #365fc0;
       transform: translateY(-2px);
     }
 
-
+    /* footer with black links + subtle dotted underline */
     .footer {
       padding: 20px;
       text-align: center;
@@ -113,9 +139,10 @@
     }
 
     .footer a {
-      color: #064d3b;
+      color: #000000;
       text-decoration: none;
       font-weight: 500;
+      border-bottom: 1px dotted #7a9c8c;
     }
 
     .footer a:hover {
@@ -127,22 +154,36 @@
       color: black;
     }
 
+    /* ----- responsive: smaller logo & name on narrow screens ----- */
     @media only screen and (max-width: 600px) {
       .header {
-        padding: 20px;
+        padding: 30px 15px 15px;
       }
+
       .logo-text-container {
-        flex-direction: row;
-        align-items: center;
+        gap: 10px;
       }
+
       .header img.logo {
-        width: 50px;
+        width: 42px !important;
+        height: auto;
       }
+
       .header h1 {
-        font-size: 32px;
+        font-size: 28px !important;
       }
+
       .content {
-        padding: 25px 15px 40px 15px;
+        padding: 0 25px;
+      }
+
+      .cta-button {
+        padding: 14px 30px;
+        font-size: 17px;
+      }
+
+      .footer {
+        padding: 15px 10px;
       }
     }
   </style>
@@ -150,35 +191,98 @@
 
 <body>
   <div class="email-container">
+    <!-- header: logo + name always adjacent (no stacking) -->
     <div class="header">
       <div class="logo-text-container">
-        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
         <h1>Prithu</h1>
       </div>
     </div>
 
     <div class="content">
-      <h2>Hi {referrerName},</h2>
+      <h2 style="color: #064d3b; font-size: 22px;">Hi {referrerName},</h2>
 
-      <p >Great news — your friend <strong>{referredUserName}</strong> just joined Prithu using your referral link! </p>
+      <p>Congratulations! You've just earned a new referral reward. Your friend <strong>{referredUserName}</strong>
+        joined Prithu using your code on <strong>{referralDate}</strong>.</p>
 
-      <p>As a thank-you for spreading the word, you’ve earned <strong>{rewardAmount}</strong> in referral rewards. Your reward has been added to your account — you can view it anytime in your Rewards or Wallet section.</p>
+      <!-- Reward Highlight Box -->
+      <div
+        style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin: 25px 0; text-align: center;">
+        <p
+          style="margin: 0; color: #166534; font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+          You Earned</p>
+        <p style="margin: 5px 0 0 0; color: #15803d; font-size: 42px; font-weight: 800;">₹{rewardAmount}</p>
+      </div>
 
-      <p>Keep sharing your referral link to earn even more exciting rewards!</p>
+      <!-- Lifetime Stats -->
+      <table width="100%" cellpadding="0" cellspacing="0"
+        style="margin-bottom: 30px; border-collapse: separate; border-spacing: 10px 0;">
+        <tr>
+          <td width="50%"
+            style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 15px; text-align: center;">
+            <p style="margin: 0; color: #6b7280; font-size: 13px; text-transform: uppercase;">Total Referrals</p>
+            <p style="margin: 5px 0 0 0; color: #111827; font-size: 20px; font-weight: 700;">{totalSuccessfulReferrals}
+            </p>
+          </td>
+          <td width="50%"
+            style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 15px; text-align: center;">
+            <p style="margin: 0; color: #6b7280; font-size: 13px; text-transform: uppercase;">Total Earnings</p>
+            <p style="margin: 5px 0 0 0; color: #111827; font-size: 20px; font-weight: 700;">₹{totalEarnings}</p>
+          </td>
+        </tr>
+      </table>
 
-      <p style="text-align:center;">
-        <a href="https://www.prithu.com/rewards" class="cta-button">Check Your Rewards</a>
+      <!-- 30-Day challenge Section -->
+      <div
+        style="background: linear-gradient(135deg, #064d3b 0%, #0a7a5e 100%); border-radius: 16px; padding: 25px; margin-bottom: 30px; color: #ffffff; box-shadow: 0 10px 20px rgba(6, 77, 59, 0.15);">
+        <h3
+          style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+          🏆 30-Day Referral Challenge
+        </h3>
+
+        <p style="color: #d1fae5; font-size: 15px; margin-bottom: 20px;">Invite 25 friends within 30 days of your
+          subscription to achieve the milestone!</p>
+
+        <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 15px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="text-align: center; border-right: 1px solid rgba(255,255,255,0.2);">
+                <p style="margin: 0; font-size: 24px; font-weight: 800;">{referredInCycle}</p>
+                <p style="margin: 2px 0 0 0; font-size: 11px; text-transform: uppercase; color: #d1fae5;">Referred</p>
+              </td>
+              <td style="text-align: center; border-right: 1px solid rgba(255,255,255,0.2);">
+                <p style="margin: 0; font-size: 24px; font-weight: 800;">{peopleRemaining}</p>
+                <p style="margin: 2px 0 0 0; font-size: 11px; text-transform: uppercase; color: #d1fae5;">Remaining</p>
+              </td>
+              <td style="text-align: center;">
+                <p style="margin: 0; font-size: 24px; font-weight: 800;">{daysRemaining}</p>
+                <p style="margin: 2px 0 0 0; font-size: 11px; text-transform: uppercase; color: #d1fae5;">Days Left</p>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <p style="margin: 20px 0 0 0; font-size: 15px; font-style: italic; text-align: center;">
+          "You're doing amazing! Just {peopleRemaining} more to reach your goal. Keep going!"
+        </p>
+      </div>
+
+      <p style="text-align:center; margin-top: 30px;">
+        <a href="https://www.prithu.app/home/referral" class="cta-button">View Your Dashboard →</a>
       </p>
 
-      <p style="text-align: center;">Thanks for helping our community grow.</p>
+      <p style="text-align: center; margin-top: 40px;">Thanks for helping our community grow.</p>
       <p style="text-align: center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
     </div>
 
+    <!-- footer with black links + dotted style (as previous files) -->
     <div class="footer">
-      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
-      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
-      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#">let us know!</a></p>
+      <p><a href="#">View this email as a web page</a></p>
     </div>
   </div>
 </body>
+
 </html>

@@ -10,6 +10,7 @@ const checkActiveSubscription = require('../../middlewares/subscriptionMiddlewar
 const razorpay = require("../../middlewares/helper/razorPayConfig.js");
 const { sendTemplateEmail } = require("../../utils/templateMailer.js");
 const { handleReferralReward } = require("../../middlewares/helper/directReferalFunction.js");
+const { generateInvoicePDF } = require("../../utils/invoiceGenerator.js");
 
 /**
  * 1️⃣ Subscribe to a Plan
@@ -451,24 +452,60 @@ exports.verifySubscriptionPayment = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // 6. Send Invoice Email (Async - don't block response)
-    // We deliberately invoke this AFTER transaction commit
-    sendTemplateEmail({
-      templateName: "InvoiceTemplate.html",
-      to: (await User.findById(userId)).email,
-      subject: `Payment Receipt - ${invoiceNumber}`,
-      placeholders: {
-        userName: (await User.findById(userId)).userName,
+    // 6. Send Subscription Activation Mail with PDF Invoice (Async)
+    const activeUser = await User.findById(userId);
+
+    try {
+      // Generate PDF Invoice
+      const pdfBuffer = await generateInvoicePDF({
+        userName: activeUser.userName,
+        email: activeUser.email,
         invoiceNumber,
+        paymentDate: today.toLocaleDateString(),
         planName: plan.name,
         amount: plan.price,
-        paymentDate: today.toDateString(),
-        year: new Date().getFullYear()
-      },
-      embedLogo: false
-    }).then(() => {
-      Invoice.findByIdAndUpdate(invoice._id, { emailSent: true }).exec();
-    }).catch(err => console.error("Invoice email failed:", err));
+        razorpayPaymentId: razorpay_payment_id
+      });
+
+      // Send Activation Detail Email WITH PDF ATTACHMENT
+      sendTemplateEmail({
+        templateName: "SubscriptionActivation.html",
+        to: activeUser.email,
+        subject: "🚀 Your Prithu Premium is Activated!",
+        placeholders: {
+          userName: activeUser.userName,
+          planType: plan.name,
+          startDate: today.toLocaleDateString(),
+          endDate: subscription.endDate.toLocaleDateString(),
+        },
+        attachments: [
+          {
+            filename: `Invoice_${invoiceNumber}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }
+        ],
+        embedLogo: false
+      }).catch(err => console.error("Activation email failed:", err));
+
+      // Mark Invoice as email sent
+      await Invoice.findByIdAndUpdate(invoice._id, { emailSent: true });
+    } catch (pdfErr) {
+      console.error("PDF generation/Email failed:", pdfErr);
+      // Fallback: Send email without attachment if PDF fails
+      sendTemplateEmail({
+        templateName: "SubscriptionActivation.html",
+        to: activeUser.email,
+        subject: "🚀 Your Prithu Premium is Activated!",
+        placeholders: {
+          userName: activeUser.userName,
+          planType: plan.name,
+          startDate: today.toLocaleDateString(),
+          endDate: subscription.endDate.toLocaleDateString(),
+        },
+        embedLogo: false
+      }).catch(err => console.error("Fallback activation email failed:", err));
+    }
 
     return res.status(200).json({
       success: true,
@@ -529,6 +566,20 @@ exports.recordPaymentFailure = async (req, res) => {
       await invoice.save();
     }
 
+    const failUser = await User.findById(userId);
+    if (failUser) {
+      sendTemplateEmail({
+        templateName: "payment-failed.html",
+        to: failUser.email,
+        subject: "⚠️ Payment Failed - Action Required",
+        placeholders: {
+          userName: failUser.userName,
+          planName: subscription.planId.name,
+        },
+        embedLogo: false
+      }).catch(err => console.error("Payment failure email failed:", err));
+    }
+
     return res.status(200).json({
       success: true,
       message: "Payment failure recorded",
@@ -542,7 +593,97 @@ exports.recordPaymentFailure = async (req, res) => {
 };
 
 /**
- * 1️⃣1️⃣ Get User Invoices
+ * 1️⃣1️⃣ Record Payment Cancellation (User Manual Cancel)
+ */
+exports.recordPaymentCancel = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const { razorpay_order_id } = req.body;
+
+    if (!razorpay_order_id) {
+      return res.status(400).json({ success: false, message: "Order ID is required" });
+    }
+
+    const subscription = await UserSubscription.findOne({
+      razorpayOrderId: razorpay_order_id,
+      userId
+    }).populate('planId');
+
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: "Subscription record not found" });
+    }
+
+    // Update status to canceled if not already success
+    if (subscription.paymentStatus !== "success") {
+      subscription.paymentStatus = "failed"; // We use failed in DB, but template says canceled
+      await subscription.save();
+    }
+
+    const cancelUser = await User.findById(userId);
+    if (cancelUser) {
+      sendTemplateEmail({
+        templateName: "payment-canceled.html",
+        to: cancelUser.email,
+        subject: "Prithu - Subscription Payment Canceled",
+        placeholders: {
+          userName: cancelUser.userName,
+          planName: subscription.planId.name,
+        },
+        embedLogo: false
+      }).catch(err => console.error("Payment cancellation email failed:", err));
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment cancellation recorded"
+    });
+
+  } catch (err) {
+    console.error("recordPaymentCancel error:", err);
+    res.status(500).json({ success: false, message: "Failed to record payment cancellation", error: err.message });
+  }
+};
+
+/**
+ * 1️⃣2️⃣ Download Invoice PDF
+ */
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const userId = req.Id;
+
+    const invoice = await Invoice.findById(invoiceId).populate('planId').populate('userId');
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+
+    // Security check: Only the owner or admin can download
+    if (invoice.userId._id.toString() !== userId.toString()) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    const pdfBuffer = await generateInvoicePDF({
+      userName: invoice.userId.userName,
+      email: invoice.userId.email,
+      invoiceNumber: invoice.invoiceNumber,
+      paymentDate: invoice.paidAt.toLocaleDateString(),
+      planName: invoice.planId.name,
+      amount: invoice.amount,
+      razorpayPaymentId: invoice.razorpayPaymentId
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Invoice_${invoice.invoiceNumber}.pdf`);
+    res.status(200).send(pdfBuffer);
+
+  } catch (err) {
+    console.error("downloadInvoice error:", err);
+    res.status(500).json({ success: false, message: "Failed to generate invoice PDF", error: err.message });
+  }
+};
+
+/**
+ * 1️⃣3️⃣ Get User Invoices
  */
 exports.getUserInvoices = async (req, res) => {
   try {

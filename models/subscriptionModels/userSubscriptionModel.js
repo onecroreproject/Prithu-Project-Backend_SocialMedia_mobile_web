@@ -23,6 +23,7 @@ const userSubscriptionSchema = new mongoose.Schema({
   razorpaySignature: { type: String },      // Signature for verification
 
   invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" }, // Linked Invoice
+  lastExpiryReminderDate: { type: String }, // Format: YYYY-MM-DD to track daily reminders
 
   // Meta
   createdAt: { type: Date, default: Date.now },

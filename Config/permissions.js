@@ -59,7 +59,10 @@ const ALL_PERMISSIONS = [
     'canManageUpdates',
 
     // System & Server Management
-    'canViewSystemLogs'
+    'canViewSystemLogs',
+
+    // Email Management
+    'canManageEmails'
 ];
 
 module.exports = {

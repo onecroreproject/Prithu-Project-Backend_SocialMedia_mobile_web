@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prithu Premium Activated</title>
   <style>
+    /* ----- base & reset (unified off-white) ----- */
     body {
       margin: 0;
       padding: 0;
@@ -22,49 +24,59 @@
       overflow: hidden;
     }
 
+    /* ----- HEADER: logo + name always side by side (no stacking) ----- */
     .header {
       background-color: #f9f9f7;
       color: #064d3b;
       padding: 40px 20px 20px;
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
     }
 
     .logo-text-container {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 15px;
+      /* consistent gap */
       font-family: serif;
+      flex-wrap: nowrap;
+      /* force no wrap */
     }
 
-    /* Add rotation animation */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+    /* spin animation (identical to all previous) */
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
 
-/* Apply the animation to your logo */
-.header img.logo {
-  width: 65px;
-  height: auto;
-  animation: spin 4s linear infinite; /* 4s = rotation speed */
-}
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+      display: block;
+      border-radius: 50%;
+      /* soft roundness */
+      box-shadow: 0 4px 10px rgba(0, 50, 30, 0.1);
+    }
 
     .header h1 {
       margin: 0;
       font-size: 37px;
+      /* matches previous style */
       color: #064d3b;
+      /* prithu green */
+      white-space: nowrap;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-weight: 600;
+      letter-spacing: -0.5px;
     }
 
+    /* ----- content area (left aligned text) ----- */
     .content {
       padding: 0 40px;
       background-color: #f9f9f7;
@@ -73,39 +85,63 @@
     }
 
     .content h2 {
-      font-size: 18px;
-      margin-bottom: 10px;
+      font-size: 19px;
+      margin: 0 0 12px 0;
+      color: #064d3b;
+      font-weight: 600;
     }
 
     .content p {
       font-size: 18px;
       margin-bottom: 15px;
+      color: #000;
+      line-height: 1.5;
     }
 
     .content a {
       color: #4169E1;
+      /* fallback for inline links, but button uses its own */
       text-decoration: none;
     }
 
+    /* list styling */
+    .content ul {
+      padding-left: 20px;
+      font-size: 17px;
+      color: #000;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .content li {
+      margin-bottom: 8px;
+    }
+
+    /* ----- BUTTON : exact pill design from registration email ----- */
     .cta-button {
       display: inline-block;
-     background-color: #4169E1;
+      background-color: #4169E1;
       color: #ffffff !important;
-      padding: 15px 30px;
+      /* white text, override any inheritance */
+      padding: 16px 38px;
       text-decoration: none;
-      border-radius: 5px;
+      border-radius: 60px;
+      /* pill shape */
       font-size: 18px;
-      margin: 20px 0;
-      font-weight: bold;
-      transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      font-weight: 500;
+      margin: 20px 0 15px 0;
+      box-shadow: 0 8px 16px rgba(65, 105, 225, 0.25);
+      border: 1px solid #2e4db3;
+      transition: background 0.2s ease, transform 0.2s ease;
+      line-height: 1.2;
     }
-   .cta-button:hover {
+
+    .cta-button:hover {
       background-color: #365fc0;
       transform: translateY(-2px);
     }
 
-
+    /* footer with black links + subtle dotted underline */
     .footer {
       padding: 20px;
       text-align: center;
@@ -116,9 +152,10 @@
     }
 
     .footer a {
-      color: #064d3b;
+      color: #000000;
       text-decoration: none;
       font-weight: 500;
+      border-bottom: 1px dotted #7a9c8c;
     }
 
     .footer a:hover {
@@ -130,22 +167,36 @@
       color: black;
     }
 
+    /* ----- responsive: smaller logo & name on narrow screens ----- */
     @media only screen and (max-width: 600px) {
       .header {
-        padding: 20px;
+        padding: 30px 15px 15px;
       }
+
       .logo-text-container {
-        flex-direction: row;
-        align-items: center;
+        gap: 10px;
       }
+
       .header img.logo {
-        width: 50px;
+        width: 42px !important;
+        height: auto;
       }
+
       .header h1 {
-        font-size: 32px;
+        font-size: 28px !important;
       }
+
       .content {
-        padding: 25px 15px 40px 15px;
+        padding: 0 25px;
+      }
+
+      .cta-button {
+        padding: 14px 30px;
+        font-size: 17px;
+      }
+
+      .footer {
+        padding: 15px 10px;
       }
     }
   </style>
@@ -153,48 +204,54 @@
 
 <body>
   <div class="email-container">
+    <!-- header: logo + name always adjacent (no stacking) -->
     <div class="header">
       <div class="logo-text-container">
-        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
         <h1>Prithu</h1>
       </div>
     </div>
-<div class="content">
-  <h2>Hi {userName},</h2>
 
-  <p>Thank you for subscribing to <strong>Prithu Premium</strong>!<br>
-  Your account has been successfully activated, and you now have full access to everything our premium community enjoys.</p>
+    <div class="content">
+      <h2>Hi {userName},</h2>
 
-  <p><strong>Subscription Details:</strong></p>
-  <ul style="margin-left: -10px; font-size: 17px;">
-    <li>📦 <strong>Plan:</strong> {planType}</li>
-    <li>🗓️ <strong>Start Date:</strong> {startDate}</li>
-    <li>🗓️ <strong>End Date:</strong> {endDate}</li>
-  </ul>
+      <p>Thank you for subscribing to <strong>Prithu Premium</strong>!<br>
+        Your account has been successfully activated, and you now have full access to everything our premium community
+        enjoys.</p>
 
-  <p>Here’s what you can do as a Premium Member:</p>
+      <p><strong>Subscription Details:</strong></p>
+      <ul>
+        <li>📦 <strong>Plan:</strong> {planType}</li>
+        <li>🗓️ <strong>Start Date:</strong> {startDate}</li>
+        <li>🗓️ <strong>End Date:</strong> {endDate}</li>
+      </ul>
 
-  <ul style="margin-left: -10px; font-size: 17px">
-    <li>📸 <strong>Post & Share</strong> your favorite moments through images and videos.</li>
-    <li>❤️ <strong>Like, Comment & Download</strong> the content that inspires you.</li>
-    <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
-  </ul>
+      <p>Here’s what you can do as a Premium Member:</p>
 
-  <p>Your creativity deserves the spotlight — start sharing, connecting, and exploring the world of Prithu today!</p>
+      <ul>
+        <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+      </ul>
 
-  <p style="text-align:center;">
-    <a href="https://www.prithu.com/home" class="cta-button">Go to your feed</a>
-  </p>
-  <p style="text-align:center;">Thanks for being part of the Prithu family — we’re excited to see what you’ll create!</p>
-  <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
-</div>
+      <p>Your creativity deserves the spotlight — start sharing, connecting, and exploring the world of Prithu today!
+      </p>
 
+      <!-- button with consistent pill design, centered via text-align on parent -->
+      <p style="text-align:center;">
+        <a href="https://www.prithu.app/home" class="cta-button">Go to your feed →</a>
+      </p>
+      <p style="text-align:center;">Thanks for being part of the Prithu family — we’re excited to see what you’ll
+        create!</p>
+      <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+    </div>
 
+    <!-- footer with black links + dotted style (as previous files) -->
     <div class="footer">
-      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
-      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
-      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#">let us know!</a></p>
+      <p><a href="#">View this email as a web page</a></p>
     </div>
   </div>
 </body>
+
 </html>

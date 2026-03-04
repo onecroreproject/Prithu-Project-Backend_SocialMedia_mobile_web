@@ -7,8 +7,17 @@ const feedQueue = require("../queue/feedPostQueue");
 const trendingQueue = require("../queue/treandingQueue");
 const dailyAnalyticsQueue = require("../queue/salesMetricksUpdate");
 const notificationQueue = require("../queue/notificationQueue");
+const subscriptionReminderQueue = require("../queue/subscriptionReminderQueue");
 const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
+const promotionalEmailQueue = require("../queue/promotionalEmailQueue");
 const cleanupInactiveSessions = require("../scripts/sessionCleanup");
+const redisClient = require("../config/redisConfig");
+
+const CAMPAIGN_PAUSE_KEY = "promo_campaign_paused";
+
+const User = require("../models/userModels/userModel");
+const UserSubscription = require("../models/subscriptionModels/userSubscriptionModel");
+const { getPromotionalStats } = require("../services/statsService");
 
 // Registry to track tasks for Admin UI
 const taskRegistry = [
@@ -60,6 +69,101 @@ const taskRegistry = [
     schedule: "*/15 * * * *",
     description: "Cleans up inactive admin sessions (Every 15 mins)",
     action: () => cleanupInactiveSessions()
+  },
+  {
+    id: "subscription_expiry_reminder",
+    name: "Subscription Expiry Reminder",
+    schedule: "0 9 * * *", // 9 AM daily
+    description: "Sends expiry notifications 10 days before (Daily)",
+    action: async () => {
+      console.log("🔹 Scanning for subscriptions expiring in <= 10 days...");
+      const now = new Date();
+      const tenDaysFromNow = new Date();
+      tenDaysFromNow.setDate(now.getDate() + 10);
+      const todayStr = now.toISOString().split('T')[0];
+
+      // Find active subscriptions ending in the next 10 days
+      // and NOT already reminded today
+      const eligible = await UserSubscription.find({
+        isActive: true,
+        endDate: { $gt: now, $lte: tenDaysFromNow },
+        lastExpiryReminderDate: { $ne: todayStr }
+      }).lean();
+
+      console.log(`🔹 Found ${eligible.length} eligible subscriptions for expiry reminder.`);
+
+      for (const sub of eligible) {
+        // Calculate remaining days
+        const diffTime = sub.endDate - now;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays >= 1 && diffDays <= 10) {
+          await subscriptionReminderQueue.add({
+            subId: sub._id,
+            remainingDays: diffDays,
+            todayStr
+          });
+        }
+      }
+      return { count: eligible.length };
+    }
+  },
+  {
+    id: "promotional_campaign",
+    name: "Promotional Campaign",
+    schedule: "0 10 * * *", // 10 AM daily
+    description: "Sends promotional emails to non-subscribed users (Every 3 days per user)",
+    action: async () => {
+      // Check if paused
+      const isPaused = await redisClient.get(CAMPAIGN_PAUSE_KEY);
+      if (isPaused === "true") {
+        console.log("⏸️ Promotional Campaign is currently PAUSED. Skipping run.");
+        return { processed: 0, status: "paused" };
+      }
+
+      console.log("🚀 Starting Promotional Campaign...");
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+      // Find users who:
+      // 1. Are NOT subscribed
+      // 2. Haven't received a promo in the last 3 days
+      const eligibleUsers = await User.find({
+        "subscription.isActive": { $ne: true },
+        $or: [
+          { lastPromotionalEmailDate: { $exists: false } },
+          { lastPromotionalEmailDate: { $lte: threeDaysAgo } }
+        ]
+      })
+        .select("userName email promoTemplateIndex")
+        .limit(1000) // Batch of 1000 per day to manage load
+        .lean();
+
+      console.log(`📊 Found ${eligibleUsers.length} users eligible for promotional emails.`);
+
+      for (const user of eligibleUsers) {
+        // Add to queue for processing template & sending
+        await promotionalEmailQueue.add({
+          userId: user._id,
+          userName: user.userName,
+          email: user.email,
+          templateIndex: user.promoTemplateIndex || 0
+        });
+
+        // Update tracking fields immediately to prevent double-send in next run
+        await User.updateOne(
+          { _id: user._id },
+          {
+            $set: { lastPromotionalEmailDate: new Date() },
+            $inc: { promoTemplateIndex: 1 } // Increment for next time (1-10 cycle)
+          }
+        );
+
+        // Note: promoTemplateIndex will be used with modulo 10 in the queue worker
+      }
+
+      return { processed: eligibleUsers.length };
+    }
   }
 ];
 

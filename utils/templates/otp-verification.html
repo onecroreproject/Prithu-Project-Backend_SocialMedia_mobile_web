@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prithu OTP Verification</title>
   <style>
+    /* ----- base & reset (same off-white background) ----- */
     body {
       margin: 0;
       padding: 0;
-      background-color: #f9f9f7; /* subtle page background */
+      background-color: #f9f9f7;
       font-family: Arial, sans-serif;
       line-height: 1.4;
     }
@@ -16,96 +17,102 @@
     .email-container {
       max-width: 600px;
       margin: 40px auto;
-      background-color: #f9f9f7; /* uniform off-white color for entire email */
+      background-color: #f9f9f7;
       box-shadow: 2px 6px 30px rgba(0,0,0,0.15);
       border-radius: 12px;
       overflow: hidden;
     }
 
+    /* ----- HEADER: logo + name always side by side (no stacking) ----- */
     .header {
-      background-color: #f9f9f7; /* same as container */
+      background-color: #f9f9f7;
       color: #064d3b;
-      padding: 45px;
+      padding: 40px 20px 20px;
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
     }
 
     .logo-text-container {
       display: flex;
       align-items: center;
-      gap: 15px;
+      justify-content: center;
+      gap: 15px;                /* consistent gap with previous files */
       font-family: serif;
+      flex-wrap: nowrap;        /* force no wrap */
     }
-/* Add rotation animation */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
 
-/* Apply the animation to your logo */
-.header img.logo {
-  width: 65px;
-  height: auto;
-  animation: spin 4s linear infinite; /* 4s = rotation speed */
-}
+    /* spin animation (identical) */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+      display: block;
+      border-radius: 50%;            /* soft roundness from previous */
+      box-shadow: 0 4px 10px rgba(0,50,30,0.1); /* subtle depth */
+    }
 
     .header h1 {
       margin: 0;
-      font-size: 28px;
+      font-size: 37px;               /* matches previous style */
       color: #064d3b;
+      white-space: nowrap;            /* keep name on one line */
+      font-family: Georgia, 'Times New Roman', serif;
+      font-weight: 600;
+      letter-spacing: -0.5px;
     }
 
+    /* ----- content area (left aligned text) ----- */
     .content {
-      padding: 0px 40px;
+      padding: 0 40px;
       background-color: #f9f9f7;
-      color: #064d3b;
+      color: black;
       text-align: center;
-	  
     }
 
     .content h2 {
-      font-size: 18px;
+      font-size: 19px;
       text-align: left;
-      color: black;
-      margin-bottom: 10px;
+      margin: 0 0 12px 0;
+      color: #064d3b;
+      font-weight: 600;
     }
 
     .content p {
       font-size: 18px;
       margin-bottom: 15px;
       text-align: left;
-      color: black;
+      color: #000;
+      line-height: 1.5;
     }
 
+    /* OTP box — same elegant style (slightly smaller width for focus) */
     .otp-box {
-      background: #f9f9f7 ;
+      background: #f9f9f7;
       border-radius: 10px;
       padding: 15px;
       margin: 20px auto;
       width: 45%;
       color: black;
-      font-size: 22px;
-      letter-spacing: 2px;
+      font-size: 26px;          /* slightly larger for OTP */
+      letter-spacing: 4px;       /* improved readability */
       text-align: center;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       border: 1px solid rgba(0,0,0,0.1);
+      font-weight: 600;
+      font-family: 'Courier New', monospace; /* OTP looks clearer */
     }
 
     .important-heading {
       color: black;
       text-align: left;
-      font-size: 19px;
+      font-size: 20px;
       font-weight: 600;
       font-family: serif;
-      margin: 15px 0 8px 0;
+      margin: 20px 0 8px 0;
     }
 
     .security-list {
@@ -115,20 +122,29 @@
       padding: 0;
       margin: 5px auto 20px auto;
       font-size: 18px;
-      line-height: 1.6;
+      line-height: 1.7;
       color: black;
     }
 
+    .security-list li {
+      margin-bottom: 8px;
+    }
+
+    /* ----- BUTTON : exact pill design from registration email ----- */
     .cta-button {
       display: inline-block;
       background-color: #4169E1;
-      color: white;
-      padding: 15px 30px;
+      color: #ffffff;
+      padding: 16px 38px;
       text-decoration: none;
-      border-radius: 5px;
+      border-radius: 60px;              /* pill shape */
       font-size: 18px;
-      margin: 20px 0;
-      transition: background 0.3s ease, transform 0.2s ease;
+      font-weight: 500;
+      margin: 20px 0 25px 0;
+      box-shadow: 0 8px 16px rgba(65,105,225,0.25);
+      border: 1px solid #2e4db3;
+      transition: background 0.2s ease, transform 0.2s ease;
+      line-height: 1.2;
     }
 
     .cta-button:hover {
@@ -136,19 +152,21 @@
       transform: translateY(-2px);
     }
 
+    /* footer with black links + subtle dotted underline */
     .footer {
       padding: 20px;
       text-align: center;
       font-size: 14px;
       color: #064d3b;
-      background-color:#f9f9f7; /* same as content & header */
+      background-color: #f9f9f7;
       border-top: 1px solid rgba(0,0,0,0.05);
     }
 
     .footer a {
-      color: #064d3b;
+      color: #000000;
       text-decoration: none;
       font-weight: 500;
+      border-bottom: 1px dotted #7a9c8c;
     }
 
     .footer a:hover {
@@ -160,24 +178,39 @@
       color: black;
     }
 
+    /* ----- responsive: smaller logo & name on narrow screens ----- */
     @media only screen and (max-width: 600px) {
       .header {
-        flex-direction: column;
-        gap: 10px;
-        padding: 15px;
+        padding: 30px 15px 15px;
       }
       .logo-text-container {
-        flex-direction: row;
-        align-items: center;
+        gap: 10px;
       }
       .header img.logo {
-        width: 50px;
+        width: 42px !important;
+        height: auto;
       }
       .header h1 {
+        font-size: 28px !important;
+      }
+      .content {
+        padding: 0 25px;
+      }
+      .otp-box {
+        width: 65%;             /* take more width on mobile */
         font-size: 24px;
+        letter-spacing: 3px;
+        padding: 12px;
+      }
+      .cta-button {
+        padding: 14px 30px;
+        font-size: 17px;
       }
       .footer {
         padding: 15px 10px;
+      }
+      .security-list {
+        font-size: 17px;
       }
     }
   </style>
@@ -185,19 +218,20 @@
 
 <body>
   <div class="email-container">
-    <div class="header"  ">
+    <!-- header: logo + name always adjacent (no stacking) -->
+    <div class="header">
       <div class="logo-text-container">
         <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
-        <h1 style="font-size: 37px">Prithu</h1>
+        <h1>Prithu</h1>
       </div>
     </div>
 
     <div class="content">
-      <h2 style="font-size: 19px">Dear {username},</h2>
-      <p style="font-size: 18px;  line-height: 1.6;">As part of our enhanced security measures, we've sent you this One-Time Password (OTP) to verify your identity and complete your SignUp to your <strong>Prithu</strong> account.</p>
+      <h2>Dear {username},</h2>
+      <p>As part of our enhanced security measures, we've sent you this One-Time Password (OTP) to verify your identity and complete your SignUp to your <strong>Prithu</strong> account.</p>
 
+      <!-- OTP display box (clean, subtle) -->
       <div class="otp-box">{otp}</div>
-     
 
       <h3 class="important-heading">Important Security Information:</h3>
       <ul class="security-list">
@@ -207,16 +241,18 @@
         <li>• If you didn't request this OTP, please ignore this email or contact our support team immediately</li>
       </ul>
 
-      <a href="#" class="cta-button">Go To Dashboard</a>
+      <!-- button now matches previous pill + shadow exactly -->
+      <a href="https://www.prithu.app/" class="cta-button">Go To Dashboard →</a>
 
       <p style="text-align:center;">Thank you for being a part of our community.</p>
-      <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+      <p style="text-align:center; margin-top: 5px;"><strong>Warm regards,<br>The Prithu Team</strong></p>
     </div>
 
+    <!-- footer (black links, dotted style) -->
     <div class="footer">
-      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
-      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
-      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#">let us know!</a></p>
+      <p><a href="#">View this email as a web page</a></p>
     </div>
   </div>
 </body>

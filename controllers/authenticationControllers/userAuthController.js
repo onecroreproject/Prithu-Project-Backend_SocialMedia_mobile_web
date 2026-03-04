@@ -14,6 +14,7 @@ const path = require("path");
 const { sendTemplateEmail } = require("../../utils/templateMailer");
 const { checkAndClearDeactivatedUser } = require("../../controllers/userControllers/userDeleteController");
 const checkActiveSubscription = require("../../middlewares/subscriptionMiddlewares/checkActiveSubscription");
+const { processReferralReward } = require("../../middlewares/helper/directReferalFunction");
 
 
 
@@ -62,52 +63,23 @@ exports.createNewUser = async (req, res) => {
     // ✅ If referral code provided
     if (referralCode) {
       const parent = await User.findOne({
-        referralCode,
+        referralCode: referralCode.toUpperCase(),
         referralCodeIsValid: true,
       });
 
       if (parent) {
         user.referredByUserId = parent._id;
-
-        // ✅ Check if parent has an active subscription
-        const parentSub = await checkActiveSubscription(parent._id);
-        if (parentSub.hasActive) {
-          await Promise.all([
-            UserReferral.updateOne(
-              { parentId: parent._id },
-              { $addToSet: { childIds: user._id } },
-              { upsert: true }
-            ),
-            // 💰 REWARD REFERRER: Add 100 rupees
-            User.updateOne(
-              { _id: parent._id },
-              {
-                $inc: {
-                  totalEarnings: 100,
-                  balanceEarnings: 100,
-                  referralCodeUsageCount: 1
-                }
-              }
-            ),
-            // 📜 LEDGER ENTRY: Create earning record for API calculation and history
-            UserEarning.create({
-              userId: parent._id,
-              fromUserId: user._id,
-              amount: 100,
-              level: 1,
-              tier: 1,
-              isPartial: false
-            })
-          ]);
-        } else {
-          // Parent inactive: register without linking referral benefits
-          user.referredByUserId = undefined;
-          console.log(`Referral from inactive parent ${parent._id} ignored for new user ${user.email}`);
-        }
       }
     }
 
     await user.save();
+
+    // ✅ Process Referral Reward (if applicable)
+    if (user.referredByUserId) {
+      processReferralReward(user._id).catch((err) =>
+        console.error("❌ Referral Reward Processing failed:", err)
+      );
+    }
 
 
     // ✅ Create profile settings
@@ -119,7 +91,7 @@ exports.createNewUser = async (req, res) => {
       whatsAppNumber: whatsapp,
     }).catch((err) => console.error("❌ Failed to create ProfileSettings:", err));
 
-    // ✅ Send welcome email
+    // ✅ Send registration confirmation email
     sendTemplateEmail({
       templateName: "registration-confirmation.html",
       to: email,
@@ -131,7 +103,18 @@ exports.createNewUser = async (req, res) => {
         referralCode: generatedCode,
       },
       embedLogo: false,
-    }).catch((err) => console.error("❌ Email sending failed:", err));
+    }).catch((err) => console.error("❌ Registration Email failed:", err));
+
+    // ✅ Send welcome email (additional)
+    sendTemplateEmail({
+      templateName: "welcome.html",
+      to: email,
+      subject: "✨ Welcome to Prithu!",
+      placeholders: {
+        username,
+      },
+      embedLogo: false,
+    }).catch((err) => console.error("❌ Welcome Email failed:", err));
 
     // ✅ Final response
     res.status(201).json({

@@ -4,20 +4,32 @@ const UserEarning = require("../../models/userModels/userRefferalModels/referral
 const UserReferral = require("../../models/userModels/userRefferalModels/userReferralModel");
 const { sendTemplateEmail } = require("../../utils/templateMailer");
 const Withdrawal = require("../../models/userModels/userRefferalModels/withdrawal");
+const { updateCycleOnReferral } = require("../../services/referralCycleService");
 
 
-exports.handleReferralReward = async (req, res) => {
+/**
+ * Core logic to process a direct referral reward.
+ * Can be called from API handlers or other services.
+ * @param {string} referredUserId - The ID of the user who signed up.
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+const processReferralReward = async (referredUserId) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ message: "User ID required" });
-
-    const currentUser = await User.findById(userId);
-    if (!currentUser) return res.status(404).json({ message: "User not found" });
+    const currentUser = await User.findById(referredUserId);
+    if (!currentUser) return { success: false, message: "User not found" };
 
     const referrerId = currentUser.referredByUserId;
-    if (!referrerId)
-      return res.status(200).json({ message: "No referrer found, no reward applied." });
+    if (!referrerId) return { success: false, message: "No referrer found" };
 
+    // 1️⃣ Prevent Duplicate Rewards
+    const existingEarning = await UserEarning.findOne({
+      userId: referrerId,
+      fromUserId: referredUserId,
+      level: 1
+    });
+    if (existingEarning) return { success: false, message: "Reward already processed for this referral" };
+
+    // 2️⃣ Check Referrer Subscription
     const referrerSubscription = await UserSubscription.findOne({
       userId: referrerId,
       isActive: true,
@@ -26,36 +38,42 @@ exports.handleReferralReward = async (req, res) => {
     });
 
     const referrer = await User.findById(referrerId);
+    if (!referrer) return { success: false, message: "Referrer not found" };
 
-    // ✅ If referrer has an active subscription
     if (referrerSubscription) {
-      const rewardAmount = 25;
+      const rewardAmount = 100;
 
-      // Add earning record
+      // 3️⃣ Credits & Records
       await UserEarning.create({
         userId: referrerId,
-        fromUserId: userId,
+        fromUserId: referredUserId,
         level: 1,
         tier: 1,
         amount: rewardAmount,
         isPartial: false,
       });
 
-      // Update referrer's earnings
       const updatedReferrer = await User.findByIdAndUpdate(
         referrerId,
-        { $inc: { totalEarnings: rewardAmount, balanceEarnings: rewardAmount } },
+        { $inc: { totalEarnings: rewardAmount, balanceEarnings: rewardAmount, referralCodeUsageCount: 1 } },
         { new: true }
       );
 
-      // Handle withdrawal cumulatively
+      // Link child to parent in UserReferral collection
+      await UserReferral.updateOne(
+        { parentId: referrerId },
+        { $addToSet: { childIds: referredUserId } },
+        { upsert: true }
+      );
+
+      // 4️⃣ Withdrawal Update
       let withdrawal = await Withdrawal.findOne({ userId: referrerId, status: "pending" });
       if (withdrawal) {
         withdrawal.amount += rewardAmount;
         withdrawal.totalAmount += rewardAmount;
         await withdrawal.save();
       } else {
-        withdrawal = await Withdrawal.create({
+        await Withdrawal.create({
           userId: referrerId,
           amount: rewardAmount,
           withdrawalAmount: 0,
@@ -65,49 +83,53 @@ exports.handleReferralReward = async (req, res) => {
         });
       }
 
-      // ✅ Send template emails
+      // 5️⃣ Update Referral Cycle & Get Stats
+      let cycleStats = { referredInCycle: 0, peopleRemaining: 25, daysRemaining: 30 };
+      try {
+        const cycle = await updateCycleOnReferral(referrerId, referredUserId, rewardAmount);
+        if (cycle) {
+          cycleStats.referredInCycle = cycle.referralCount;
+          cycleStats.peopleRemaining = Math.max(0, 25 - cycle.referralCount);
+          cycleStats.daysRemaining = Math.max(0, Math.ceil((cycle.endDate - new Date()) / (1000 * 60 * 60 * 24)));
+        }
+      } catch (cycleErr) {
+        console.error("Failed to update referral cycle:", cycleErr);
+      }
+
+      const totalSuccessfulReferrals = await UserEarning.countDocuments({ userId: referrerId });
+
+      // 6️⃣ Send Referral Reward Email
       if (updatedReferrer?.email) {
         await sendTemplateEmail({
           templateName: "ReferralReward.html",
           to: updatedReferrer.email,
-          subject: "You earned ₹25 from a referral!",
+          subject: `You earned ₹${rewardAmount} from a referral!`,
           placeholders: {
             referrerName: updatedReferrer.userName,
             referredUserName: currentUser.userName,
             rewardAmount,
-            balance: updatedReferrer.balanceEarnings,
+            referralDate: new Date().toLocaleDateString(),
+            totalSuccessfulReferrals,
+            totalEarnings: updatedReferrer.totalEarnings,
+            referredInCycle: cycleStats.referredInCycle,
+            peopleRemaining: cycleStats.peopleRemaining,
+            daysRemaining: cycleStats.daysRemaining,
           },
           embedLogo: false,
         });
       }
 
-      if (currentUser?.email) {
-        await sendTemplateEmail({
-          templateName: "ReferralReward.html",
-          to: currentUser.email,
-          subject: "Referral reward applied!",
-          placeholders: {
-            userName: currentUser.userName,
-            referrerName: updatedReferrer.userName,
-          },
-          embedLogo: false,
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Referral reward applied successfully (₹25 added to referrer and emails sent).",
-      });
+      return { success: true, message: "Reward processed successfully" };
     }
 
-    // ✅ Referrer subscription expired
-    await User.findByIdAndUpdate(userId, { $unset: { referredByUserId: "" } });
+    // 8️⃣ Handle Expired Referrer Case
+    await User.findByIdAndUpdate(referredUserId, { $unset: { referredByUserId: "" } });
     await UserReferral.findOneAndUpdate(
       { parentId: referrerId },
-      { $pull: { childIds: userId } }
+      { $pull: { childIds: referredUserId } }
     );
 
-    // Notify referrer
+    // Notify users of expiry
     if (referrer?.email) {
       await sendTemplateEmail({
         templateName: "SubscriptionExpired.html",
@@ -122,28 +144,24 @@ exports.handleReferralReward = async (req, res) => {
       });
     }
 
-    // Notify referred user
-    if (currentUser?.email) {
-      await sendTemplateEmail({
-        templateName: "ReferralExpiredUser.html",
-        to: currentUser.email,
-        subject: "Your Referral Link Has Expired",
-        placeholders: {
-          userName: currentUser.userName,
-          referrerName: referrer?.userName || "your referrer",
-        },
-        embedLogo: false,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Referrer subscription expired. Referral link removed, users notified, and current user can use a new referral code.",
-    });
+    return { success: true, message: "Referrer subscription expired, users notified" };
   } catch (error) {
-    console.error("Referral reward handler error:", error);
+    console.error("processReferralReward error:", error);
+    throw error;
+  }
+};
+
+exports.handleReferralReward = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ message: "User ID required" });
+
+    const result = await processReferralReward(userId);
+    return res.status(200).json(result);
+  } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+exports.processReferralReward = processReferralReward;
 

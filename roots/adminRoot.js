@@ -180,10 +180,19 @@ const {
 } = require('../controllers/adminControllers/seoController');
 
 const {
-    adminProfileDetailUpdate,
     getAdminProfileDetail,
     getUserProfileDetail,
 } = require('../controllers/profileControllers/profileController');
+
+const {
+    getPromoDashboardStats,
+    getPromotionTemplates,
+    getTemplateContent,
+    saveTemplate,
+    deleteTemplate,
+    triggerManualBatch,
+    toggleCampaignStatus
+} = require('../controllers/adminControllers/adminEmailController');
 
 const {
     getAllParties,
@@ -451,6 +460,15 @@ router.post('/admin/blogs/create', auth, checkPermission('canManageBlogAdd'), bl
 router.put('/admin/blogs/update/:id', auth, checkPermission('canManageBlogs'), blogUpload, processBlogImage, updateBlog);
 router.delete('/admin/blogs/delete/:id', auth, checkPermission('canManageBlogs'), deleteBlog);
 router.patch('/admin/blogs/toggle-status/:id', auth, checkPermission('canManageBlogs'), toggleBlogStatus);
+
+/* --------------------- Admin Email Management API --------------------- */
+router.get('/admin/email/promo/stats', auth, checkPermission('canManageEmails'), getPromoDashboardStats);
+router.get('/admin/email/promo/templates', auth, checkPermission('canManageEmails'), getPromotionTemplates);
+router.get('/admin/email/promo/templates/:fileName', auth, checkPermission('canManageEmails'), getTemplateContent);
+router.post('/admin/email/promo/templates', auth, checkPermission('canManageEmails'), saveTemplate);
+router.delete('/admin/email/promo/templates/:fileName', auth, checkPermission('canManageEmails'), deleteTemplate);
+router.post('/admin/email/promo/trigger-batch', auth, checkPermission('canManageEmails'), triggerManualBatch);
+router.patch('/admin/email/promo/toggle-status', auth, checkPermission('canManageEmails'), toggleCampaignStatus);
 
 /* --------------------- Admin Update API ------------------- */
 router.get('/admin/updates/all', auth, checkPermission('canManageUpdates'), getAllUpdatesAdmin);

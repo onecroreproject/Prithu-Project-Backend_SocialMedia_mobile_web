@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to Prithu</title>
   <style>
+    /* ----- base & reset (unified off-white) ----- */
     body {
       margin: 0;
       padding: 0;
@@ -22,93 +23,116 @@
       overflow: hidden;
     }
 
+    /* ----- HEADER: logo + name always side by side (no stacking) ----- */
     .header {
       background-color: #f9f9f7;
       color: #064d3b;
       padding: 40px 20px 20px;
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
     }
 
     .logo-text-container {
       display: flex;
       align-items: center;
-      gap: 15px;
+      justify-content: center;
+      gap: 15px;                /* consistent gap */
       font-family: serif;
+      flex-wrap: nowrap;        /* force no wrap */
     }
 
-    /* Add rotation animation */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+    /* spin animation (identical to all previous) */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
 
-/* Apply the animation to your logo */
-.header img.logo {
-  width: 65px;
-  height: auto;
-  animation: spin 4s linear infinite; /* 4s = rotation speed */
-}
-
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+      display: block;
+      border-radius: 50%;            /* soft roundness */
+      box-shadow: 0 4px 10px rgba(0,50,30,0.1);
+    }
 
     .header h1 {
       margin: 0;
-      font-size: 30px;
-      color: #064d3b;
+      font-size: 37px;               /* matches previous style */
+      color: #064d3b;                 /* prithu green */
+      white-space: nowrap;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-weight: 600;
+      letter-spacing: -0.5px;
     }
 
+    /* ----- content area (left aligned text) ----- */
     .content {
       padding: 0 40px;
       background-color: #f9f9f7;
       color: black;
-      text-align: center;
+      text-align: left;
     }
 
     .content h2 {
-      font-size: 18px;
-      text-align: left;
-      margin-bottom: 10px;
+      font-size: 19px;
+      margin: 0 0 12px 0;
+      color: #064d3b;
+      font-weight: 600;
     }
 
     .content p {
-      font-size: 16px;
+      font-size: 18px;
       margin-bottom: 15px;
-      text-align: left;
+      color: #000;
+      line-height: 1.5;
+    }
+
+    .content a {
+      color: #4169E1;
+      text-decoration: none;
     }
 
     .content ul {
       text-align: left;
       line-height: 1.6;
-      font-size: 16px;
+      font-size: 18px;
       list-style: none;
       padding-left: 0;
+      color: #000;
+      margin-bottom: 20px;
     }
 
+    .content li {
+      margin-bottom: 12px;
+      padding-left: 28px;
+      position: relative;
+    }
+
+    /* Emoji bullet points */
+    .content li::before {
+      content: attr(data-emoji);
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+
+    /* ----- BUTTON : exact pill design from registration email ----- */
     .cta-button {
       display: inline-block;
       background-color: #4169E1;
-      color: white;
-      padding: 15px 30px;
+      color: #ffffff !important;   /* white text */
+      padding: 16px 38px;
       text-decoration: none;
-      border-radius: 5px;
+      border-radius: 60px;          /* pill shape */
       font-size: 18px;
-      margin: 20px 0;
-      transition: background 0.3s ease, transform 0.2s ease;
+      font-weight: 500;
+      margin: 20px 0 25px 0;
+      box-shadow: 0 8px 16px rgba(65,105,225,0.25);
+      border: 1px solid #2e4db3;
+      line-height: 1.2;
     }
 
-    .cta-button:hover {
-      background-color: #365fc0;
-      transform: translateY(-2px);
-    }
-
+    /* footer with black links + subtle dotted underline */
     .footer {
       padding: 20px;
       text-align: center;
@@ -119,9 +143,10 @@
     }
 
     .footer a {
-      color: #064d3b;
+      color: #000000;
       text-decoration: none;
       font-weight: 500;
+      border-bottom: 1px dotted #7a9c8c;
     }
 
     .footer a:hover {
@@ -133,19 +158,27 @@
       color: black;
     }
 
+    /* ----- responsive: smaller logo & name on narrow screens ----- */
     @media only screen and (max-width: 600px) {
       .header {
-        padding: 20px;
+        padding: 30px 15px 15px;
       }
       .logo-text-container {
-        flex-direction: row;
-        align-items: center;
+        gap: 10px;
       }
       .header img.logo {
-        width: 50px;
+        width: 42px !important;
+        height: auto;
       }
       .header h1 {
-        font-size: 24px;
+        font-size: 28px !important;
+      }
+      .content {
+        padding: 0 25px;
+      }
+      .cta-button {
+        padding: 14px 30px;
+        font-size: 17px;
       }
       .footer {
         padding: 15px 10px;
@@ -156,39 +189,45 @@
 
 <body>
   <div class="email-container">
-    <div class="header" >
+    <!-- header: logo + name always adjacent (no stacking) -->
+    <div class="header">
       <div class="logo-text-container">
         <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
-        <h1 style="font-size: 37px">Prithu</h1>
+        <h1>Prithu</h1>
       </div>
     </div>
 
     <div class="content">
-        <h2 style="font-size: 19px">Hi {username},</h2>
-      <p  style="font-size: 18px;">Welcome to <strong>Prithu</strong>! We’re thrilled to have you join our creative community.</p>
+      <h2>Hi {username},</h2>
+      
+      <p><strong>Welcome to Prithu!</strong> We’re absolutely thrilled to have you join our creative community — a space where your moments become stories, and your stories inspire the world.</p>
 
-      <p  style="font-size: 18px;">Here, you can explore trending photos and videos, share your own stories, and connect with amazing creators from all around the world.</p>
+      <p>With Prithu, you can:</p>
 
-      <p style="font-size: 18px;">With Prithu, you can:</p>
-
-      <ul  style="font-size: 18px;">
-        <li>📸 <strong>Post & Share</strong> your favorite moments through images and videos.</li>
-        <li>❤️ <strong>Like, Comment & Download</strong> the content that inspires you.</li>
-        <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
-        <li>👤 <strong>Explore Creator Profiles</strong> and follow your favorites.</li>
+      <ul>
+        <li data-emoji="📸"> <strong>Post & Share</strong> — your favorite moments through images and videos.</li>
+        <li data-emoji="🚀"> <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+        <li data-emoji="🎨"> <strong>Personalize Every Post</strong> — smart templates that feel uniquely yours.</li>
+        <li data-emoji="💰"> <strong>Earn Rewards</strong> — by inviting friends and sharing the love.</li>
       </ul>
 
-      <a href="#" class="cta-button">Start Exploring Now</a>
+      <p>We’ve designed Prithu to be your happy place — whether you're here to create, connect, or just unwind with beautiful content.</p>
 
-      <p style="text-align:center; font-size: 18px">Get ready to be inspired, express yourself, and enjoy endless creativity — all in one place.</p>
-	  
+      <!-- button with consistent pill design, centered -->
+      <p style="text-align:center;">
+        <a href="https://www.prithu.app/" class="cta-button">Start Exploring Now →</a>
+      </p>
+
+      <p style="text-align:center;">Get ready to be inspired, express yourself, and enjoy endless creativity — all in one place.</p>
+      
       <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
     </div>
 
-     <div class="footer">
-      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
-      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
-      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+    <!-- footer with black links + dotted style -->
+    <div class="footer">
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#">let us know!</a></p>
+      <p><a href="#">View this email as a web page</a></p>
     </div>
   </div>
 </body>

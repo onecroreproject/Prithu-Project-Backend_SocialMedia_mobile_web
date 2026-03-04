@@ -11,7 +11,7 @@ deactivateQueue.process(async (job) => {
     const expired = await UserSubscription.find({
         isActive: true,
         endDate: { $lt: now }
-    }).select("userId").lean();
+    }).populate("planId").select("userId planId").lean();
 
     if (expired.length === 0) {
         console.log("✅ No expired subscriptions found to deactivate.");
@@ -27,14 +27,32 @@ deactivateQueue.process(async (job) => {
         { $set: { isActive: false } }
     );
 
-    // 3. Clear isActive in User collection (sub-document)
     const User = require("../models/userModels/userModel");
-    await User.updateMany(
-        { _id: { $in: userIds } },
-        { $set: { "subscription.isActive": false } }
-    );
+    const { sendTemplateEmail } = require("../utils/templateMailer");
 
-    console.log(`✅ Deactivated ${expired.length} expired subscriptions for users:`, userIds);
+    for (const sub of expired) {
+        // Clear isActive in User collection (sub-document)
+        await User.updateOne(
+            { _id: sub.userId },
+            { $set: { "subscription.isActive": false } }
+        );
+
+        // If it was a trial, send expiration email
+        if (sub.planId && sub.planId.planType === "trial") {
+            const user = await User.findById(sub.userId).select("email userName").lean();
+            if (user && user.email) {
+                await sendTemplateEmail({
+                    templateName: "TrialPlanExpired.html",
+                    to: user.email,
+                    subject: "Your Trial Plan has Expired",
+                    placeholders: { userName: user.userName },
+                    embedLogo: false
+                }).catch(err => console.error(`❌ Trial expiration email failed for ${user.email}:`, err));
+            }
+        }
+    }
+
+    console.log(`✅ Deactivated ${expired.length} expired subscriptions.`);
 });
 
 deactivateQueue.on("completed", (job) => console.log(`✅ Job completed: ${job.id}`));

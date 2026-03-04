@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prithu Trial Ended</title>
   <style>
+    /* ----- base & reset (unified off-white) ----- */
     body {
       margin: 0;
       padding: 0;
@@ -22,49 +24,59 @@
       overflow: hidden;
     }
 
+    /* ----- HEADER: logo + name always side by side (no stacking) ----- */
     .header {
       background-color: #f9f9f7;
       color: #064d3b;
       padding: 40px 20px 20px;
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
     }
 
     .logo-text-container {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 15px;
+      /* consistent gap */
       font-family: serif;
+      flex-wrap: nowrap;
+      /* force no wrap */
     }
 
-   /* Add rotation animation */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+    /* spin animation (identical to all previous) */
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
 
-/* Apply the animation to your logo */
-.header img.logo {
-  width: 65px;
-  height: auto;
-  animation: spin 4s linear infinite; /* 4s = rotation speed */
-}
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+      display: block;
+      border-radius: 50%;
+      /* soft roundness */
+      box-shadow: 0 4px 10px rgba(0, 50, 30, 0.1);
+    }
 
     .header h1 {
       margin: 0;
       font-size: 37px;
+      /* matches previous style */
       color: #064d3b;
+      /* prithu green */
+      white-space: nowrap;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-weight: 600;
+      letter-spacing: -0.5px;
     }
 
+    /* ----- content area (left aligned text) ----- */
     .content {
       padding: 0 40px;
       background-color: #f9f9f7;
@@ -74,12 +86,16 @@
 
     .content h2 {
       font-size: 19px;
-      margin-bottom: 10px;
+      margin: 0 0 12px 0;
+      color: #064d3b;
+      font-weight: 600;
     }
 
     .content p {
       font-size: 18px;
       margin-bottom: 15px;
+      color: #000;
+      line-height: 1.5;
     }
 
     .content a {
@@ -90,28 +106,42 @@
     .content ul {
       margin-left: 5px;
       font-size: 17px;
-      padding-left: 0;
-      list-style-position: inside;
+      padding-left: 20px;
+      list-style-position: outside;
+      color: #000;
+      line-height: 1.6;
+      margin-bottom: 20px;
     }
 
+    .content li {
+      margin-bottom: 8px;
+    }
+
+    /* ----- BUTTON : exact pill design from registration email ----- */
     .cta-button {
       display: inline-block;
       background-color: #4169E1;
       color: #ffffff !important;
-      padding: 15px 30px;
+      /* white text, override any inheritance */
+      padding: 16px 38px;
       text-decoration: none;
-      border-radius: 5px;
+      border-radius: 60px;
+      /* pill shape */
       font-size: 18px;
-      margin: 20px 0;
-      font-weight: bold;
-      transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      font-weight: 500;
+      margin: 20px 0 15px 0;
+      box-shadow: 0 8px 16px rgba(65, 105, 225, 0.25);
+      border: 1px solid #2e4db3;
+      transition: background 0.2s ease, transform 0.2s ease;
+      line-height: 1.2;
     }
+
     .cta-button:hover {
       background-color: #365fc0;
       transform: translateY(-2px);
     }
 
+    /* footer with black links + subtle dotted underline */
     .footer {
       padding: 20px;
       text-align: center;
@@ -122,9 +152,10 @@
     }
 
     .footer a {
-      color: #064d3b;
+      color: #000000;
       text-decoration: none;
       font-weight: 500;
+      border-bottom: 1px dotted #7a9c8c;
     }
 
     .footer a:hover {
@@ -136,22 +167,36 @@
       color: black;
     }
 
+    /* ----- responsive: smaller logo & name on narrow screens ----- */
     @media only screen and (max-width: 600px) {
       .header {
-        padding: 20px;
+        padding: 30px 15px 15px;
       }
+
       .logo-text-container {
-        flex-direction: row;
-        align-items: center;
+        gap: 10px;
       }
+
       .header img.logo {
-        width: 50px;
+        width: 42px !important;
+        height: auto;
       }
+
       .header h1 {
-        font-size: 32px;
+        font-size: 28px !important;
       }
+
       .content {
-        padding: 25px 15px 40px 15px;
+        padding: 0 25px;
+      }
+
+      .cta-button {
+        padding: 14px 30px;
+        font-size: 17px;
+      }
+
+      .footer {
+        padding: 15px 10px;
       }
     }
   </style>
@@ -159,41 +204,64 @@
 
 <body>
   <div class="email-container">
+    <!-- header: logo + name always adjacent (no stacking) -->
     <div class="header">
       <div class="logo-text-container">
-        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
         <h1>Prithu</h1>
       </div>
     </div>
 
     <div class="content">
-      <h2>Hi {userName},</h2>
+      <h2 style="color: #064d3b; font-size: 22px;">Hi {userName},</h2>
 
-      <p>We hope you enjoyed exploring <strong>Prithu Premium</strong>! Your trial plan has now expired. </p>
+      <p>We hope you explored and enjoyed the premium perks of Prithu! This is just a quick note to let you know that
+        your <strong>Trial Plan has ended</strong>.</p>
 
-      <p> Note: The trial plan can only be used once per user, so this was your one-time opportunity to experience Premium for free.</p>
+      <!-- Expired Status Card -->
+      <div
+        style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 16px; padding: 25px; margin: 25px 0; text-align: center;">
+        <span style="font-size: 40px;">⏱️</span>
+        <h3 style="margin: 10px 0 5px 0; color: #991b1b; font-size: 18px; font-weight: 700;">Trial Expired</h3>
+        <p style="margin: 0; color: #b91c1c; font-size: 14px;">Your access to premium features has paused.</p>
+      </div>
 
-      <p>But don’t worry — you can upgrade to a full Premium subscription anytime to continue enjoying all the awesome features:</p>
+      <p>Don't miss out on the full Prithu experience. Upgrade to a permanent subscription today to reclaim these
+        exclusive features:</p>
 
-      <ul>
-        <li>📸<strong>Post & Share</strong> your favorite moments through images and videos.</li>
-        <li>❤️<strong>Like, Comment & Download</strong> the content that inspires you.</li>
-        <li>🚀<strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+      <ul style="list-style-type: none; padding: 0;">
+        <li
+          style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">🚀</span>
+          <span><strong>Trending Insights</strong> — Stay ahead by knowing what's going viral right now.</span>
+        </li>
+        <li
+          style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">⬇️</span>
+          <span><strong>Unlimited Freedom</strong> — Download and save content without any daily limits.</span>
+        </li>
       </ul>
 
-      <p style="text-align:center; margin-top: -18px">
-        <a href="https://www.prithu.com/subscribe" class="cta-button">Upgrade Now</a>
+      <p style="text-align:center; margin-top: 30px;">
+        <a href="https://www.prithu.app/home/subscribe" class="cta-button">Upgrade to Premium Now →</a>
       </p>
 
-      <p style="text-align:center;">Don’t miss out on your favorite content and premium perks — we’d love to keep you in the Prithu Premium community!</p>
-      <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+      <p style="margin-top: 30px; font-size: 15px; color: #6b7280; line-height: 1.6; text-align: center;">
+        Note: Trial plans are a one-time welcome offer. To continue your journey with premium tools, a subscription is
+        required.
+      </p>
+
+      <p style="text-align: center; margin-top: 40px;"><strong>Warm regards,<br>The Prithu Team</strong></p>
     </div>
 
+    <!-- footer with black links + dotted style (as previous files) -->
     <div class="footer">
-      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
-      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
-      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#">let us know!</a></p>
+      <p><a href="#">View this email as a web page</a></p>
     </div>
   </div>
 </body>
+
 </html>

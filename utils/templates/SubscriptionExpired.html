@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prithu Premium Expired</title>
+  <title>Your Prithu Subscription is Expiring Soon</title>
   <style>
+    /* ----- base & reset (unified off-white) ----- */
     body {
       margin: 0;
       padding: 0;
@@ -22,49 +24,53 @@
       overflow: hidden;
     }
 
+    /* ----- HEADER: logo + name always side by side ----- */
     .header {
       background-color: #f9f9f7;
       color: #064d3b;
       padding: 40px 20px 20px;
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
     }
 
     .logo-text-container {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 15px;
       font-family: serif;
+      flex-wrap: nowrap;
     }
 
-   /* Add rotation animation */
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
 
-/* Apply the animation to your logo */
-.header img.logo {
-  width: 65px;
-  height: auto;
-  animation: spin 4s linear infinite; /* 4s = rotation speed */
-}
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 4s linear infinite;
+      display: block;
+      border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(0, 50, 30, 0.1);
+    }
 
     .header h1 {
       margin: 0;
       font-size: 37px;
       color: #064d3b;
+      white-space: nowrap;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-weight: 600;
+      letter-spacing: -0.5px;
     }
 
+    /* ----- content area ----- */
     .content {
       padding: 0 40px;
       background-color: #f9f9f7;
@@ -73,40 +79,52 @@
     }
 
     .content h2 {
-      font-size: 18px;
-      margin-bottom: 10px;
+      font-size: 19px;
+      margin: 0 0 12px 0;
+      color: #064d3b;
+      font-weight: 600;
     }
 
     .content p {
       font-size: 18px;
       margin-bottom: 15px;
+      color: #000;
+      line-height: 1.5;
     }
 
-    .content a {
-      color: #4169E1;
-      text-decoration: none;
+    .expiry-alert {
+      background-color: #fff4f4;
+      border: 1px solid #ffcccc;
+      padding: 15px;
+      border-radius: 12px;
+      margin: 20px 0;
+      text-align: center;
     }
 
-    .content ul {
-      margin-left: 5px;
-      font-size: 17px;
-      padding-left: 0;
-      list-style-position: inside;
+    .expiry-days {
+      font-size: 24px;
+      font-weight: bold;
+      color: #d32f2f;
+      display: block;
+      margin-bottom: 5px;
     }
 
     .cta-button {
       display: inline-block;
       background-color: #4169E1;
       color: #ffffff !important;
-      padding: 15px 30px;
+      padding: 16px 38px;
       text-decoration: none;
-      border-radius: 5px;
+      border-radius: 60px;
       font-size: 18px;
-      margin: 20px 0;
-      font-weight: bold;
-      transition: background 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      font-weight: 500;
+      margin: 20px 0 15px 0;
+      box-shadow: 0 8px 16px rgba(65, 105, 225, 0.25);
+      border: 1px solid #2e4db3;
+      transition: background 0.2s ease, transform 0.2s ease;
+      line-height: 1.2;
     }
+
     .cta-button:hover {
       background-color: #365fc0;
       transform: translateY(-2px);
@@ -122,36 +140,32 @@
     }
 
     .footer a {
-      color: #064d3b;
+      color: #000000;
       text-decoration: none;
       font-weight: 500;
-    }
-
-    .footer a:hover {
-      text-decoration: underline;
-    }
-
-    .footer p {
-      margin: 8px 0;
-      color: black;
+      border-bottom: 1px dotted #7a9c8c;
     }
 
     @media only screen and (max-width: 600px) {
       .header {
-        padding: 20px;
+        padding: 30px 15px 15px;
       }
-      .logo-text-container {
-        flex-direction: row;
-        align-items: center;
-      }
+
       .header img.logo {
-        width: 50px;
+        width: 42px !important;
       }
+
       .header h1 {
-        font-size: 32px;
+        font-size: 28px !important;
       }
+
       .content {
-        padding: 25px 15px 40px 15px;
+        padding: 0 25px;
+      }
+
+      .cta-button {
+        padding: 14px 30px;
+        font-size: 17px;
       }
     }
   </style>
@@ -161,37 +175,39 @@
   <div class="email-container">
     <div class="header">
       <div class="logo-text-container">
-        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" 
-             alt="Prithu Logo" class="logo" />
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
         <h1>Prithu</h1>
       </div>
     </div>
 
     <div class="content">
-      <h2>Hi {referrerName},</h2>
+      <h2>Hi {userName},</h2>
+      <p>We wanted to let you know that your <strong>Prithu {planName}</strong> subscription is expiring soon.</p>
 
-      <p>We wanted to inform you that the subscription of your referred user <strong>{referredUserName}</strong> has expired.</p>
+      <div class="expiry-alert">
+        <span class="expiry-days">{remainingDays} Days Left</span>
+        <p style="font-size: 16px; margin: 0;">Don't lose access to your premium features!</p>
+      </div>
 
-      <p>Their referral code <strong>{referralCode}</strong> is no longer active. Don’t worry — you can continue referring friends after subscription active to enjoy Prithu Premium benefits!</p>
-
-      <ul>
-        <li>📸 <strong>Post & Share</strong> your favorite moments through images and videos.</li>
-        <li>❤️ <strong>Like, Comment & Download</strong> the content that inspires you.</li>
-        <li>🚀 <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+      <p>By renewing today, you can continue to enjoy:</p>
+      <ul style="font-size: 17px; line-height: 1.6;">
+        <li>🚀 <strong>Unlimited Downloads</strong></li>
+        <li>✨ <strong>Ad-Free Experience</strong></li>
+        <li>💎 <strong>Exclusive Content Access</strong></li>
       </ul>
 
-      <p style="text-align:center; margin-top: 20px;">
-        <a href="https://www.prithu.com/subscribe" class="cta-button">Renew Now</a>
+      <p style="text-align:center;">
+        <a href="https://www.prithu.app/home/subscriptions" class="cta-button">Renew Subscription →</a>
       </p>
 
-      <p>We’d love to keep you engaged with your friends and our premium community, so don’t miss out on exclusive content and perks!</p>
+      <p>If you have any questions, we're here to help.</p>
       <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
     </div>
 
     <div class="footer">
-      <p><a href="mailto:contact@prithu.in" style="color: black;">info@prithu.in</a></p>
-      <p>If you wish to unsubscribe, <a href="#" style="color: black;">let us know!</a></p>
-      <p><a href="#" style="color: black;">View this email as a web page</a></p>
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>Need help? <a href="https://www.prithu.app/contact">Contact Support</a></p>
     </div>
   </div>
 </body>

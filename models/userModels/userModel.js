@@ -116,6 +116,10 @@ const UserSchema = new mongoose.Schema(
       default: "notallow",
       index: true,
     },
+
+    // ------------ PROMOTIONAL CAMPAIGN --------------
+    lastPromotionalEmailDate: { type: Date },
+    promoTemplateIndex: { type: Number, default: 0 },
   },
   {
     timestamps: true,
