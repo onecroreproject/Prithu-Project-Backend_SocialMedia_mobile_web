@@ -1710,6 +1710,8 @@ exports.sharePostOG = async (req, res) => {
     }
 
     // 🤖 crawler → OG HTML
+    const { type, u: userId } = req.query;
+
     const profile = await ProfileSettings.findOne({
       accountId: feed.createdByAccount,
     }).lean();
@@ -1719,9 +1721,23 @@ exports.sharePostOG = async (req, res) => {
     const title = `${userName}'s ${feed.type === "video" ? "Video" : "Post"}`;
 
     const currentUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-    const frontendUrl = `${process.env.FRONTEND_URL}/share/post/${feedId}`;
+    const frontendUrl = `${process.env.FRONTEND_URL}/home/retrivefeed/${feedId}?u=${userId || ''}&type=${type || ''}&isShared=true`;
 
-    const { ogImageUrl, ogVideoUrl } = await getOptimizedOGMedia(feed);
+    let { ogImageUrl, ogVideoUrl } = await getOptimizedOGMedia(feed);
+
+    // 🚀 ENHANCEMENT: Check for processed share media if userId and type are provided
+    if (userId && type) {
+      const shareDir = path.join(__dirname, "../../uploads/shares");
+      const videoFilename = `${userId}_${feedId}_${type}.mp4`;
+      const thumbFilename = `${userId}_${feedId}_${type}_thumb.jpg`;
+
+      if (fs.existsSync(path.join(shareDir, videoFilename))) {
+        ogVideoUrl = `${process.env.BACKEND_URL}/uploads/shares/${videoFilename}`;
+      }
+      if (fs.existsSync(path.join(shareDir, thumbFilename))) {
+        ogImageUrl = `${process.env.BACKEND_URL}/uploads/shares/${thumbFilename}`;
+      }
+    }
 
     res.set("Content-Type", "text/html");
     res.send(`
@@ -1735,17 +1751,31 @@ exports.sharePostOG = async (req, res) => {
 <meta property="og:title" content="${title}" />
 <meta property="og:description" content="${caption}" />
 <meta property="og:image" content="${ogImageUrl}" />
-${feed.type === "video" ? `<meta property="og:video" content="${ogVideoUrl}" />` : ""}
+<meta property="og:type" content="video.other" />
+${feed.type === "video" || ogVideoUrl ? `
+<meta property="og:video" content="${ogVideoUrl}" />
+<meta property="og:video:secure_url" content="${ogVideoUrl}" />
+<meta property="og:video:type" content="video/mp4" />
+<meta property="og:video:width" content="720" />
+<meta property="og:video:height" content="1280" />
+` : ""}
 
-<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:card" content="player" />
 <meta name="twitter:title" content="${title}" />
 <meta name="twitter:description" content="${caption}" />
 <meta name="twitter:image" content="${ogImageUrl}" />
+${ogVideoUrl ? `
+<meta name="twitter:player" content="${ogVideoUrl}" />
+<meta name="twitter:player:width" content="720" />
+<meta name="twitter:player:height" content="1280" />
+` : ""}
 
 
 <link rel="canonical" href="${frontendUrl}" />
 </head>
-<body></body>
+<body>
+  <script>window.location.href="${frontendUrl}";</script>
+</body>
 </html>
     `);
   } catch (err) {
@@ -2744,5 +2774,176 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
   } catch (err) {
     console.error("Error fetching liked feeds for saved:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+/**
+ * 🛠️ Internal Helper: Resolve Design Metadata for Share Previews
+ */
+const getShareDesignMetadata = (feed, type, customMetadata = {}, viewer = {}) => {
+  let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
+  if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+
+  switch (type) {
+    case 'birthday':
+      if (Array.isArray(customMetadata.avatarConfigs)) {
+        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+        customMetadata.avatarConfigs.forEach((av, idx) => {
+          designMetadata.overlayElements.push({
+            id: `birthday-avatar-${idx}`,
+            type: 'avatar',
+            xPercent: av.x, yPercent: av.y, wPercent: av.w, hPercent: av.h,
+            visible: true, zIndex: 110 + idx,
+            mediaConfig: { url: av.img },
+            avatarConfig: { shape: av.shape || 'circle' },
+          });
+        });
+      }
+      designMetadata.hasFooter = false;
+      break;
+
+    case 'anniversary':
+      if (Array.isArray(customMetadata.avatarConfigs)) {
+        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+        customMetadata.avatarConfigs.forEach((av, idx) => {
+          designMetadata.overlayElements.push({
+            id: `anniversary-avatar-${idx}`,
+            type: 'avatar',
+            xPercent: av.x, yPercent: av.y, wPercent: av.w, hPercent: av.h,
+            visible: true, zIndex: 110 + idx,
+            mediaConfig: { url: av.img },
+            avatarConfig: { shape: av.shape || 'circle' },
+          });
+        });
+      }
+      designMetadata.hasFooter = false;
+      break;
+
+    case 'politics':
+      if (Array.isArray(customMetadata.avatarConfigs)) {
+        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+        customMetadata.avatarConfigs.forEach((av, idx) => {
+          designMetadata.overlayElements.push({
+            id: `politics-avatar-${idx}`,
+            type: 'avatar',
+            xPercent: av.x, yPercent: av.y, wPercent: av.w, hPercent: av.h,
+            visible: true, zIndex: 110 + idx,
+            mediaConfig: { url: av.img },
+            avatarConfig: { shape: av.shape || 'circle' },
+          });
+        });
+      }
+      if (Array.isArray(customMetadata.leaderOverlays)) {
+        customMetadata.leaderOverlays.forEach((ov, idx) => {
+          designMetadata.overlayElements.push({
+            id: ov.id || `politics-leader-${idx}`,
+            type: 'avatar',
+            xPercent: ov.x, yPercent: ov.y, wPercent: ov.w, hPercent: ov.h,
+            visible: true, zIndex: 140 + idx,
+            mediaConfig: { url: ov.img },
+            avatarConfig: { shape: ov.type === 'party-logo' ? 'square' : 'circle' },
+            noFade: true,
+          });
+        });
+      }
+      if (customMetadata.footerConfig?.showFooter) {
+        designMetadata.hasFooter = true;
+        designMetadata.footerConfig = { ...designMetadata.footerConfig, ...customMetadata.footerConfig, enabled: true };
+      }
+      break;
+
+    default:
+      designMetadata.hasFooter = true;
+      if (!designMetadata.footerConfig) {
+        designMetadata.footerConfig = { enabled: true, showElements: { name: true, phone: true } };
+      }
+      break;
+  }
+  return designMetadata;
+};
+
+/**
+ * 🚀 Controller: Process Share Preview
+ */
+exports.processSharePreview = async (req, res) => {
+  const { feedId } = req.params;
+  const userId = req.Id;
+  const { type, customMetadata = {} } = req.body;
+
+  console.log("📥 [Backend] processSharePreview request received:", { feedId, userId, type });
+
+  if (!userId || !feedId) {
+    console.warn("⚠️ [Backend] Missing userId or feedId");
+    return res.status(400).json({ message: "userId and feedId required" });
+  }
+
+  const shareDir = path.join(__dirname, "../../uploads/shares");
+  if (!fs.existsSync(shareDir)) fs.mkdirSync(shareDir, { recursive: true });
+
+  const tempDir = path.join(__dirname, "../../uploads/temp_share", `sh_${Date.now()}_${userId}`);
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+  const cleanup = () => { try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) { } };
+
+  try {
+    const feed = await Feeds.findById(feedId).lean();
+    if (!feed) {
+      console.warn("⚠️ [Backend] Feed not found:", feedId);
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    const [user, profile] = await Promise.all([
+      User.findById(userId).lean(),
+      ProfileSettings.findOne({ userId }).lean(),
+    ]);
+
+    const viewer = {
+      userName: profile?.userName || profile?.name || user?.userName || 'User',
+      email: profile?.email || user?.email || null,
+      phoneNumber: profile?.phoneNumber || user?.phoneNumber || null,
+      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
+    };
+
+    console.log("🛠️ [Backend] Resolving design metadata for type:", type);
+    const designMetadata = getShareDesignMetadata(feed, type, customMetadata, viewer);
+
+    console.log("🎬 [Backend] Starting media processing with FFmpeg...");
+    const { ffmpegCommand } = await processPosterMedia({
+      feed: { ...feed, mediaUrl: getMediaUrl(feed.mediaUrl) },
+      viewer, designMetadata, tempDir,
+    });
+
+    const videoFilename = `${userId}_${feedId}_${type || 'direct'}.mp4`;
+    const finalOutputPath = path.join(shareDir, videoFilename);
+    const thumbFilename = `${userId}_${feedId}_${type || 'direct'}_thumb.jpg`;
+
+    ffmpegCommand
+      .on('error', (err) => {
+        console.error("❌ [Backend] FFmpeg error:", err.message);
+        cleanup();
+        if (!res.headersSent) res.status(500).json({ error: 'Processing failed' });
+      })
+      .on('end', async () => {
+        console.log("✅ [Backend] FFmpeg processing complete. Generating thumbnail...");
+        ffmpeg(finalOutputPath).screenshots({ timemarks: ['00:00:01'], filename: thumbFilename, folder: shareDir, size: '1200x630' })
+          .on('end', async () => {
+            console.log("✅ [Backend] Thumbnail generated. Saving share action...");
+            await UserFeedActions.findOneAndUpdate({ userId }, { $push: { sharedFeeds: { feedId, type: type || 'direct', processedUrl: videoFilename, thumbUrl: thumbFilename, sharedAt: new Date() } } }, { upsert: true });
+            cleanup();
+            if (!res.headersSent) {
+              console.log("🚀 [Backend] Share preview ready!");
+              res.status(200).json({ success: true, videoUrl: `${process.env.BACKEND_URL}/uploads/shares/${videoFilename}`, thumbUrl: `${process.env.BACKEND_URL}/uploads/shares/${thumbFilename}` });
+            }
+          })
+          .on('error', (err) => {
+            console.error("❌ [Backend] Thumbnail error:", err.message);
+            cleanup();
+          });
+      })
+      .save(finalOutputPath);
+  } catch (err) {
+    console.error("❌ [Backend] Critical error in processSharePreview:", err);
+    cleanup();
+    if (!res.headersSent) res.status(500).json({ message: "Internal server error" });
   }
 };

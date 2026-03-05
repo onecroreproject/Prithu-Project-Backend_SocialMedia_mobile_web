@@ -122,6 +122,7 @@ const {
     birthdayDownloadFeed,
     anniversaryDownloadFeed,
     politicsDownloadFeed,
+    processSharePreview,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 const {
@@ -359,6 +360,7 @@ router.get('/user/feed/liked', auth, getUserLikedFeeds);
 router.get('/user/feed/saved', auth, getUserSavedFeeds);
 router.get('/user/feed/downloaded', auth, getUserDownloadedFeeds);
 router.get('/user/get/saved/feeds', auth, getUserLikedFeedsForSaved); // Alias for frontend compatibility (using liked feeds as requested)
+router.post('/user/feed/share-process/:feedId', auth, processSharePreview);
 router.get('/user/feed/share-link/:feedId', generateShareLink);
 router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
 router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
