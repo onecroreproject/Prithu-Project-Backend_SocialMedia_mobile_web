@@ -1364,7 +1364,7 @@ exports.shareFeed = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error generating share link:", err);
+    console.error("Error sharing feed:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -1396,12 +1396,6 @@ exports.generateShareLink = async (req, res) => {
       userName = profileSettings.userName || profileSettings.name || 'User';
       profileAvatar = profileSettings.profileAvatar;
     }
-
-
-
-    // ============ CRITICAL FIX: Use backend URL for sharing ============
-    // WhatsApp/Facebook crawlers MUST hit the backend URL to get OG tags
-
 
     // Generate OG image URL based on media type
     let ogImageUrl = '';
@@ -1745,31 +1739,18 @@ exports.sharePostOG = async (req, res) => {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>${title}</title>
+<title>Prithu</title>
 
 <meta property="og:url" content="${currentUrl}" />
-<meta property="og:title" content="${title}" />
-<meta property="og:description" content="${caption}" />
-<meta property="og:image" content="${ogImageUrl}" />
-<meta property="og:type" content="video.other" />
-${feed.type === "video" || ogVideoUrl ? `
-<meta property="og:video" content="${ogVideoUrl}" />
-<meta property="og:video:secure_url" content="${ogVideoUrl}" />
-<meta property="og:video:type" content="video/mp4" />
-<meta property="og:video:width" content="720" />
-<meta property="og:video:height" content="1280" />
-` : ""}
+<meta property="og:title" content="Prithu" />
+<meta property="og:description" content="Check out this post on Prithu" />
+<meta property="og:image" content="${process.env.BACKEND_URL}/logo/prithulogo.png" />
+<meta property="og:type" content="website" />
 
-<meta name="twitter:card" content="player" />
-<meta name="twitter:title" content="${title}" />
-<meta name="twitter:description" content="${caption}" />
-<meta name="twitter:image" content="${ogImageUrl}" />
-${ogVideoUrl ? `
-<meta name="twitter:player" content="${ogVideoUrl}" />
-<meta name="twitter:player:width" content="720" />
-<meta name="twitter:player:height" content="1280" />
-` : ""}
-
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Prithu" />
+<meta name="twitter:description" content="Check out this post on Prithu" />
+<meta name="twitter:image" content="${process.env.BACKEND_URL}/logo/prithulogo.png" />
 
 <link rel="canonical" href="${frontendUrl}" />
 </head>
@@ -2868,13 +2849,23 @@ const getShareDesignMetadata = (feed, type, customMetadata = {}, viewer = {}) =>
 exports.processSharePreview = async (req, res) => {
   const { feedId } = req.params;
   const userId = req.Id;
-  const { type, customMetadata = {} } = req.body;
+  let { type, customMetadata = {} } = req.body;
 
   console.log("📥 [Backend] processSharePreview request received:", { feedId, userId, type });
 
   if (!userId || !feedId) {
     console.warn("⚠️ [Backend] Missing userId or feedId");
     return res.status(400).json({ message: "userId and feedId required" });
+  }
+
+  // Handle stringified metadata from form submissions (Mirroring DirectDownload logic)
+  if (typeof customMetadata === 'string') {
+    try {
+      customMetadata = JSON.parse(customMetadata);
+    } catch (e) {
+      console.error("[SharePreview] Failed to parse customMetadata:", e.message);
+      customMetadata = {};
+    }
   }
 
   const shareDir = path.join(__dirname, "../../uploads/shares");
@@ -2894,23 +2885,98 @@ exports.processSharePreview = async (req, res) => {
 
     const [user, profile] = await Promise.all([
       User.findById(userId).lean(),
-      ProfileSettings.findOne({ userId }).lean(),
+      ProfileSettings.findOne({ userId }).populate('visibility').lean()
     ]);
 
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    // 🚀 STEP 1: RESOLVE DESIGN METADATA (Mirroring DirectDownload)
+    let designMetadata = feed.designMetadata || {};
+    designMetadata = JSON.parse(JSON.stringify(designMetadata)); // Deep copy
+
+    // 🚀 STEP 2: MERGE CUSTOM METADATA (Mirroring DirectDownload)
+    if (customMetadata && Object.keys(customMetadata).length > 0) {
+      // Override Footer Config
+      if (customMetadata.footerConfig) {
+        designMetadata.footerConfig = {
+          ...designMetadata.footerConfig,
+          ...customMetadata.footerConfig,
+          enabled: true
+        };
+      }
+
+      // Add/Override Overlay Elements (Avatars) - Exact matching with DirectDownload logic
+      if (customMetadata.avatarConfigs && Array.isArray(customMetadata.avatarConfigs)) {
+        if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
+
+        customMetadata.avatarConfigs.forEach((av, idx) => {
+          designMetadata.overlayElements.push({
+            id: `manual-avatar-${idx}`,
+            type: 'avatar',
+            xPercent: av.x,
+            yPercent: av.y,
+            wPercent: av.w,
+            hPercent: av.h,
+            visible: true,
+            zIndex: 110,
+            mediaConfig: { url: av.img },
+            avatarConfig: { shape: av.shape || 'circle' },
+            animation: { enabled: true, direction: 'left', speed: 1, delay: 0 }
+          });
+        });
+      }
+    }
+
+    // 🚀 STEP 3: RESOLVE VIEWER (Mirroring DirectDownload Privacy)
+    const visibility = profile?.visibility || {};
     const viewer = {
-      userName: profile?.userName || profile?.name || user?.userName || 'User',
-      email: profile?.email || user?.email || null,
-      phoneNumber: profile?.phoneNumber || user?.phoneNumber || null,
-      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
+      id: user._id,
+      userName: (visibility.userName === 'public' || visibility.displayName === 'public')
+        ? (profile?.userName || user.userName || profile?.name || "User")
+        : null,
+      email: visibility.email === 'public' ? (user.email || profile?.email) : null,
+      phoneNumber: visibility.phoneNumber === 'public' ? (profile?.phoneNumber || user.phoneNumber || user.phone) : null,
+      profileAvatar: (visibility.profileAvatar === 'public')
+        ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
+        : null,
     };
 
-    console.log("🛠️ [Backend] Resolving design metadata for type:", type);
-    const designMetadata = getShareDesignMetadata(feed, type, customMetadata, viewer);
+    // 🚀 STEP 4: FOOTER & SOCIAL LOGIC (Mirroring DirectDownload)
+    if (designMetadata.footerConfig?.showElements) {
+      if (viewer.email) designMetadata.footerConfig.showElements.email = true;
+      if (viewer.phoneNumber) designMetadata.footerConfig.showElements.phone = true;
+    }
 
-    console.log("🎬 [Backend] Starting media processing with FFmpeg...");
-    const { ffmpegCommand } = await processPosterMedia({
-      feed: { ...feed, mediaUrl: getMediaUrl(feed.mediaUrl) },
-      viewer, designMetadata, tempDir,
+    if (designMetadata.footerConfig && profile?.socialLinks) {
+      const socialLinks = profile.socialLinks;
+      const isSocialPublic = visibility.socialLinks === 'public';
+
+      if (designMetadata.footerConfig.socialIcons && designMetadata.footerConfig.socialIcons.length > 0) {
+        designMetadata.footerConfig.socialIcons = designMetadata.footerConfig.socialIcons.filter(icon => {
+          if (!isSocialPublic) return false;
+          const platform = icon.platform?.toLowerCase();
+          return socialLinks[platform] && socialLinks[platform].length > 0;
+        });
+      }
+      else if (designMetadata.footerConfig.showElements?.socialIcons && isSocialPublic) {
+        designMetadata.footerConfig.socialIcons = Object.keys(socialLinks)
+          .filter(platform => socialLinks[platform] && String(socialLinks[platform]).trim().length > 0)
+          .map(platform => ({
+            platform: platform.charAt(0).toUpperCase() + platform.slice(1),
+            visible: true,
+            url: socialLinks[platform]
+          }));
+      }
+    }
+
+    console.log("🎬 [Backend] Starting media processing (Exact DirectDownload sequence)...");
+    const { ffmpegCommand } = await processFeedMedia({
+      feed,
+      viewer,
+      designMetadata,
+      tempDir,
+      isStreaming: false
     });
 
     const videoFilename = `${userId}_${feedId}_${type || 'direct'}.mp4`;
@@ -2931,8 +2997,15 @@ exports.processSharePreview = async (req, res) => {
             await UserFeedActions.findOneAndUpdate({ userId }, { $push: { sharedFeeds: { feedId, type: type || 'direct', processedUrl: videoFilename, thumbUrl: thumbFilename, sharedAt: new Date() } } }, { upsert: true });
             cleanup();
             if (!res.headersSent) {
-              console.log("🚀 [Backend] Share preview ready!");
-              res.status(200).json({ success: true, videoUrl: `${process.env.BACKEND_URL}/uploads/shares/${videoFilename}`, thumbUrl: `${process.env.BACKEND_URL}/uploads/shares/${thumbFilename}` });
+              const stats = fs.statSync(finalOutputPath);
+              console.log(`🚀 [Backend] Share preview ready! Size: ${stats.size} bytes`);
+              const baseUrl = process.env.NODE_ENV === 'production' ? process.env.BACKEND_URL : 'http://localhost:5000';
+              res.status(200).json({
+                success: true,
+                mediaType: 'video',
+                videoUrl: `${baseUrl}/uploads/shares/${videoFilename}`,
+                thumbUrl: `${baseUrl}/uploads/shares/${thumbFilename}`
+              });
             }
           })
           .on('error', (err) => {

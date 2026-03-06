@@ -22,7 +22,7 @@ initSocket(server);
 
 const allowedOrigins = [
   "http://localhost:5173",
-   "http://localhost:5174",
+  "http://localhost:5174",
   "https://admin.prithu.app",
   "https://www.prithu.app",
   "https://prithu.app",
@@ -67,9 +67,12 @@ app.use("/media", express.static(path.join(__dirname, "media"), {
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
   setHeaders: (res, path) => {
-    // Allow CORS for images since they're used in OG tags
-    if (path.match(/\.(jpg|jpeg|png|webp)$/)) {
+    // Allow CORS for images and videos since they're used in OG tags/previews
+    if (path.match(/\.(jpg|jpeg|png|webp|mp4)$/)) {
       res.setHeader('Access-Control-Allow-Origin', '*');
+      if (path.endsWith('.mp4')) {
+        res.setHeader('Content-Type', 'video/mp4');
+      }
     }
   }
 }));

@@ -234,12 +234,10 @@ exports.processPosterMedia = async ({
 
     const maxMediaH = (footerEnabled) ? (OUT_H - footerH) : OUT_H;
     const scaleFactor = Math.min(OUT_W / sourceMeta.width, maxMediaH / sourceMeta.height);
-    const actualMediaW = Math.round(sourceMeta.width * scaleFactor);
+    let actualMediaW = Math.round(sourceMeta.width * scaleFactor);
+    if (actualMediaW % 2 !== 0) actualMediaW -= 1;
     let actualMediaH = Math.round(sourceMeta.height * scaleFactor);
-
-    // 🚀 FFmpeg libx264 requires even dimensions for yuv420p. 
-    // Ensure height is even to avoid "Error while opening encoder"
-    if (actualMediaH % 2 !== 0) actualMediaH += 1;
+    if (actualMediaH % 2 !== 0) actualMediaH -= 1;
 
     const paddingX = (OUT_W - actualMediaW) / 2;
     let finalOUT_H = actualMediaH + footerH;
@@ -248,16 +246,16 @@ exports.processPosterMedia = async ({
 
     const footerBgColor = normalizeFfmpegColor(footerConfig?.backgroundColor || "#1a1a1a");
 
-    const ffmpegCommand = ffmpeg(tempSourcePath).inputOptions(["-err_detect ignore_err", "-fflags +genpts"]);
+    const ffmpegCommand = ffmpeg(tempSourcePath);
     const duration = sourceMeta.duration && sourceMeta.duration !== 'N/A' ? sourceMeta.duration : 8;
     if (isImagePost) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
 
-    let currentBase = "base";
+    let currentBase = "rgba_base";
     const combinedFilters = [
         { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
         { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=0:color=black`, inputs: "scaled_base", outputs: "padded_base" },
-        { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: "rgba_base" },
-        { filter: "format", options: "rgba", inputs: "rgba_base", outputs: currentBase }
+        { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: "rgba_padded" },
+        { filter: "format", options: "rgba", inputs: "rgba_padded", outputs: currentBase }
     ];
 
     let overlayInputIndex = 1;
@@ -473,8 +471,27 @@ exports.processPosterMedia = async ({
     }
 
     ffmpegCommand.complexFilter(combinedFilters);
-    ffmpegCommand.outputOptions(["-map", `[${currentBase}]`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-f", "mp4"]);
-    if (isVideoPost) ffmpegCommand.outputOptions(["-map", "0:a?", "-c:a", "aac"]);
+    ffmpegCommand.outputOptions([
+        "-map", `[${currentBase}]`,
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-profile:v", "main",
+        "-level:v", "3.1",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-movflags", "+faststart",
+        "-r", "30"
+    ]);
+    if (isVideoPost) {
+        ffmpegCommand.outputOptions([
+            "-map", "0:a?",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-ar", "44100",
+            "-ac", "2",
+            "-shortest"
+        ]);
+    }
 
     return { ffmpegCommand, tempSourcePath };
 };
