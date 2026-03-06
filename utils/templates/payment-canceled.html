@@ -6,28 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Prithu Payment Canceled</title>
     <style>
-        /* ----- base & reset (unified off-white) ----- */
+        /* ----- base & reset ----- */
         body {
             margin: 0;
             padding: 0;
-            background-color: #f9f9f7;
-            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+            font-family: 'Segoe UI', Arial, sans-serif;
             line-height: 1.4;
+            min-height: 100vh;
         }
 
         .email-container {
             max-width: 600px;
             margin: 40px auto;
-            background-color: #f9f9f7;
-            box-shadow: 2px 6px 30px rgba(0, 0, 0, 0.15);
-            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+            border-radius: 24px;
             overflow: hidden;
         }
 
-        /* ----- HEADER: logo + name always side by side ----- */
+        /* ----- header ----- */
         .header {
-            background-color: #f9f9f7;
-            color: #064d3b;
             padding: 40px 20px 20px;
             text-align: center;
         }
@@ -37,7 +39,6 @@
             align-items: center;
             justify-content: center;
             gap: 15px;
-            font-family: serif;
             flex-wrap: nowrap;
         }
 
@@ -54,107 +55,86 @@
         .header img.logo {
             width: 65px;
             height: auto;
-            animation: spin 4s linear infinite;
+            animation: spin 6s linear infinite;
             display: block;
             border-radius: 50%;
-            box-shadow: 0 4px 10px rgba(0, 50, 30, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
         }
 
         .header h1 {
             margin: 0;
-            font-size: 37px;
+            font-size: 38px;
             color: #064d3b;
-            white-space: nowrap;
-            font-family: Georgia, 'Times New Roman', serif;
-            font-weight: 600;
+            font-family: 'Georgia', serif;
+            font-weight: 700;
             letter-spacing: -0.5px;
         }
 
         /* ----- content area ----- */
         .content {
             padding: 0 40px;
-            background-color: #f9f9f7;
-            color: black;
-            text-align: left;
+            color: #333;
         }
 
         .content h2 {
-            font-size: 19px;
-            margin: 0 0 12px 0;
+            font-size: 22px;
+            margin: 0 0 15px 0;
             color: #757575;
-            /* Neutral grey for cancellation */
-            font-weight: 600;
+            font-weight: 700;
+            text-align: left;
         }
 
         .content p {
-            font-size: 18px;
-            margin-bottom: 15px;
-            color: #000;
-            line-height: 1.5;
+            font-size: 17px;
+            margin-bottom: 20px;
+            color: #444;
+            line-height: 1.6;
+            text-align: left;
         }
 
+        /* ----- BUTTON ----- */
         .cta-button {
             display: inline-block;
-            background-color: #4169E1;
+            background: linear-gradient(135deg, #4169E1 0%, #567ef4 100%);
             color: #ffffff !important;
-            padding: 16px 38px;
+            padding: 16px 40px;
             text-decoration: none;
-            border-radius: 60px;
+            border-radius: 50px;
             font-size: 18px;
-            font-weight: 500;
-            margin: 20px 0 15px 0;
-            box-shadow: 0 8px 16px rgba(65, 105, 225, 0.25);
-            border: 1px solid #2e4db3;
-            transition: background 0.2s ease, transform 0.2s ease;
-            line-height: 1.2;
+            font-weight: 600;
+            margin: 25px 0;
+            box-shadow: 0 10px 20px rgba(65, 105, 225, 0.2);
         }
 
-        .cta-button:hover {
-            background-color: #365fc0;
-            transform: translateY(-2px);
-        }
-
+        /* footer */
         .footer {
-            padding: 20px;
+            padding: 30px 20px;
             text-align: center;
-            font-size: 14px;
-            color: #064d3b;
-            background-color: #f9f9f7;
+            font-size: 13px;
+            color: #666;
+            background: rgba(0, 0, 0, 0.02);
             border-top: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .footer a {
-            color: #000000;
+            color: #000;
             text-decoration: none;
-            font-weight: 500;
-            border-bottom: 1px dotted #7a9c8c;
-        }
-
-        .footer p {
-            margin: 8px 0;
-            color: black;
+            font-weight: 600;
+            border-bottom: 1px dotted #ccc;
         }
 
         @media only screen and (max-width: 600px) {
-            .header {
-                padding: 30px 15px 15px;
-            }
-
-            .header img.logo {
-                width: 42px !important;
-            }
-
-            .header h1 {
-                font-size: 28px !important;
+            .email-container {
+                margin: 20px 10px;
             }
 
             .content {
                 padding: 0 25px;
             }
 
-            .cta-button {
-                padding: 14px 30px;
-                font-size: 17px;
+            .header h1 {
+                font-size: 32px;
             }
         }
     </style>

@@ -1,32 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prithu OTP Verification</title>
   <style>
-    /* ----- base & reset (same off-white background) ----- */
+    /* ----- base & reset ----- */
     body {
       margin: 0;
       padding: 0;
-      background-color: #f9f9f7;
-      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+      font-family: 'Segoe UI', Arial, sans-serif;
       line-height: 1.4;
+      min-height: 100vh;
     }
 
     .email-container {
       max-width: 600px;
       margin: 40px auto;
-      background-color: #f9f9f7;
-      box-shadow: 2px 6px 30px rgba(0,0,0,0.15);
-      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+      border-radius: 24px;
       overflow: hidden;
     }
 
-    /* ----- HEADER: logo + name always side by side (no stacking) ----- */
+    /* ----- header ----- */
     .header {
-      background-color: #f9f9f7;
-      color: #064d3b;
       padding: 40px 20px 20px;
       text-align: center;
     }
@@ -35,182 +38,157 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 15px;                /* consistent gap with previous files */
-      font-family: serif;
-      flex-wrap: nowrap;        /* force no wrap */
+      gap: 15px;
+      flex-wrap: nowrap;
     }
 
-    /* spin animation (identical) */
     @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .header img.logo {
       width: 65px;
       height: auto;
-      animation: spin 4s linear infinite;
+      animation: spin 6s linear infinite;
       display: block;
-      border-radius: 50%;            /* soft roundness from previous */
-      box-shadow: 0 4px 10px rgba(0,50,30,0.1); /* subtle depth */
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
     }
 
     .header h1 {
       margin: 0;
-      font-size: 37px;               /* matches previous style */
+      font-size: 38px;
       color: #064d3b;
-      white-space: nowrap;            /* keep name on one line */
-      font-family: Georgia, 'Times New Roman', serif;
-      font-weight: 600;
+      font-family: 'Georgia', serif;
+      font-weight: 700;
       letter-spacing: -0.5px;
     }
 
-    /* ----- content area (left aligned text) ----- */
+    /* ----- content area ----- */
     .content {
       padding: 0 40px;
-      background-color: #f9f9f7;
-      color: black;
-      text-align: center;
+      color: #333;
     }
 
     .content h2 {
-      font-size: 19px;
-      text-align: left;
-      margin: 0 0 12px 0;
+      font-size: 22px;
+      margin: 0 0 15px 0;
       color: #064d3b;
       font-weight: 600;
+      text-align: left;
     }
 
     .content p {
-      font-size: 18px;
-      margin-bottom: 15px;
+      font-size: 17px;
+      margin-bottom: 20px;
+      color: #444;
+      line-height: 1.6;
       text-align: left;
-      color: #000;
-      line-height: 1.5;
     }
 
-    /* OTP box — same elegant style (slightly smaller width for focus) */
+    /* OTP box Glass within Glass */
     .otp-box {
-      background: #f9f9f7;
-      border-radius: 10px;
-      padding: 15px;
-      margin: 20px auto;
-      width: 45%;
-      color: black;
-      font-size: 26px;          /* slightly larger for OTP */
-      letter-spacing: 4px;       /* improved readability */
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 16px;
+      padding: 20px;
+      margin: 25px auto;
+      width: 50%;
+      color: #064d3b;
+      font-size: 28px;
+      letter-spacing: 6px;
       text-align: center;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      border: 1px solid rgba(0,0,0,0.1);
-      font-weight: 600;
-      font-family: 'Courier New', monospace; /* OTP looks clearer */
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
     }
 
     .important-heading {
-      color: black;
+      color: #064d3b;
       text-align: left;
-      font-size: 20px;
-      font-weight: 600;
-      font-family: serif;
-      margin: 20px 0 8px 0;
+      font-size: 19px;
+      font-weight: 700;
+      margin: 25px 0 10px 0;
     }
 
     .security-list {
       list-style: none;
       text-align: left;
-      display: inline-block;
       padding: 0;
-      margin: 5px auto 20px auto;
-      font-size: 18px;
+      margin-bottom: 25px;
+      font-size: 16px;
       line-height: 1.7;
-      color: black;
+      color: #555;
     }
 
     .security-list li {
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+      padding-left: 20px;
+      position: relative;
     }
 
-    /* ----- BUTTON : exact pill design from registration email ----- */
+    .security-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: #064d3b;
+      font-weight: bold;
+    }
+
+    /* ----- BUTTON ----- */
     .cta-button {
       display: inline-block;
-      background-color: #4169E1;
-      color: #ffffff;
-      padding: 16px 38px;
+      background: linear-gradient(135deg, #4169E1 0%, #567ef4 100%);
+      color: #ffffff !important;
+      padding: 16px 40px;
       text-decoration: none;
-      border-radius: 60px;              /* pill shape */
+      border-radius: 50px;
       font-size: 18px;
-      font-weight: 500;
-      margin: 20px 0 25px 0;
-      box-shadow: 0 8px 16px rgba(65,105,225,0.25);
-      border: 1px solid #2e4db3;
-      transition: background 0.2s ease, transform 0.2s ease;
-      line-height: 1.2;
+      font-weight: 600;
+      margin: 25px 0;
+      box-shadow: 0 10px 20px rgba(65, 105, 225, 0.2);
     }
 
-    .cta-button:hover {
-      background-color: #365fc0;
-      transform: translateY(-2px);
-    }
-
-    /* footer with black links + subtle dotted underline */
+    /* footer */
     .footer {
-      padding: 20px;
+      padding: 30px 20px;
       text-align: center;
-      font-size: 14px;
-      color: #064d3b;
-      background-color: #f9f9f7;
-      border-top: 1px solid rgba(0,0,0,0.05);
+      font-size: 13px;
+      color: #666;
+      background: rgba(0, 0, 0, 0.02);
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
     }
 
     .footer a {
-      color: #000000;
+      color: #000;
       text-decoration: none;
-      font-weight: 500;
-      border-bottom: 1px dotted #7a9c8c;
+      font-weight: 600;
+      border-bottom: 1px dotted #ccc;
     }
 
-    .footer a:hover {
-      text-decoration: underline;
-    }
-
-    .footer p {
-      margin: 8px 0;
-      color: black;
-    }
-
-    /* ----- responsive: smaller logo & name on narrow screens ----- */
     @media only screen and (max-width: 600px) {
-      .header {
-        padding: 30px 15px 15px;
+      .email-container {
+        margin: 20px 10px;
       }
-      .logo-text-container {
-        gap: 10px;
-      }
-      .header img.logo {
-        width: 42px !important;
-        height: auto;
-      }
-      .header h1 {
-        font-size: 28px !important;
-      }
+
       .content {
         padding: 0 25px;
       }
+
+      .header h1 {
+        font-size: 32px;
+      }
+
       .otp-box {
-        width: 65%;             /* take more width on mobile */
+        width: 80%;
         font-size: 24px;
-        letter-spacing: 3px;
-        padding: 12px;
-      }
-      .cta-button {
-        padding: 14px 30px;
-        font-size: 17px;
-      }
-      .footer {
-        padding: 15px 10px;
-      }
-      .security-list {
-        font-size: 17px;
       }
     }
   </style>
@@ -221,14 +199,16 @@
     <!-- header: logo + name always adjacent (no stacking) -->
     <div class="header">
       <div class="logo-text-container">
-        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
         <h1>Prithu</h1>
       </div>
     </div>
 
     <div class="content">
       <h2>Dear {username},</h2>
-      <p>As part of our enhanced security measures, we've sent you this One-Time Password (OTP) to verify your identity and complete your SignUp to your <strong>Prithu</strong> account.</p>
+      <p>As part of our enhanced security measures, we've sent you this One-Time Password (OTP) to verify your identity
+        and complete your SignUp to your <strong>Prithu</strong> account.</p>
 
       <!-- OTP display box (clean, subtle) -->
       <div class="otp-box">{otp}</div>
@@ -256,4 +236,5 @@
     </div>
   </div>
 </body>
+
 </html>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,24 +10,26 @@
     body {
       margin: 0;
       padding: 0;
-      background-color: #f9f9f7;
-      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+      font-family: 'Segoe UI', Arial, sans-serif;
       line-height: 1.4;
+      min-height: 100vh;
     }
 
     .email-container {
       max-width: 600px;
       margin: 40px auto;
-      background-color: #f9f9f7;
-      box-shadow: 2px 6px 30px rgba(0,0,0,0.15);
-      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+      border-radius: 24px;
       overflow: hidden;
     }
 
-    /* ----- header: logo & name exactly as previous file (side by side, same gap) ----- */
+    /* ----- header ----- */
     .header {
-      background-color: #f9f9f7;
-      color: #064d3b;
       padding: 40px 20px 20px;
       text-align: center;
     }
@@ -35,159 +38,141 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 15px;                /* identical to first file */
-      font-family: serif;
+      gap: 15px;
       flex-wrap: nowrap;
     }
 
-    /* spin animation — same as original */
     @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .header img.logo {
       width: 65px;
       height: auto;
-      animation: spin 4s linear infinite;
+      animation: spin 6s linear infinite;
       display: block;
-      border-radius: 50%;        /* subtle rounding from previous (makes logo softer) */
-      box-shadow: 0 4px 10px rgba(0,50,30,0.1); /* exactly as previous design */
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
     }
 
     .header h1 {
       margin: 0;
-      font-size: 37px;           /* matches previous file size */
+      font-size: 38px;
       color: #064d3b;
-      white-space: nowrap;
-      font-family: Georgia, 'Times New Roman', serif; /* consistent serif */
-      font-weight: 600;
-      letter-spacing: -0.5px;    /* from previous design */
+      font-family: 'Georgia', serif;
+      font-weight: 700;
+      letter-spacing: -0.5px;
     }
 
-    /* ----- content area (left aligned) ----- */
+    /* ----- content area ----- */
     .content {
       padding: 0 40px;
-      background-color: #f9f9f7;
-      color: black;
-      text-align: center;
+      color: #333;
     }
 
     .content h2 {
-      font-size: 19px;            /* matches previous "Hi {username}" size */
-      text-align: left;
-      margin: 0 0 12px 0;
+      font-size: 22px;
+      margin: 0 0 15px 0;
       color: #064d3b;
       font-weight: 600;
+      text-align: left;
     }
 
     .content p {
-      font-size: 18px;            /* unified paragraph size */
-      margin-bottom: 15px;
+      font-size: 17px;
+      margin-bottom: 20px;
+      color: #444;
+      line-height: 1.6;
       text-align: left;
-      color: #000;
-      line-height: 1.5;
     }
 
-    /* ----- BUTTON : EXACT design from previous registration email ----- */
+    /* ----- BUTTON ----- */
     .cta-button {
       display: inline-block;
-      background-color: #4169E1;      /* same royal blue */
-      color: #ffffff;
-      padding: 16px 38px;              /* exact padding from previous */
+      background: linear-gradient(135deg, #4169E1 0%, #567ef4 100%);
+      color: #ffffff !important;
+      padding: 16px 40px;
       text-decoration: none;
-      border-radius: 60px;              /* previous used 60px (pill shape) */
+      border-radius: 50px;
       font-size: 18px;
-      font-weight: 500;
-      margin: 20px 0 25px 0;
-      box-shadow: 0 8px 16px rgba(65,105,225,0.25); /* same subtle shadow */
-      border: 1px solid #2e4db3;
-      transition: background 0.2s ease;
-      line-height: 1.2;
+      font-weight: 600;
+      margin: 25px 0;
+      box-shadow: 0 10px 20px rgba(65, 105, 225, 0.2);
+      transition: all 0.3s ease;
     }
 
-    .cta-button:hover {
-      background-color: #365fc0;
-      transform: translateY(-2px);
-    }
-
-    /* footer exactly as previous with black links */
+    /* footer */
     .footer {
-      padding: 20px;
+      padding: 30px 20px;
       text-align: center;
-      font-size: 14px;
-      color: #064d3b;
-      background-color: #f9f9f7;
+      font-size: 13px;
+      color: #666;
+      background: rgba(0, 0, 0, 0.02);
       border-top: 1px solid rgba(0, 0, 0, 0.05);
     }
 
     .footer a {
-      color: #000000;             /* black links as requested */
+      color: #000;
       text-decoration: none;
-      font-weight: 500;
-      border-bottom: 1px dotted #7a9c8c; /* subtle dotted from previous */
+      font-weight: 600;
+      border-bottom: 1px dotted #ccc;
     }
 
-    .footer a:hover {
-      text-decoration: underline;
-    }
-
-    .footer p {
-      margin: 8px 0;
-      color: black;
-    }
-
-    /* responsive: smaller logo & name */
     @media only screen and (max-width: 600px) {
-      .header {
-        padding: 30px 15px 15px;
+      .email-container {
+        margin: 20px 10px;
       }
-      .logo-text-container {
-        gap: 10px;
-      }
-      .header img.logo {
-        width: 42px !important;      /* smaller on mobile */
-        height: auto;
-      }
-      .header h1 {
-        font-size: 28px !important;
-      }
+
       .content {
         padding: 0 25px;
       }
-      .cta-button {
-        padding: 14px 30px;          /* adjust but keep pill shape */
-        font-size: 17px;
+
+      .header h1 {
+        font-size: 32px;
       }
-      .footer {
-        padding: 15px 10px;
+
+      .header img.logo {
+        width: 45px;
       }
     }
   </style>
 </head>
+
 <body>
   <div class="email-container">
     <!-- header: logo next to name (identical to previous design) -->
     <div class="header">
       <div class="logo-text-container">
-        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo" class="logo" />
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
         <h1>Prithu</h1>
       </div>
     </div>
 
     <div class="content">
       <h2>Hi {username},</h2>
-      <p>It's great to see you back at <strong>Prithu</strong> — your creative haven for inspiration and connection! Dive into a world of endless creativity with every login.</p>
+      <p>It's great to see you back at <strong>Prithu</strong> — your creative haven for inspiration and connection!
+        Dive into a world of endless creativity with every login.</p>
 
-      <p style="margin-bottom: 25px;">Jump right into your creative journey and rediscover what’s trending, inspiring, and uniquely you.</p>
+      <p style="margin-bottom: 25px;">Jump right into your creative journey and rediscover what’s trending, inspiring,
+        and uniquely you.</p>
 
       <!-- button now matches previous pill + shadow exactly -->
       <a href="https://www.prithu.app/" class="cta-button">Go To Dashboard →</a>
 
       <!-- thank you note, left aligned (but centered by container) -->
-      <p style="text-align:center; font-size:18px; line-height:1.5;">Thank you for being a valued part of our community!</p>
+      <p style="text-align:center; font-size:18px; line-height:1.5;">Thank you for being a valued part of our community!
+      </p>
 
-      <p style="text-align:center; margin-top: 30px; font-size:18px;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+      <p style="text-align:center; margin-top: 30px; font-size:18px;"><strong>Warm regards,<br>The Prithu Team</strong>
+      </p>
     </div>
 
     <!-- footer with black links and dotted style from previous -->
@@ -198,4 +183,5 @@
     </div>
   </div>
 </body>
+
 </html>
