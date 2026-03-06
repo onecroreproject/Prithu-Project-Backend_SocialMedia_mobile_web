@@ -1682,83 +1682,98 @@ async function getOptimizedOGMedia(feed) {
 
 exports.sharePostOG = async (req, res) => {
   const { feedId } = req.params;
+  const { type, u: userId } = req.query;
 
   try {
     const feed = await Feeds.findById(feedId).lean();
 
-    if (!feed || feed.audience !== "public" || feed.isDeleted) {
-      return res.send(getDefaultOGPage());
+    if (!feed || feed.isDeleted) {
+      return res.status(404).send(getDefaultOGPage());
     }
 
-    // detect crawler
+    // Determine absolute media URLs
+    const mediaUrl = getMediaUrl(feed.mediaUrl);
+    const thumbnailUrl = getMediaUrl(feed.files?.[0]?.thumbnail || feed.storage?.urls?.thumbnail || "");
+
+    // Detect crawler
     const ua = req.headers["user-agent"] || "";
-    const isCrawler =
-      /facebookexternalhit|Twitterbot|WhatsApp|Telegram|bot|crawler|preview/i.test(ua);
+    const isCrawler = /facebookexternalhit|Twitterbot|WhatsApp|Telegram|bot|crawler|preview|linkedinbot/i.test(ua);
 
-    // 👤 normal user → frontend
-    if (!isCrawler) {
-      return res.redirect(
-        302,
-        `${process.env.FRONTEND_URL}/home/retrivefeed/${feedId}`
-      );
-    }
+    const title = "Watch this video on Prithu";
+    const description = feed.caption || "Shared via Prithu App";
+    const currentUrl = `${process.env.BACKEND_URL}/share/post/${feedId}`;
 
-    // 🤖 crawler → OG HTML
-    const { type, u: userId } = req.query;
-
-    const profile = await ProfileSettings.findOne({
-      accountId: feed.createdByAccount,
-    }).lean();
-
-    const userName = profile?.userName || "User";
-    const caption = feed.dec || `Post by ${userName}`;
-    const title = `${userName}'s ${feed.type === "video" ? "Video" : "Post"}`;
-
-    const currentUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-    const frontendUrl = `${process.env.FRONTEND_URL}/home/retrivefeed/${feedId}?u=${userId || ''}&type=${type || ''}&isShared=true`;
-
-    let { ogImageUrl, ogVideoUrl } = await getOptimizedOGMedia(feed);
-
-    // 🚀 ENHANCEMENT: Check for processed share media if userId and type are provided
-    if (userId && type) {
-      const shareDir = path.join(__dirname, "../../uploads/shares");
-      const videoFilename = `${userId}_${feedId}_${type}.mp4`;
-      const thumbFilename = `${userId}_${feedId}_${type}_thumb.jpg`;
-
-      if (fs.existsSync(path.join(shareDir, videoFilename))) {
-        ogVideoUrl = `${process.env.BACKEND_URL}/uploads/shares/${videoFilename}`;
-      }
-      if (fs.existsSync(path.join(shareDir, thumbFilename))) {
-        ogImageUrl = `${process.env.BACKEND_URL}/uploads/shares/${thumbFilename}`;
-      }
-    }
-
-    res.set("Content-Type", "text/html");
-    res.send(`
+    if (isCrawler) {
+      // 🤖 Crawler -> Return Open Graph Meta Tags
+      return res.status(200).send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<title>Prithu</title>
+  <meta charset="utf-8" />
+  <title>${title}</title>
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${thumbnailUrl}" />
+  <meta property="og:video" content="${mediaUrl}" />
+  <meta property="og:type" content="video.other" />
+  <meta property="og:url" content="${currentUrl}" />
 
-<meta property="og:url" content="${currentUrl}" />
-<meta property="og:title" content="Prithu" />
-<meta property="og:description" content="Check out this post on Prithu" />
-<meta property="og:image" content="${process.env.BACKEND_URL}/logo/prithulogo.png" />
-<meta property="og:type" content="website" />
-
-<meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Prithu" />
-<meta name="twitter:description" content="Check out this post on Prithu" />
-<meta name="twitter:image" content="${process.env.BACKEND_URL}/logo/prithulogo.png" />
-
-<link rel="canonical" href="${frontendUrl}" />
+  <meta name="twitter:card" content="player" />
+  <meta name="twitter:player" content="${mediaUrl}" />
+  <meta name="twitter:image" content="${thumbnailUrl}" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${description}" />
+</head>
+<body></body>
+</html>
+      `);
+    } else {
+      // 👤 Normal User -> Return Video Player Page
+      return res.status(200).send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .player-container {
+            max-width: 720px;
+            width: 100%;
+            position: relative;
+            padding: 10px;
+        }
+        video {
+            width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+    </style>
 </head>
 <body>
-  <script>window.location.href="${frontendUrl}";</script>
+    <div class="player-container">
+        <video 
+            controls 
+            poster="${thumbnailUrl}"
+            playsinline
+        >
+            <source src="${mediaUrl}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
 </body>
 </html>
-    `);
+      `);
+    }
   } catch (err) {
     console.error("OG Share Error:", err);
     return res.status(500).send(getErrorOGPage());
