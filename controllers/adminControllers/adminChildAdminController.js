@@ -320,7 +320,9 @@ exports.updateChildAdminProfileById = async (req, res) => {
       bio,
       gender,
       displayName,
-      socialLinks
+      socialLinks,
+      privacy,
+      fieldPrivacy
     } = req.body;
     const { role: currentUserRole, Id: currentUserId } = req;
 
@@ -370,6 +372,20 @@ exports.updateChildAdminProfileById = async (req, res) => {
     if (gender) profile.gender = gender;
     if (displayName) profile.displayName = displayName;
     if (userName) profile.userName = userName;
+
+    // 5.1️⃣ Handle Privacy (Fix for 500 Validation Error)
+    if (privacy) {
+      if (typeof privacy === "string") {
+        profile.privacy = privacy;
+      } else if (typeof privacy === "object") {
+        // If frontend sends fieldPrivacy object inside privacy field, map it correctly
+        profile.fieldPrivacy = { ...profile.fieldPrivacy, ...privacy };
+      }
+    }
+
+    if (fieldPrivacy && typeof fieldPrivacy === "object") {
+      profile.fieldPrivacy = { ...profile.fieldPrivacy, ...fieldPrivacy };
+    }
 
     // 6️⃣ Handle Social Links
     if (socialLinks) {

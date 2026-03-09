@@ -2861,6 +2861,9 @@ const getShareDesignMetadata = (feed, type, customMetadata = {}, viewer = {}) =>
 /**
  * 🚀 Controller: Process Share Preview
  */
+/**
+ * 🚀 Controller: Process Share Preview
+ */
 exports.processSharePreview = async (req, res) => {
   const { feedId } = req.params;
   const userId = req.Id;
@@ -2873,7 +2876,7 @@ exports.processSharePreview = async (req, res) => {
     return res.status(400).json({ message: "userId and feedId required" });
   }
 
-  // Handle stringified metadata from form submissions (Mirroring DirectDownload logic)
+  // Handle stringified metadata from form submissions
   if (typeof customMetadata === 'string') {
     try {
       customMetadata = JSON.parse(customMetadata);
@@ -2882,14 +2885,6 @@ exports.processSharePreview = async (req, res) => {
       customMetadata = {};
     }
   }
-
-  const shareDir = path.join(__dirname, "../../uploads/shares");
-  if (!fs.existsSync(shareDir)) fs.mkdirSync(shareDir, { recursive: true });
-
-  const tempDir = path.join(__dirname, "../../uploads/temp_share", `sh_${Date.now()}_${userId}`);
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-  const cleanup = () => { try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) { } };
 
   try {
     const feed = await Feeds.findById(feedId).lean();
@@ -2905,45 +2900,10 @@ exports.processSharePreview = async (req, res) => {
 
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    // 🚀 STEP 1: RESOLVE DESIGN METADATA (Mirroring DirectDownload)
-    let designMetadata = feed.designMetadata || {};
-    designMetadata = JSON.parse(JSON.stringify(designMetadata)); // Deep copy
+    // 🚀 STEP 1: RESOLVE DESIGN METADATA
+    const designMetadata = getShareDesignMetadata(feed, type, customMetadata, profile);
 
-    // 🚀 STEP 2: MERGE CUSTOM METADATA (Mirroring DirectDownload)
-    if (customMetadata && Object.keys(customMetadata).length > 0) {
-      // Override Footer Config
-      if (customMetadata.footerConfig) {
-        designMetadata.footerConfig = {
-          ...designMetadata.footerConfig,
-          ...customMetadata.footerConfig,
-          enabled: true
-        };
-      }
-
-      // Add/Override Overlay Elements (Avatars) - Exact matching with DirectDownload logic
-      if (customMetadata.avatarConfigs && Array.isArray(customMetadata.avatarConfigs)) {
-        if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
-        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'avatar');
-
-        customMetadata.avatarConfigs.forEach((av, idx) => {
-          designMetadata.overlayElements.push({
-            id: `manual-avatar-${idx}`,
-            type: 'avatar',
-            xPercent: av.x,
-            yPercent: av.y,
-            wPercent: av.w,
-            hPercent: av.h,
-            visible: true,
-            zIndex: 110,
-            mediaConfig: { url: av.img },
-            avatarConfig: { shape: av.shape || 'circle' },
-            animation: { enabled: true, direction: 'left', speed: 1, delay: 0 }
-          });
-        });
-      }
-    }
-
-    // 🚀 STEP 3: RESOLVE VIEWER (Mirroring DirectDownload Privacy)
+    // 🚀 STEP 2: RESOLVE VIEWER (Mirroring DirectDownload Privacy)
     const visibility = profile?.visibility || {};
     const viewer = {
       id: user._id,
@@ -2957,81 +2917,29 @@ exports.processSharePreview = async (req, res) => {
         : null,
     };
 
-    // 🚀 STEP 4: FOOTER & SOCIAL LOGIC (Mirroring DirectDownload)
-    if (designMetadata.footerConfig?.showElements) {
-      if (viewer.email) designMetadata.footerConfig.showElements.email = true;
-      if (viewer.phoneNumber) designMetadata.footerConfig.showElements.phone = true;
-    }
-
-    if (designMetadata.footerConfig && profile?.socialLinks) {
-      const socialLinks = profile.socialLinks;
-      const isSocialPublic = visibility.socialLinks === 'public';
-
-      if (designMetadata.footerConfig.socialIcons && designMetadata.footerConfig.socialIcons.length > 0) {
-        designMetadata.footerConfig.socialIcons = designMetadata.footerConfig.socialIcons.filter(icon => {
-          if (!isSocialPublic) return false;
-          const platform = icon.platform?.toLowerCase();
-          return socialLinks[platform] && socialLinks[platform].length > 0;
-        });
-      }
-      else if (designMetadata.footerConfig.showElements?.socialIcons && isSocialPublic) {
-        designMetadata.footerConfig.socialIcons = Object.keys(socialLinks)
-          .filter(platform => socialLinks[platform] && String(socialLinks[platform]).trim().length > 0)
-          .map(platform => ({
-            platform: platform.charAt(0).toUpperCase() + platform.slice(1),
-            visible: true,
-            url: socialLinks[platform]
-          }));
-      }
-    }
-
-    console.log("🎬 [Backend] Starting media processing (Exact DirectDownload sequence)...");
-    const { ffmpegCommand } = await processFeedMedia({
-      feed,
+    // 🚀 STEP 3: ADD JOB TO QUEUE
+    console.log(`[SharePreview] Queueing job for user ${userId}, feed ${feedId}...`);
+    const job = await downloadQueue.add({
+      jobType: 'share-preview',
+      feed: { ...feed, mediaUrl: getMediaUrl(feed.mediaUrl) },
+      userId,
       viewer,
       designMetadata,
-      tempDir,
-      isStreaming: false
+    }, {
+      attempts: 2,
+      removeOnComplete: true,
+      removeOnFail: false
     });
 
-    const videoFilename = `${userId}_${feedId}_${type || 'direct'}.mp4`;
-    const finalOutputPath = path.join(shareDir, videoFilename);
-    const thumbFilename = `${userId}_${feedId}_${type || 'direct'}_thumb.jpg`;
+    res.status(202).json({
+      success: true,
+      message: "Share preview processing started",
+      jobId: job.id,
+      status: "queued"
+    });
 
-    ffmpegCommand
-      .on('error', (err) => {
-        console.error("❌ [Backend] FFmpeg error:", err.message);
-        cleanup();
-        if (!res.headersSent) res.status(500).json({ error: 'Processing failed' });
-      })
-      .on('end', async () => {
-        console.log("✅ [Backend] FFmpeg processing complete. Generating thumbnail...");
-        ffmpeg(finalOutputPath).screenshots({ timemarks: ['00:00:01'], filename: thumbFilename, folder: shareDir, size: '1200x630' })
-          .on('end', async () => {
-            console.log("✅ [Backend] Thumbnail generated. Saving share action...");
-            await UserFeedActions.findOneAndUpdate({ userId }, { $push: { sharedFeeds: { feedId, type: type || 'direct', processedUrl: videoFilename, thumbUrl: thumbFilename, sharedAt: new Date() } } }, { upsert: true });
-            cleanup();
-            if (!res.headersSent) {
-              const stats = fs.statSync(finalOutputPath);
-              console.log(`🚀 [Backend] Share preview ready! Size: ${stats.size} bytes`);
-              const baseUrl = process.env.NODE_ENV === 'production' ? process.env.BACKEND_URL : 'http://localhost:5000';
-              res.status(200).json({
-                success: true,
-                mediaType: 'video',
-                videoUrl: `${baseUrl}/uploads/shares/${videoFilename}`,
-                thumbUrl: `${baseUrl}/uploads/shares/${thumbFilename}`
-              });
-            }
-          })
-          .on('error', (err) => {
-            console.error("❌ [Backend] Thumbnail error:", err.message);
-            cleanup();
-          });
-      })
-      .save(finalOutputPath);
   } catch (err) {
     console.error("❌ [Backend] Critical error in processSharePreview:", err);
-    cleanup();
     if (!res.headersSent) res.status(500).json({ message: "Internal server error" });
   }
 };

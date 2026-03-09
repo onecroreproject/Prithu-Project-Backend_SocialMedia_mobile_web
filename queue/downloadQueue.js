@@ -164,20 +164,39 @@ const normalizeFfmpegColor = (c) => {
 const { processFeedMedia } = require("../utils/feedMediaProcessor");
 
 downloadQueue.process(async (job) => {
-    const { feed, userId, viewer, designMetadata } = job.data;
+    const { feed, userId, viewer, designMetadata, jobType = 'download' } = job.data;
     const jobId = job.id;
 
-    console.log(`[Job ${jobId}] Starting video processing for Feed ID: ${feed._id}`);
+    console.log(`[Job ${jobId}] Starting ${jobType} processing for Feed ID: ${feed._id}`);
     job.progress(10);
 
+    const isSharePreview = jobType === 'share-preview';
     const tempDir = path.join(__dirname, "../uploads/temp_processing", jobId);
-    const finalOutputName = `processed_${jobId}.mp4`;
-    const finalOutputPath = path.join(__dirname, "../uploads", finalOutputName);
-    const BACKEND_URL = process.env.BACKEND_URL;
+
+    // Output paths depend on job type
+    const shareDir = path.join(__dirname, "../uploads/shares");
+    const downloadDir = path.join(__dirname, "../uploads");
+
+    if (isSharePreview && !fs.existsSync(shareDir)) fs.mkdirSync(shareDir, { recursive: true });
+
+    const finalOutputName = isSharePreview
+        ? `${userId}_${feed._id}_direct.mp4`
+        : `processed_${jobId}.mp4`;
+
+    const finalOutputPath = isSharePreview
+        ? path.join(shareDir, finalOutputName)
+        : path.join(downloadDir, finalOutputName);
+
+    const thumbFilename = isSharePreview ? `${userId}_${feed._id}_direct_thumb.jpg` : null;
+    const BACKEND_URL = process.env.BACKEND_URL || (process.env.NODE_ENV === 'production' ? "" : "http://localhost:5000");
 
     try {
         const io = getIO();
-        if (io) io.to(userId).emit("download-progress", { jobId, progress: 10, status: "processing" });
+        const emitEvent = isSharePreview ? "share-progress" : "download-progress";
+        const completeEvent = isSharePreview ? "share-complete" : "download-complete";
+        const failEvent = isSharePreview ? "share-failed" : "download-failed";
+
+        if (io) io.to(userId).emit(emitEvent, { jobId, progress: 10, status: "processing" });
 
         const { ffmpegCommand, tempSourcePath } = await processFeedMedia({
             feed,
@@ -187,7 +206,7 @@ downloadQueue.process(async (job) => {
             onProgress: (p) => {
                 const jobProg = Math.floor(10 + (p * 0.4));
                 job.progress(jobProg);
-                if (io) io.to(userId).emit("download-progress", { jobId, progress: jobProg, status: "processing" });
+                if (io) io.to(userId).emit(emitEvent, { jobId, progress: jobProg, status: "processing" });
             }
         });
 
@@ -200,13 +219,45 @@ downloadQueue.process(async (job) => {
                     if (p.percent) {
                         const jobProg = Math.floor(50 + (p.percent * 0.4));
                         job.progress(jobProg);
-                        if (io) io.to(userId).emit("download-progress", { jobId, progress: jobProg, status: "processing" });
+                        if (io) io.to(userId).emit(emitEvent, { jobId, progress: jobProg, status: "processing" });
                     }
                 })
                 .on('error', (err) => reject(err))
                 .on('end', () => resolve())
                 .run();
         });
+
+        // Special handling for Share Preview: Generate Thumbnail & Update DB
+        if (isSharePreview) {
+            console.log(`[Job ${jobId}] Generating thumbnail for share preview...`);
+            await new Promise((resolve, reject) => {
+                ffmpeg(finalOutputPath).screenshots({
+                    timemarks: ['00:00:01'],
+                    filename: thumbFilename,
+                    folder: shareDir,
+                    size: '1200x630'
+                })
+                    .on('end', resolve)
+                    .on('error', reject);
+            });
+
+            const UserFeedActions = require("../models/userFeedInterSectionModel");
+            await UserFeedActions.findOneAndUpdate(
+                { userId },
+                {
+                    $push: {
+                        sharedFeeds: {
+                            feedId: feed._id,
+                            type: 'direct',
+                            processedUrl: finalOutputName,
+                            thumbUrl: thumbFilename,
+                            sharedAt: new Date()
+                        }
+                    }
+                },
+                { upsert: true }
+            );
+        }
 
         job.progress(100);
 
@@ -217,16 +268,26 @@ downloadQueue.process(async (job) => {
             console.warn(`[Job ${jobId}] Cleanup warning:`, cleanupErr.message);
         }
 
-        const downloadUrl = `${BACKEND_URL}/uploads/${finalOutputName}`;
-        console.log(`[Job ${jobId}] Processing complete. Download URL: ${downloadUrl}`);
-        if (io) io.to(userId).emit("download-complete", { jobId, progress: 100, status: "ready", downloadUrl });
+        const downloadUrl = isSharePreview
+            ? `${BACKEND_URL}/uploads/shares/${finalOutputName}`
+            : `${BACKEND_URL}/uploads/${finalOutputName}`;
 
-        return { downloadUrl, processedFilePath: finalOutputPath };
+        const thumbUrl = isSharePreview ? `${BACKEND_URL}/uploads/shares/${thumbFilename}` : null;
+
+        console.log(`[Job ${jobId}] Processing complete. URL: ${downloadUrl}`);
+
+        if (io) {
+            const payload = { jobId, progress: 100, status: "ready", videoUrl: downloadUrl, thumbUrl, mediaType: 'video' };
+            io.to(userId).emit(completeEvent, payload);
+        }
+
+        return { downloadUrl, thumbUrl, processedFilePath: finalOutputPath };
 
     } catch (err) {
         console.error(`[Job ${jobId}] Critical Failure:`, err.stack || err);
         const io = getIO();
-        if (io) io.to(userId).emit("download-failed", { jobId, error: err.message });
+        const failEvent = jobType === 'share-preview' ? "share-failed" : "download-failed";
+        if (io) io.to(userId).emit(failEvent, { jobId, error: err.message });
         try {
             if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
         } catch (cleanupErr) { }
