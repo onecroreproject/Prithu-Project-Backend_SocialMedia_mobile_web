@@ -72,6 +72,7 @@ const {
     getDashboardMetricCount,
     getDashUserRegistrationRatio,
     getDashUserSubscriptionRatio,
+    getDashboardHeartbeat,
 } = require('../controllers/adminControllers/dashboardController');
 
 const {
@@ -95,6 +96,10 @@ const {
 const {
     sendAdminNotification,
 } = require('../controllers/adminControllers/notificationController');
+
+const {
+    getSystemMetrics,
+} = require('../controllers/adminControllers/systemMetricsController');
 
 const {
     getChildAdmins,
@@ -253,20 +258,20 @@ router.post(
     adminFeedUpload
 );
 router.get("/admin/get/all/feed", auth, checkPermission('canManageFeeds'), getAllFeedAdmin);
-router.get("/admin/feed/:feedId/design", auth, getFeedWithDesign);
-router.put("/admin/feed/:feedId/design", auth, updateFeedDesign);
+router.get("/admin/feed/:feedId/design", auth, checkPermission('canManageFeeds'), getFeedWithDesign);
+router.put("/admin/feed/:feedId/design", auth, checkPermission('canManageFeeds'), updateFeedDesign);
 router.patch("/admin/feed/:feedId/schedule", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/adminfeedController').updateFeedSchedule);
-router.get("/admin/get/trending/creator", adminGetTrendingFeeds); // Match key ADMIN_GET_TRENDING_CREATOR
-router.delete("/admin/delete/feed", deleteFeed);
-router.delete("/admin/feed/:feedId/category/:categoryId", removeFeedCategory);
-router.get("/get/trending/feed", adminGetTrendingFeeds);
+router.get("/admin/get/trending/creator", auth, checkPermission('canTrendingCreators'), adminGetTrendingFeeds); // Match key ADMIN_GET_TRENDING_CREATOR
+router.delete("/admin/delete/feed", auth, checkPermission('canManageFeeds'), deleteFeed);
+router.delete("/admin/feed/:feedId/category/:categoryId", auth, checkPermission('canManageCategories'), removeFeedCategory);
+router.get("/get/trending/feed", auth, checkPermission('canManageTrendingFeeds'), adminGetTrendingFeeds);
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', auth, checkPermission('canManageCategories'), adminAddCategory);
 router.delete('/admin/feed/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/admin/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category', auth, checkPermission('canManageCategories'), deleteCategory); // For body-based ID
-router.get('/admin/get/feed/category', auth, getAllCategories);
+router.get('/admin/get/feed/category', auth, checkPermission('canManageCategories'), getAllCategories);
 router.put('/admin/update/category', auth, checkPermission('canManageCategories'), updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
@@ -274,7 +279,7 @@ router.post('/admin/subscription/create', auth, checkPermission('canManageSubscr
 router.put('/admin/subscription/update/:id', auth, checkPermission('canManageSubscriptions'), updatePlan);
 router.delete('/admin/subscription/delete/:id', auth, checkPermission('canManageSubscriptions'), deletePlan);
 router.get('/admin/subscription/all', auth, checkPermission('canManageSubscriptions'), getAllPlans);
-router.get('/admin/getall/subscriptions', getAllPlans); // Alias
+router.get('/admin/getall/subscriptions', auth, checkPermission('canManageSubscriptions'), getAllPlans); // Alias
 
 /* --------------------- Admin User API --------------------- */
 router.get('/admin/getall/users', auth, checkPermission('canManageUsers'), getAllUserDetails);
@@ -285,67 +290,64 @@ router.get("/admin/user/detail/by-date", auth, checkPermission('canManageUsers')
 router.get('/admin/user/analytical-count/:userId', auth, checkPermission('canManageUsers'), getAnaliticalCountforUser);
 router.get('/admin/get/user/analytical/data/:userId', auth, checkPermission('canManageUsers'), getUserAnalyticalData);
 
-router.patch("/admin/block/user/:userId", auth, (req, res, next) => {
-    next();
-}, require('../controllers/userControllers/userDetailController').blockUserById);
-router.get('/admin/user/profile/metricks', getUserProfileDashboardMetricCount);
-router.get('/admin/user/likes/:userId', getUserLikedFeedsforAdmin);
-router.delete('/admin/delete/user/:userId', deleteUserAndAllRelated);
-router.get("/user/list/willingtopost", getUsersWillingToPost);
-router.put("/update/user/post/status/:userId", updateUserPostPermission);
-router.get("/admin/user/activities/:userId", getUserActivitiesForAdmin);
+router.patch("/admin/block/user/:userId", auth, checkPermission('canManageUsers'), require('../controllers/userControllers/userDetailController').blockUserById);
+router.get('/admin/user/profile/metricks', auth, checkPermission('canManageUsers'), getUserProfileDashboardMetricCount);
+router.get('/admin/user/likes/:userId', auth, checkPermission('canManageUsers'), getUserLikedFeedsforAdmin);
+router.delete('/admin/delete/user/:userId', auth, checkPermission('canManageUsers'), deleteUserAndAllRelated);
+router.get("/user/list/willingtopost", auth, checkPermission('canManageUserFeedRequest'), getUsersWillingToPost);
+router.put("/update/user/post/status/:userId", auth, checkPermission('canManageUserFeedRequest'), updateUserPostPermission);
+router.get("/admin/user/activities/:userId", auth, checkPermission('canManageUsers'), getUserActivitiesForAdmin);
 
 /* --------------------- User Analytics API --------------------- */
-router.get("/admin/summary/:userId", getUserAnalyticsSummary);
-router.get("/admin/feeds/:userId", fetchUserFeeds);
-router.get("/admin/following/:userId", fetchUserFollowing);
-router.get("/admin/interested/:userId", fetchUserInterested);
-router.get("/admin/hidden/:userId", fetchUserHidden);
-router.get("/admin/liked/:userId", fetchUserLiked);
-router.get("/admin/disliked/:userId", fetchUserDisliked);
-router.get("/admin/commented/:userId", fetchUserCommented);
-router.get("/admin/shared/:userId", fetchUserShared);
-router.get("/admin/downloaded/:userId", fetchUserDownloaded);
-router.get("/admin/nonInterested/:userId", fetchUserNonInterested);
+router.get("/admin/summary/:userId", auth, checkPermission('canManageUsers'), getUserAnalyticsSummary);
+router.get("/admin/feeds/:userId", auth, checkPermission('canManageUsers'), fetchUserFeeds);
+router.get("/admin/following/:userId", auth, checkPermission('canManageUsers'), fetchUserFollowing);
+router.get("/admin/interested/:userId", auth, checkPermission('canManageUsers'), fetchUserInterested);
+router.get("/admin/hidden/:userId", auth, checkPermission('canManageUsers'), fetchUserHidden);
+router.get("/admin/liked/:userId", auth, checkPermission('canManageUsers'), fetchUserLiked);
+router.get("/admin/disliked/:userId", auth, checkPermission('canManageUsers'), fetchUserDisliked);
+router.get("/admin/commented/:userId", auth, checkPermission('canManageUsers'), fetchUserCommented);
+router.get("/admin/shared/:userId", auth, checkPermission('canManageUsers'), fetchUserShared);
+router.get("/admin/downloaded/:userId", auth, checkPermission('canManageUsers'), fetchUserDownloaded);
+router.get("/admin/nonInterested/:userId", auth, checkPermission('canManageUsers'), fetchUserNonInterested);
 
 // Aliases for New Admin Panel (short paths)
-router.get("/summary/:userId", getUserAnalyticsSummary);
-router.get("/feeds/:userId", fetchUserFeeds);
-router.get("/following/:userId", fetchUserFollowing);
-router.get("/interested/:userId", fetchUserInterested);
-router.get("/hidden/:userId", fetchUserHidden);
-router.get("/liked/:userId", fetchUserLiked);
-router.get("/disliked/:userId", fetchUserDisliked);
-router.get("/commented/:userId", fetchUserCommented);
-router.get("/shared/:userId", fetchUserShared);
-router.get("/downloaded/:userId", fetchUserDownloaded);
-router.get("/nonInterested/:userId", fetchUserNonInterested);
+router.get("/summary/:userId", auth, checkPermission('canManageUsers'), getUserAnalyticsSummary);
+router.get("/feeds/:userId", auth, checkPermission('canManageUsers'), fetchUserFeeds);
+router.get("/following/:userId", auth, checkPermission('canManageUsers'), fetchUserFollowing);
+router.get("/interested/:userId", auth, checkPermission('canManageUsers'), fetchUserInterested);
+router.get("/hidden/:userId", auth, checkPermission('canManageUsers'), fetchUserHidden);
+router.get("/liked/:userId", auth, checkPermission('canManageUsers'), fetchUserLiked);
+router.get("/disliked/:userId", auth, checkPermission('canManageUsers'), fetchUserDisliked);
+router.get("/commented/:userId", auth, checkPermission('canManageUsers'), fetchUserCommented);
+router.get("/shared/:userId", auth, checkPermission('canManageUsers'), fetchUserShared);
+router.get("/downloaded/:userId", auth, checkPermission('canManageUsers'), fetchUserDownloaded);
+router.get("/nonInterested/:userId", auth, checkPermission('canManageUsers'), fetchUserNonInterested);
 
 /* --------------------- Admin DashBoard API --------------------- */
 router.get("/admin/dashboard/metricks/counts", auth, getDashboardMetricCount); // Generic dashboard, auth only
 router.get("/admin/users/monthly-registrations", auth, checkPermission('canManageUsers'), getDashUserRegistrationRatio);
+router.get("/admin/dashboard/heartbeat", auth, getDashboardHeartbeat);
 router.get("/admin/user/subscriptionration", auth, checkPermission('canManageSubscriptions'), getDashUserSubscriptionRatio);
-router.get('/admin/posts/daily', getPostVolumeDaily);
-router.get('/admin/posts/weekly', getPostVolumeWeekly);
-router.get('/admin/posts/monthly', getPostVolumeMonthly);
+router.get('/admin/posts/daily', auth, checkPermission('canManageFeeds'), getPostVolumeDaily);
+router.get('/admin/posts/weekly', auth, checkPermission('canManageFeeds'), getPostVolumeWeekly);
+router.get('/admin/posts/monthly', auth, checkPermission('canManageFeeds'), getPostVolumeMonthly);
 
 /* --------------------- Admin Creator API --------------------- */
-router.get('/admin/getall/creators', require('../controllers/creatorControllers/creatorDetailController').getAllCreatorDetails);
+router.get('/admin/getall/creators', auth, checkPermission('canManageCreators'), require('../controllers/creatorControllers/creatorDetailController').getAllCreatorDetails);
 
 /* --------------------- Admin Sales Dashboard ------------------ */
 router.get("/admin/sales/dashboard/analytics", auth, checkPermission('canManageSalesDashboard'), getAnalytics);
-router.get("/get/recent/subscribers", getRecentSubscriptionUsers);
-router.get("/get/recent/withdrawals", getRecentWithdrawalUsers);
-router.get("/sales/dashboard/analytics", getAnalytics);
-router.get("/admin/top/referral/users", getTopReferralUsers);
-router.get("/admin/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
+router.get("/get/recent/subscribers", auth, checkPermission('canManageSalesDashboard'), getRecentSubscriptionUsers);
+router.get("/get/recent/withdrawals", auth, checkPermission('canManageSalesDashboard'), getRecentWithdrawalUsers);
+router.get("/sales/dashboard/analytics", auth, checkPermission('canManageSalesDashboard'), getAnalytics);
+router.get("/admin/top/referral/users", auth, checkPermission('canManageSalesDashboard'), getTopReferralUsers);
+router.get("/admin/dashboard/user-subscription-counts", auth, checkPermission('canManageSalesDashboard'), getUserAndSubscriptionCountsDaily);
 
 // Aliases for Sales Dashboard
-router.get("/sales/dashboard/analytics", getAnalytics);
-router.get("/top/referral/users", getTopReferralUsers);
-router.get("/get/recent/subscribers", getRecentSubscriptionUsers);
-router.get("/dashboard/user-subscription-counts", getUserAndSubscriptionCountsDaily);
-router.delete("/delete/feed", deleteFeed);
+router.get("/top/referral/users", auth, checkPermission('canManageSalesDashboard'), getTopReferralUsers);
+router.get("/dashboard/user-subscription-counts", auth, checkPermission('canManageSalesDashboard'), getUserAndSubscriptionCountsDaily);
+router.delete("/delete/feed", auth, checkPermission('canManageFeeds'), deleteFeed);
 
 /* --------------------- Admin Report API --------------------- */
 router.post("/admin/add/report/questions", auth, checkPermission('canManageAddReport'), addReportQuestion);
@@ -358,7 +360,7 @@ router.get("/admin/get/ReportTypes", auth, checkPermission('canManageReport'), a
 router.patch("/admin/toggleReportType", auth, checkPermission('canManageAddReport'), toggleReportType);
 router.delete("/admin/deleteReportType", auth, checkPermission('canManageAddReport'), deleteReportType);
 router.delete("/admin/deleteQuestion", auth, checkPermission('canManageAddReport'), deleteQuestion);
-router.put("/admin/report/:reportId/status", updateReportStatus);
+router.put("/admin/report/:reportId/status", auth, checkPermission('canManageReport'), updateReportStatus);
 router.get("/admin/report/:reportId/logs", auth, getReportLogs);
 router.get('/admin/user/report', auth, checkPermission('canManageReport'), getAllReports);
 router.put("/admin/report/action/update/:reportId", auth, adminTakeActionOnReport);
@@ -366,7 +368,7 @@ router.put("/admin/report/action/update/:reportId", auth, adminTakeActionOnRepor
 
 
 /* --------------------- Admin Notification API ------------------- */
-router.post("/admin/send/notification", sendAdminNotification);
+router.post("/admin/send/notification", auth, checkPermission('canManageUsers'), sendAdminNotification);
 
 /* --------------------- Child Admin Profile API --------------------- */
 router.get("/admin/childadmin/list", auth, checkPermission('canManageChildAdmins'), getChildAdmins);
@@ -377,9 +379,9 @@ router.patch("/admin/block/childadmin/:id", auth, checkPermission('canManageChil
 router.delete("/admin/delete/childadmin/:id", auth, checkPermission('canManageChildAdmins'), deleteChildAdmin);
 
 // Aliases for Child Admin
-router.get("/child/admin/:id", getChildAdminById);
-router.delete("/delete/child/admin/:id", deleteChildAdmin);
-router.patch("/block/child/admin/:id", blockChildAdmin);
+router.get("/child/admin/:id", auth, checkPermission('canManageChildAdmins'), getChildAdminById);
+router.delete("/delete/child/admin/:id", auth, checkPermission('canManageChildAdmins'), deleteChildAdmin);
+router.patch("/block/child/admin/:id", auth, checkPermission('canManageChildAdmins'), blockChildAdmin);
 router.put("/child/admin/profile/update/:id", auth, childAdminAvatarUpload, processChildAdminAvatar, updateChildAdminProfileById);
 
 /* --------------------- Admin Driver API ---------------------- */
@@ -417,14 +419,14 @@ router.get("/admin/help", auth, checkPermission('canManageFAQs'), getHelpFAQ);
 /* --------------------- Admin Feedback --------------------- */
 router.get("/admin/feedback", auth, checkPermission('canManageUserFeedbacks'), getAllUserFeedback);
 router.put("/admin/feedback/:id", auth, checkPermission('canManageUserFeedbacks'), updateFeedbackStatus);
-router.get("/admin/support-queries", auth, getAllSupportQueries);
-router.put("/admin/support-queries/:id", auth, updateSupportQueryStatus);
+router.get("/admin/support-queries", auth, checkPermission('canManageUserFeedbacks'), getAllSupportQueries);
+router.put("/admin/support-queries/:id", auth, checkPermission('canManageUserFeedbacks'), updateSupportQueryStatus);
 
 /* --------------------- Admin Footer --------------------- */
-router.put("/admin/footer", auth, updateFooterConfig);
+router.put("/admin/footer", auth, checkPermission('canManageFooter'), updateFooterConfig);
 
 
-router.get('/admin/get/user/detail', getUserProfileDetailforAdmin);
+router.get('/admin/get/user/detail', auth, checkPermission('canManageUsers'), getUserProfileDetailforAdmin);
 
 router.post('/admin/static-page/:slug', auth, updatePageBySlug);
 
@@ -433,26 +435,26 @@ router.get('/admin/seo/stats', auth, checkPermission('canViewSEODashboard'), get
 router.get('/admin/seo/config', auth, checkPermission('canManageSEOGlobal'), getSeoConfig);
 router.put('/admin/seo/config', auth, checkPermission('canManageSEOGlobal'), updateSeoConfig);
 router.get('/admin/seo/pages', auth, checkPermission('canManageSEO'), getAllPagesSeo);
-router.get('/admin/seo/feeds', auth, getAllFeedsSeo);
-router.put('/admin/seo/feeds/:id', auth, updateFeedSeo);
-router.get('/admin/seo/media', auth, getMediaSeo);
-router.get('/admin/seo/redirects', auth, getAllRedirects);
-router.post('/admin/seo/redirects', auth, createRedirect);
-router.delete('/admin/seo/redirects/:id', auth, deleteRedirect);
-router.post('/admin/seo/sitemap', auth, triggerSitemapGeneration);
-router.post('/admin/seo/robots', auth, updateRobotsTxt);
+router.get('/admin/seo/feeds', auth, checkPermission('canManageSEOFeeds'), getAllFeedsSeo);
+router.put('/admin/seo/feeds/:id', auth, checkPermission('canManageSEOFeeds'), updateFeedSeo);
+router.get('/admin/seo/media', auth, checkPermission('canManageSEOMedia'), getMediaSeo);
+router.get('/admin/seo/redirects', auth, checkPermission('canManageSEORedirects'), getAllRedirects);
+router.post('/admin/seo/redirects', auth, checkPermission('canManageSEORedirects'), createRedirect);
+router.delete('/admin/seo/redirects/:id', auth, checkPermission('canManageSEORedirects'), deleteRedirect);
+router.post('/admin/seo/sitemap', auth, checkPermission('canManageSEO'), triggerSitemapGeneration);
+router.post('/admin/seo/robots', auth, checkPermission('canManageSEO'), updateRobotsTxt);
 
 /* --------------------- Admin Party API --------------------- */
-router.get('/admin/parties', auth, getAllParties);
-router.post('/admin/party', auth, adminUploadFeed.fields([
+router.get('/admin/parties', auth, checkPermission('canManageParties'), getAllParties);
+router.post('/admin/party', auth, checkPermission('canManageParties'), adminUploadFeed.fields([
     { name: 'partyLogo', maxCount: 1 },
     { name: 'leaderPhotos', maxCount: 10 }
 ]), createParty);
-router.put('/admin/party/:id', auth, adminUploadFeed.fields([
+router.put('/admin/party/:id', auth, checkPermission('canManageParties'), adminUploadFeed.fields([
     { name: 'partyLogo', maxCount: 1 },
     { name: 'leaderPhotos', maxCount: 10 }
 ]), updateParty);
-router.delete('/admin/party/:id', auth, deleteParty);
+router.delete('/admin/party/:id', auth, checkPermission('canManageParties'), deleteParty);
 
 /* --------------------- Admin Blog Management --------------------- */
 router.get('/admin/blogs/all', auth, checkPermission('canManageBlogList'), getAllBlogsAdmin);
@@ -475,5 +477,8 @@ router.get('/admin/updates/all', auth, checkPermission('canManageUpdates'), getA
 router.post('/admin/updates/create', auth, checkPermission('canManageUpdates'), adminUploadFeed.single('media'), createUpdate);
 router.put('/admin/updates/update/:id', auth, checkPermission('canManageUpdates'), adminUploadFeed.single('media'), updateUpdate);
 router.delete('/admin/updates/delete/:id', auth, checkPermission('canManageUpdates'), deleteUpdate);
+
+// System Metrics
+router.get("/admin/system/metrics", auth, checkPermission('canViewSystemLogs'), getSystemMetrics);
 
 module.exports = router;

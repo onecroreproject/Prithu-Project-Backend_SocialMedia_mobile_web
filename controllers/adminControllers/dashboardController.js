@@ -10,12 +10,14 @@ exports.getDashboardMetricCount = async (req, res) => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+
     // -----------------------------------
     // Run all queries in parallel
     // -----------------------------------
     const [
       totalUsers,
-      activeUsersToday,     // using isOnline instead of lastActiveAt
+      onlineUsers,
       newRegistrationsToday,
       suspendedUsers,
       totalReports,
@@ -27,9 +29,10 @@ exports.getDashboardMetricCount = async (req, res) => {
       // 1️⃣ Total Users
       User.countDocuments(),
 
-      // 2️⃣ Active Users Today → users who were active today
+      // 2️⃣ Online Users (Using 20min threshold for consistency with User Detail page)
       User.countDocuments({
-        lastActiveAt: { $gte: startOfToday },
+        isOnline: true,
+        lastSeenAt: { $gte: twentyMinutesAgo }
       }),
 
       // 3️⃣ New registrations today
@@ -63,7 +66,7 @@ exports.getDashboardMetricCount = async (req, res) => {
     return res.status(200).json({
       success: true,
       totalUsers,
-      activeUsersToday,
+      onlineUsers,
       newRegistrationsToday,
       suspendedUsers,
       totalReports,
@@ -88,23 +91,50 @@ exports.getDashboardMetricCount = async (req, res) => {
 
 exports.getDashUserRegistrationRatio = async (req, res) => {
   try {
-    const currentYear = new Date().getFullYear();
+    const range = req.query.range || "yearly"; // "yearly", "quarterly", "monthly"
+    const selectedYear = parseInt(req.query.year) || new Date().getFullYear();
+    const selectedMonth = parseInt(req.query.month) || (new Date().getMonth() + 1);
+
+    let matchQuery = {};
+    let groupFormat = {};
+    let dataLength = 0;
+    let categories = [];
 
     // ---------------------------------------
-    // Aggregate monthly data in a single trip
+    // Set match and group stages based on range
     // ---------------------------------------
-    const result = await User.aggregate([
-      {
-        $match: {
-          createdAt: {
-            $gte: new Date(`${currentYear}-01-01`),
-            $lte: new Date(`${currentYear}-12-31`)
-          }
+    if (range === "monthly") {
+      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
+      const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999);
+      matchQuery = { createdAt: { $gte: startDate, $lte: endDate } };
+      groupFormat = { $dayOfMonth: "$createdAt" };
+      dataLength = new Date(selectedYear, selectedMonth, 0).getDate();
+    } else if (range === "quarterly") {
+      matchQuery = {
+        createdAt: {
+          $gte: new Date(`${selectedYear}-01-01`),
+          $lte: new Date(`${selectedYear}-12-31T23:59:59.999Z`)
         }
-      },
+      };
+      groupFormat = { $ceil: { $divide: [{ $month: "$createdAt" }, 3] } };
+      dataLength = 4;
+    } else {
+      // Default: yearly (monthly breakdown)
+      matchQuery = {
+        createdAt: {
+          $gte: new Date(`${selectedYear}-01-01`),
+          $lte: new Date(`${selectedYear}-12-31T23:59:59.999Z`)
+        }
+      };
+      groupFormat = { $month: "$createdAt" };
+      dataLength = 12;
+    }
+
+    const result = await User.aggregate([
+      { $match: matchQuery },
       {
         $project: {
-          month: { $month: "$createdAt" },
+          groupKey: groupFormat,
           isActiveToday: {
             $cond: [
               { $gte: ["$lastActiveAt", new Date(new Date().setHours(0, 0, 0, 0))] },
@@ -120,7 +150,7 @@ exports.getDashUserRegistrationRatio = async (req, res) => {
       },
       {
         $group: {
-          _id: "$month",
+          _id: "$groupKey",
           registrations: { $sum: 1 },
           activeUsers: { $sum: "$isActiveToday" },
           suspendedUsers: { $sum: "$isSuspended" },
@@ -131,10 +161,10 @@ exports.getDashUserRegistrationRatio = async (req, res) => {
     ]);
 
     // ---------------------------------------
-    // Prepare full 12-month formatted dataset
+    // Prepare formatted dataset
     // ---------------------------------------
-    const data = Array.from({ length: 12 }, (_, i) => ({
-      month: i + 1,
+    const data = Array.from({ length: dataLength }, (_, i) => ({
+      index: i + 1,
       registrations: 0,
       activeUsers: 0,
       suspendedUsers: 0,
@@ -142,35 +172,47 @@ exports.getDashUserRegistrationRatio = async (req, res) => {
       growthPercent: 0
     }));
 
-    // Insert aggregated values
     result.forEach(item => {
       const index = item._id - 1;
-      data[index] = {
-        ...data[index],
-        registrations: item.registrations || 0,
-        activeUsers: item.activeUsers || 0,
-        suspendedUsers: item.suspendedUsers || 0,
-        subscriptionUsers: item.subscriptionUsers || 0
-      };
+      if (index >= 0 && index < dataLength) {
+        data[index] = {
+          ...data[index],
+          registrations: item.registrations || 0,
+          activeUsers: item.activeUsers || 0,
+          suspendedUsers: item.suspendedUsers || 0,
+          subscriptionUsers: item.subscriptionUsers || 0
+        };
+      }
     });
+
+    // Label categories for frontend
+    if (range === "monthly") {
+      categories = data.map(d => d.index.toString());
+    } else if (range === "quarterly") {
+      categories = ["Q1", "Q2", "Q3", "Q4"];
+    } else {
+      categories = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    }
 
     // ---------------------------------------
     // Calculate month-to-month growth %
     // ---------------------------------------
-    for (let i = 1; i < 12; i++) {
+    for (let i = 1; i < dataLength; i++) {
       const prev = data[i - 1].registrations;
       const curr = data[i].registrations;
-
+ 
       data[i].growthPercent =
         prev === 0 ? (curr > 0 ? 100 : 0) : ((curr - prev) / prev) * 100;
     }
-
+ 
     // ---------------------------------------
     // Return the dataset
     // ---------------------------------------
     return res.status(200).json({
       success: true,
-      year: currentYear,
+      year: selectedYear,
+      range,
+      categories,
       monthlyData: data
     });
 
@@ -270,3 +312,120 @@ exports.getDashUserSubscriptionRatio = async (req, res) => {
 
 
 
+
+exports.getDashboardHeartbeat = async (req, res) => {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+
+    const [
+      metrics,
+      subscriptionStats,
+      recentSubscriptions
+    ] = await Promise.all([
+      // 1. Core Metrics (Optimized)
+      Promise.all([
+        User.countDocuments(),
+        User.countDocuments({ isOnline: true, lastSeenAt: { $gte: twentyMinutesAgo } }),
+        User.countDocuments({ createdAt: { $gte: startOfToday } }),
+        User.countDocuments({ isBlocked: true }),
+        Report.countDocuments(),
+        ChildAdmin.countDocuments(),
+        ChildAdmin.countDocuments({ isOnline: true }),
+        ChildAdmin.find({ isOnline: true }).select("userName").lean(),
+      ]).then(([totalUsers, onlineUsers, newRegistrationsToday, suspendedUsers, totalReports, totalChildAdmins, onlineChildAdmins, onlineChildAdminsNamesData]) => ({
+        totalUsers,
+        onlineUsers,
+        newRegistrationsToday,
+        suspendedUsers,
+        totalReports,
+        totalChildAdmins,
+        onlineChildAdmins,
+        onlineAdminNames: (onlineChildAdminsNamesData || []).map(admin => admin.userName)
+      })),
+
+      // 2. Subscription Revenue Stats (Aggregated)
+      UserSubscription.aggregate([
+        {
+          $lookup: {
+            from: "SubscriptionPlan",
+            localField: "planId",
+            foreignField: "_id",
+            as: "plan",
+          },
+        },
+        { $unwind: "$plan" },
+        {
+          $group: {
+            _id: null,
+            totalSubscriptionAmount: { $sum: "$plan.price" },
+            todaySubscriptionAmount: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $gte: ["$createdAt", startOfToday] }, { $lte: ["$createdAt", endOfToday] }] },
+                  "$plan.price",
+                  0,
+                ],
+              },
+            },
+            activeUserIds: { $addToSet: "$userId" },
+          },
+        },
+      ]).then(res => res[0] || { totalSubscriptionAmount: 0, todaySubscriptionAmount: 0, activeUserIds: [] }),
+
+      // 3. Recent Subscriptions (Latest 5)
+      UserSubscription.find()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .populate({
+          path: "planId",
+          select: "planName price",
+          model: SubscriptionPlan,
+        })
+        .lean()
+    ]);
+
+    // Fetch user details for recent subscriptions
+    const userIds = recentSubscriptions.map(sub => sub.userId);
+    const ProfileSettings = require("../../models/profileSettingModel");
+    const profiles = await ProfileSettings.find(
+      { userId: { $in: userIds } },
+      { userId: 1, userName: 1, profileAvatar: 1 }
+    ).lean();
+
+    const profileMap = profiles.reduce((acc, p) => {
+      acc[p.userId.toString()] = p;
+      return acc;
+    }, {});
+
+    const formattedRecentSubscribers = recentSubscriptions.map(sub => ({
+      id: sub._id,
+      userName: profileMap[sub.userId?.toString()]?.userName || "Unknown",
+      avatar: profileMap[sub.userId?.toString()]?.profileAvatar || null,
+      planName: sub.planId?.planName || "Trial",
+      price: sub.planId?.price || 0,
+      createdAt: sub.createdAt,
+      status: sub.paymentStatus
+    }));
+
+    const totalUsers = metrics.totalUsers;
+    const ratioPercentage = totalUsers ? ((subscriptionStats.activeUserIds.length / totalUsers) * 100).toFixed(2) : "0.00";
+
+    res.status(200).json({
+      success: true,
+      metrics,
+      revenue: {
+        totalAmount: subscriptionStats.totalSubscriptionAmount,
+        todayAmount: subscriptionStats.todaySubscriptionAmount,
+        ratioPercentage
+      },
+      recentSubscribers: formattedRecentSubscribers
+    });
+  } catch (error) {
+    console.error("Dashboard heartbeat error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

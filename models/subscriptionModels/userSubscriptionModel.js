@@ -15,6 +15,7 @@ const userSubscriptionSchema = new mongoose.Schema({
   // Subscription status
   isActive: { type: Boolean, default: false, index: true },
   paymentStatus: { type: String, enum: ["pending", "success", "failed"], default: "pending", index: true },
+  createdAt: { type: Date, default: Date.now, index: true },
 
   // Razorpay details
   razorpayOrderId: { type: String },        // Order ID created before payment

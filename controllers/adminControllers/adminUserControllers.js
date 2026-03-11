@@ -161,7 +161,7 @@ exports.getUsersByDate = async (req, res) => {
 exports.getAllUserDetails = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 1000;
     const skip = (page - 1) * limit;
 
     // 1️⃣ Get total count for pagination metadata
@@ -188,15 +188,16 @@ exports.getAllUserDetails = async (req, res) => {
     const profileSettingsList = await ProfileSettings.find({
       userId: { $in: userIds },
     })
-      .select("userId profileAvatar phoneNumber")
+      .select("userId profileAvatar phoneNumber gender")
       .lean();
 
-    // Create quick lookup map for avatars and phone numbers
+    // Create quick lookup map for avatars, phone numbers and gender
     const profileMap = {};
     profileSettingsList.forEach((p) => {
       profileMap[p.userId.toString()] = {
         avatar: p.profileAvatar || null,
         phone: p.phoneNumber || null,
+        gender: p.gender || null,
       };
     });
 
@@ -225,7 +226,7 @@ exports.getAllUserDetails = async (req, res) => {
       // 📌 Avatar and Phone
       profileAvatar: profileMap[user._id.toString()]?.avatar || null,
       phone: profileMap[user._id.toString()]?.phone || user.phone || user.phoneNumber || null,
-      gender: user.gender || null,
+      gender: profileMap[user._id.toString()]?.gender || user.gender || null,
       referralCode: user.referralCode || user.referalCode || user.referealCode || null,
 
       // 📌 Subscription info
@@ -331,7 +332,7 @@ exports.searchAllUserDetails = async (req, res) => {
     const profileSettingsList = await ProfileSettings.find({
       userId: { $in: userIds },
     })
-      .select("userId profileAvatar phoneNumber")
+      .select("userId profileAvatar phoneNumber gender")
       .lean();
 
     const profileMap = {};
@@ -339,6 +340,7 @@ exports.searchAllUserDetails = async (req, res) => {
       profileMap[p.userId.toString()] = {
         avatar: p.profileAvatar || null,
         phone: p.phoneNumber || null,
+        gender: p.gender || null,
       };
     });
 
@@ -350,7 +352,7 @@ exports.searchAllUserDetails = async (req, res) => {
       userName: user.userName,
       email: user.email,
       phone: profileMap[user._id.toString()]?.phone || user.phone || user.phoneNumber || null,
-      gender: user.gender || null,
+      gender: profileMap[user._id.toString()]?.gender || user.gender || null,
       referralCode: user.referralCode || user.referalCode || user.referealCode || null,
       createdAt: user.createdAt,
       isOnline: (() => {

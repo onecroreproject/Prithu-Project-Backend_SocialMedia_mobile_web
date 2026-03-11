@@ -51,7 +51,7 @@ exports.newAdmin = async (req, res) => {
 
     let createdAdmin, profilePayload;
 
-    // ✅ 3. Handle Child_Admin creation
+    // ✅ 3. Separate Creation Logic
     if (adminType === "Child_Admin") {
       const lastChild = await ChildAdmin.findOne({}, { childAdminId: 1 })
         .sort({ createdAt: -1 })
@@ -73,6 +73,7 @@ exports.newAdmin = async (req, res) => {
       });
 
       profilePayload = { childAdminId: createdAdmin._id };
+    } else {
       // ✅ 4. Handle Master/Super Admin creation
       createdAdmin = await Admin.create({
         userName: username.replace(/\s+/g, "").trim(),
@@ -84,11 +85,6 @@ exports.newAdmin = async (req, res) => {
       profilePayload = { adminId: createdAdmin._id };
     }
 
-    // Capture plain password for child admins if applicable
-    if (adminType === "Child_Admin" && createdAdmin) {
-      createdAdmin.plainPassword = password;
-      await createdAdmin.save();
-    }
 
     // ✅ 5. Create ProfileSettings (no need for await if not required immediately)
     ProfileSettings.create({

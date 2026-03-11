@@ -9,9 +9,9 @@ const SubscriptionInvoiceSchema = new mongoose.Schema({
   razorpaySubscriptionId: { type: String, required: true }, // Subscription ID
   amount: { type: Number, required: true }, // Amount in smallest currency unit (e.g., paise)
   currency: { type: String, default: "INR" },
-  status: { type: String, enum: ["created", "paid", "failed", "refunded"], default: "created" },
+  status: { type: String, enum: ["created", "paid", "failed", "refunded"], default: "created", index: true },
   issuedAt: { type: Date, default: Date.now },
-  paidAt: { type: Date }, // Date when payment was completed
+  paidAt: { type: Date, index: true }, // Date when payment was completed
   metadata: { type: Object }, // Optional: any extra info like plan name, duration, etc.
 });
 

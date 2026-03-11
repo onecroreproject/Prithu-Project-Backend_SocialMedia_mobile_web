@@ -134,6 +134,7 @@ const UserSchema = new mongoose.Schema(
 UserSchema.index({ referralCodeIsValid: 1 });
 UserSchema.index({ "subscription.isActive": 1 });
 UserSchema.index({ isOnline: 1 });
+UserSchema.index({ createdAt: 1 });
 
 // ------------ HOOK --------------
 UserSchema.pre("save", function (next) {

@@ -224,7 +224,6 @@ exports.getChildAdminById = async (req, res) => {
       _id: childAdmin._id,
       userName: childAdmin.userName,
       email: childAdmin.email,
-      plainPassword: childAdmin.plainPassword,
       parentAdmin: childAdmin.parentAdminId,
       menuPermissions: childAdmin.menuPermissions,
       grantedPermissions: childAdmin.grantedPermissions,
@@ -353,7 +352,6 @@ exports.updateChildAdminProfileById = async (req, res) => {
     if (newPassword && currentUserRole === "Admin") {
       const bcrypt = require('bcrypt');
       childAdmin.passwordHash = await bcrypt.hash(newPassword, 10);
-      childAdmin.plainPassword = newPassword;
     }
 
     // 3️⃣ Update ChildAdmin basic info

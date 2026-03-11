@@ -10,11 +10,11 @@ const invoiceSchema = new mongoose.Schema({
     amount: { type: Number, required: true }, // In Rupees
     currency: { type: String, default: "INR" },
 
-    status: { type: String, enum: ["paid", "pending", "failed"], default: "paid" },
+    status: { type: String, enum: ["paid", "pending", "failed"], default: "paid", index: true },
     paymentMethod: { type: String, default: "Razorpay" },
     razorpayPaymentId: { type: String },
-
-    paidAt: { type: Date, default: Date.now },
+ 
+    paidAt: { type: Date, default: Date.now, index: true },
     emailSent: { type: Boolean, default: false },
 
     createdAt: { type: Date, default: Date.now },
