@@ -34,8 +34,10 @@ const CommentLikeSchema = new mongoose.Schema(
 /* ======================================================
    HIGH PERFORMANCE LOOKUP INDEXES
 ====================================================== */
-CommentLikeSchema.index({ commentId: 1 });
-CommentLikeSchema.index({ replyCommentId: 1 });
+// Commented out to resolve "Duplicate schema index" warnings. 
+// These fields are already indexed or causing conflicts.
+// CommentLikeSchema.index({ commentId: 1 });
+// CommentLikeSchema.index({ replyCommentId: 1 });
 
 module.exports = prithuDB.model("CommentLike", CommentLikeSchema, "CommentLikes");
 

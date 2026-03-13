@@ -37,7 +37,6 @@ const childAdminSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
-      index: true,
     },
     email: {
       type: String,
@@ -45,7 +44,6 @@ const childAdminSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      index: true,
     },
 
     passwordHash: { type: String, required: true },
@@ -61,7 +59,6 @@ const childAdminSchema = new mongoose.Schema(
       type: String,
       unique: true,
       default: () => new mongoose.Types.ObjectId().toString(),
-      index: true,
     },
 
     menuPermissions: { type: [menuPermissionSchema], default: [] },

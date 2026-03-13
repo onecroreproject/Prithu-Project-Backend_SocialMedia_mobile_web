@@ -30,6 +30,10 @@ exports.sendFCMNotification = async (token, title, body, image = "") => {
     console.log("📨 Notification sent successfully:", response);
     return response;
   } catch (err) {
-    console.error("❌ FCM Send Error:", err.message);
+    if (err.code === 'messaging/registration-token-not-registered' || err.message.includes("Requested entity was not found")) {
+      console.warn("⚠️ FCM Token is no longer valid (Requested entity not found). Consider removing it from the user's profile.");
+    } else {
+      console.error("❌ FCM Send Error:", err.message);
+    }
   }
 };

@@ -6,7 +6,6 @@ const adminSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    index: true,
     minlength: 3,
     maxlength: 30,
     trim: true
@@ -15,7 +14,6 @@ const adminSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    index: true,
     lowercase: true,
     trim: true
   },
@@ -63,8 +61,6 @@ adminSchema.virtual("isLocked").get(function () {
   return Boolean(this.lockUntil && this.lockUntil > Date.now());
 });
 
-// Ensure DB-level unique indexes
-adminSchema.index({ email: 1 }, { unique: true });
-adminSchema.index({ userName: 1 }, { unique: true });
+// Ensure DB-level unique indexes (already handled by field definitions)
 
 module.exports = prithuDB.model("Admin", adminSchema, "Admin");

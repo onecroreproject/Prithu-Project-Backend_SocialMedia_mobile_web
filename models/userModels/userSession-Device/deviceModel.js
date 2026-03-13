@@ -8,7 +8,6 @@ const DeviceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
 
     // 🔹 Persistent unique device fingerprint (UUID stored in localStorage)
