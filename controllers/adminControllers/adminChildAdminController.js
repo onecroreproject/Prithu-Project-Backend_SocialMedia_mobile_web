@@ -192,6 +192,17 @@ exports.getChildAdminById = async (req, res) => {
     const { id } = req.params || req.body;
 
 
+    const { role: currentUserRole, Id: currentUserId, grantedPermissions } = req;
+    const isSelf = currentUserId === id;
+    const hasPermission = grantedPermissions?.includes('canManageChildAdmins') || grantedPermissions?.includes('ALL');
+
+    if (currentUserRole !== "Admin" && !isSelf && !hasPermission) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. You do not have permission to view this child admin profile."
+      });
+    }
+
     // 1️⃣ Fetch ChildAdmin basic details (excluding password), populate parent
     const childAdmin = await ChildAdmin.findById(id)
       .populate({

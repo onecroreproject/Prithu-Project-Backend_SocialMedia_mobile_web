@@ -374,12 +374,12 @@ router.post("/admin/send/notification", auth, checkPermission('canManageUsers'),
 router.get("/admin/childadmin/list", auth, checkPermission('canManageChildAdmins'), getChildAdmins);
 router.get("/admin/childadmin/permissions/:childAdminId", auth, checkPermission('canManageChildAdmins'), getChildAdminPermissions);
 router.put("/admin/childadmin/permissions/:id", auth, checkPermission('canManageChildAdmins'), updateChildAdminPermissions);
-router.get("/admin/childadmin/:id", auth, checkPermission('canManageChildAdmins'), getChildAdminById);
+router.get("/admin/childadmin/:id", auth, getChildAdminById);
 router.patch("/admin/block/childadmin/:id", auth, checkPermission('canManageChildAdmins'), blockChildAdmin);
 router.delete("/admin/delete/childadmin/:id", auth, checkPermission('canManageChildAdmins'), deleteChildAdmin);
 
 // Aliases for Child Admin
-router.get("/child/admin/:id", auth, checkPermission('canManageChildAdmins'), getChildAdminById);
+router.get("/child/admin/:id", auth, getChildAdminById);
 router.delete("/delete/child/admin/:id", auth, checkPermission('canManageChildAdmins'), deleteChildAdmin);
 router.patch("/block/child/admin/:id", auth, checkPermission('canManageChildAdmins'), blockChildAdmin);
 router.put("/child/admin/profile/update/:id", auth, childAdminAvatarUpload, processChildAdminAvatar, updateChildAdminProfileById);
