@@ -13,7 +13,8 @@ exports.getFooterConfig = async (req, res) => {
                         links: [
                             { label: "About Prithu", href: "/about" },
                             { label: "Privacy Policy", href: "/privacy-policy" },
-                            { label: "Terms & Conditions", href: "/terms" },
+                            { label: "Terms & Conditions", href: "/terms-conditions" },
+                            { label: "Delete Data", href: "/delete-data" },
                         ],
                     },
                     {
