@@ -37,7 +37,9 @@ const UserSubscriptions = require("../../models/subscriptionModels/userSubscript
 const CommentLikes = require("../../models/commentsLikeModel.js");
 const CreatorFollowers = require('../../models/creatorFollowerModel.js');
 const Devices = require("../../models/userModels/userSession-Device/deviceModel.js");
+const UserDeleteLog = require("../../models/userDeleteLog");
 const TrendingCreators = require("../../models/treandingCreators.js")
+
 
 
 
@@ -1695,3 +1697,38 @@ exports.getUpcomingBirthdays = async (req, res) => {
 
 
 
+
+// Get User Deletion Logs
+exports.getUserDeleteLogs = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const totalLogs = await UserDeleteLog.countDocuments();
+    const logs = await UserDeleteLog.find()
+      .populate("userId", "userName email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      logs,
+      pagination: {
+        total: totalLogs,
+        page,
+        limit,
+        totalPages: Math.ceil(totalLogs / limit),
+      },
+    });
+  } catch (err) {
+    console.error("Error fetching deletion logs:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch deletion logs",
+      error: err.message,
+    });
+  }
+};

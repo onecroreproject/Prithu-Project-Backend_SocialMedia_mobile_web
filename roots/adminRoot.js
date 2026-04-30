@@ -33,6 +33,7 @@ const {
     getUserProfileDashboardMetricCount,
     deleteUserAndAllRelated,
     getUserProfileDetailforAdmin,
+    getUserDeleteLogs,
 } = require('../controllers/adminControllers/adminUserControllers');
 
 const {
@@ -294,6 +295,7 @@ router.patch("/admin/block/user/:userId", auth, checkPermission('canManageUsers'
 router.get('/admin/user/profile/metricks', auth, checkPermission('canManageUsers'), getUserProfileDashboardMetricCount);
 router.get('/admin/user/likes/:userId', auth, checkPermission('canManageUsers'), getUserLikedFeedsforAdmin);
 router.delete('/admin/delete/user/:userId', auth, checkPermission('canManageUsers'), deleteUserAndAllRelated);
+router.get('/admin/user/delete-logs', auth, checkPermission('canManageUsers'), getUserDeleteLogs);
 router.get("/user/list/willingtopost", auth, checkPermission('canManageUserFeedRequest'), getUsersWillingToPost);
 router.put("/update/user/post/status/:userId", auth, checkPermission('canManageUserFeedRequest'), updateUserPostPermission);
 router.get("/admin/user/activities/:userId", auth, checkPermission('canManageUsers'), getUserActivitiesForAdmin);

@@ -348,6 +348,11 @@ router.get("/get/profile/visibility-settings", auth, getVisibilitySettings);
 router.get("/user/get/visibility/settings", auth, getUserVisibilitySettings);
 router.post("/user/update/visibility/settings", auth, updateUserVisibilitySettings);
 
+/* --------------------- Account Deactivation & Deletion --------------------- */
+router.patch('/user/deactivate', auth, deactivateUser);
+router.delete('/user/delete', auth, deleteUserNow);
+
+
 /* --------------------- User Feed Actions --------------------- */
 router.post('/user/feed/like', auth, likeFeed);
 router.post("/user/feed/dislike", auth, toggleDislikeFeed);

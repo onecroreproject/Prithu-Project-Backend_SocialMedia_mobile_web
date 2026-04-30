@@ -51,13 +51,16 @@ exports.deactivateUser = async (req, res) => {
     const user = await Users.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    // Fetch profile for accurate snapshot
+    const profile = await ProfileSettings.findOne({ userId });
+
     // Save log only
     await UserDeleteLog.create({
       userId,
       actionType: "deactivate",
       reason: reason || "Not specified",
-      nameSnapshot: user.name,
-      mobileSnapshot: user.mobile,
+      nameSnapshot: profile?.name || user.userName || "Not specified",
+      mobileSnapshot: profile?.phoneNumber || "Not specified",
     });
 
     return res.status(200).json({
@@ -68,6 +71,7 @@ exports.deactivateUser = async (req, res) => {
     res.status(500).json({ message: "Deactivation failed", error: error.message });
   }
 };
+
 
 
 

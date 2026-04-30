@@ -20,7 +20,8 @@ const { processReferralReward } = require("../../middlewares/helper/directRefera
 
 exports.createNewUser = async (req, res) => {
   try {
-    const { username, email, password, referralCode, phone, whatsapp } = req.body;
+    let { username, email, password, referralCode, phone, whatsapp } = req.body;
+    email = email?.toLowerCase();
 
     // ✅ Validate inputs
     if (!username || !email || !password) {
@@ -138,7 +139,8 @@ exports.createNewUser = async (req, res) => {
 
 exports.userLogin = async (req, res) => {
   try {
-    const { identifier, password, deviceId, deviceType, os, browser, sessionId } = req.body;
+    let { identifier, password, deviceId, deviceType, os, browser, sessionId } = req.body;
+    identifier = identifier?.toLowerCase();
 
     if (!identifier || !password) {
       return res.status(400).json({ error: "Email and password are required" });
@@ -305,7 +307,8 @@ exports.userLogin = async (req, res) => {
 
 
 exports.userSendOtp = async (req, res) => {
-  const { email } = req.body;
+  let { email } = req.body;
+  email = email?.toLowerCase();
 
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
@@ -358,7 +361,8 @@ exports.userSendOtp = async (req, res) => {
 
 exports.newUserVerifyOtp = async (req, res) => {
   try {
-    const { otp, email } = req.body;
+    let { otp, email } = req.body;
+    email = email?.toLowerCase();
 
     if (!otp || !email) {
       return res.status(400).json({ error: "Email and OTP are required" });
@@ -426,7 +430,8 @@ exports.existUserVerifyOtp = async (req, res) => {
 
 exports.userPasswordReset = async (req, res) => {
   try {
-    const { email, newPassword } = req.body;
+    let { email, newPassword } = req.body;
+    email = email?.toLowerCase();
 
     if (!email || !newPassword) {
       return res.status(400).json({ error: "Email and new password are required" });
