@@ -35,3 +35,28 @@ exports.auth = (req, res, next) => {
     return res.status(401).json({ message });
   }
 };
+
+exports.optionalAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your_secret_key");
+    req.Id = decoded.userId;
+    req.role = decoded.role;
+    req.accountId = decoded.accountId;
+    req.userName = decoded.userName;
+    req.grantedPermissions = decoded.grantedPermissions || [];
+    return next();
+  } catch (err) {
+    // If token is invalid/expired but was provided, we still continue but without user info
+    // Alternatively, we could fail if a token was provided but is invalid.
+    // For now, let's just proceed to next().
+    return next();
+  }
+};

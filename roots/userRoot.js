@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middlewares/jwtAuthentication');
+const { auth, optionalAuth } = require('../middlewares/jwtAuthentication');
 const {
     upload: feedUpload,
     processUploadedFiles: attachFeedFile
@@ -469,9 +469,9 @@ router.get("/user/get/birthday", getUpcomingBirthdays);
 router.get("/get/user/birthday", getUpcomingBirthdays); // Alias
 router.get("/get/trending/feed", auth, getTrendingFeeds);
 router.get("/user/invite/friends", auth, (req, res) => res.status(200).json({ message: "Invite feature" })); // Placeholder
-router.post("/feedback/submit", auth, submitUserFeedback);
+router.post("/feedback/submit", optionalAuth, submitUserFeedback);
 router.get("/feedback/my", auth, getMyFeedbackAndReports);
-router.post("/support", auth, submitSupportQuery);
+router.post("/support", optionalAuth, submitSupportQuery);
 router.get("/support/my", auth, getMySupportQueries);
 router.get("/help/faq", getHelpFAQ);
 router.post('/search/all/category', searchCategories)

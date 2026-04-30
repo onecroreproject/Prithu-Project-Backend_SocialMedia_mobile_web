@@ -1,10 +1,11 @@
 const User = require("../models/userModels/userModel");
 const SupportQuery = require("../models/SupportQuery");
+const UserFeedback = require("../models/UserFeedbackAndReport");
 const { getIO } = require("../middlewares/webSocket");
 
 exports.submitUserFeedback = async (req, res) => {
   try {
-    const userId = req.userId; // from auth middleware
+    const userId = req.Id; // from auth middleware
 
     const {
       section,
