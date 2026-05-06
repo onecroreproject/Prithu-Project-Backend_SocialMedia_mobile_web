@@ -223,8 +223,13 @@ const {
 
 const { getUserActivitiesForAdmin } = require('../controllers/userControllers/userActivitController');
 
+const { exportFeedInteractionsCSV } = require('../controllers/adminControllers/adminExportController');
+
 const { getAllCategories } = require('../controllers/categoriesController');
 const { deleteFeed } = require('../controllers/feedControllers/feedsController');
+
+/* --------------------- Admin Export API --------------------- */
+router.get("/export/csv", auth, checkPermission('canManageFeeds'), exportFeedInteractionsCSV);
 
 /* --------------------- Admin Authentication --------------------- */
 router.post('/auth/admin/register', auth, newAdmin); // This was CHILD_ADMIN_REGISTER probably
