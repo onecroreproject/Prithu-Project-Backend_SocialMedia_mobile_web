@@ -1,10 +1,17 @@
 const Feed = require('../../models/feedModel');
+
 const redisClient = require("../../Config/redisConfig");
 const User = require('../../models/userModels/userModel');
 const { feedTimeCalculator } = require('../../middlewares/feedTimeCalculator');
 const UserFeedActions = require('../../models/userFeedInterSectionModel.js');
 const Account = require("../../models/accountSchemaModel.js");
 const mongoose = require("mongoose");
+
+const EXCLUDED_CATEGORY_IDS = [
+  new mongoose.Types.ObjectId("699ee0e420120ebc1d3e7725"),
+  new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b"),
+  new mongoose.Types.ObjectId("6990071590a65cd9632b2327")
+];
 const UserComment = require("../../models/userCommentModel.js");
 const UserView = require("../../models/userModels/userViewFeedsModel.js");
 const UserLanguage = require('../../models/userModels/userLanguageModel.js');
@@ -52,10 +59,10 @@ exports.clearFeedsCache = clearFeedsCache;
 
 
 exports.getAllFeedsByUserId = async (req, res) => {
-  console.log("🔵 START: getAllFeedsByUserId");
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  const dashboard = { startTime: Date.now() };
+  console.log(`\n--- 🔵 FEED_FETCH_START [${new Date().toISOString()}] ---`);
 
-  let hiddenPostIds = [];
-  let notInterestedCategoryIds = [];
 
   // Helper function for visibility check
   const canShow = (rule) => rule === "public"; // ONLY public visible
@@ -68,7 +75,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
     const { categoryId, postType } = req.query;
 
-    // 🟢 Redis Caching
+    console.log(`📡 REDIS_STATUS: ${redisClient?.status || "disconnected"}`);
+
+    const cacheKey = `${FEEDS_CACHE_PREFIX}${userId}:${page}:${limit}:${categoryId || "all"}:${postType || "all"}`;
+    /* 🟢 Redis Caching (Temporarily Disabled for Recommendation Testing)
     const cacheKey = `${FEEDS_CACHE_PREFIX}${userId}:${page}:${limit}:${categoryId || 'all'}:${postType || 'all'}`;
     if (redisClient && redisClient.status === 'ready') {
       try {
@@ -80,26 +90,55 @@ exports.getAllFeedsByUserId = async (req, res) => {
         console.warn("⚠️ Redis Get Error:", err.message);
       }
     }
+    */
 
     /* -----------------------------------------------------
-       ✅ 1️⃣ FETCH VIEWER PROFILE (LOGGED-IN USER)
+       ✅ 1️⃣ GATHER EXCLUSIONS & ML RECOMMENDATIONS
     ------------------------------------------------------*/
-    const viewerProfile = await ProfileSettings.findOne({ userId })
-      .select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility")
-      .lean();
+    const mlRecommendationService = require("../../services/mlRecommendationService");
+
+    // 1. Gather all exclusion sources
+    // 🚀 Speed Optimization: Parallelize all metadata fetches
+    const [hiddenPosts, userFeedActionsDoc, shownFeedIds, userCategories, viewerProfile, viewerUser] = await Promise.all([
+      HiddenPost.find({ userId }).select("postId -_id").lean(),
+      UserFeedActions.findOne({ userId }).select("watchedFeeds.feedId likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean(),
+      mlRecommendationService.getShownFeeds(userId),
+      UserCategory.findOne({ userId }).select("nonInterestedCategories").lean(),
+      ProfileSettings.findOne({ userId }).select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility").lean(),
+      User.findById(userId).select("email").lean()
+    ]);
+
+    const hiddenPostIds = hiddenPosts.map(h => h.postId);
+    const watchedFeedIds = (userFeedActionsDoc?.watchedFeeds || []).map(w => w.feedId.toString());
+    const userLikedSet = new Set((userFeedActionsDoc?.likedFeeds || []).map(l => l.feedId.toString()));
+    const userSavedSet = new Set((userFeedActionsDoc?.savedFeeds || []).map(s => s.feedId.toString()));
+    const userDislikedSet = new Set((userFeedActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString()));
+    const notInterestedCategoryIds = userCategories?.nonInterestedCategories || [];
+
+    const excludeIds = [
+      ...new Set([
+        ...hiddenPostIds.map(id => id.toString()),
+        ...watchedFeedIds.map(id => id.toString()),
+        ...shownFeedIds.map(id => id.toString())
+      ])
+    ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+
+    // 2. Fetch ML Recommendations while metadata is ready
+    let recommendedIds = [];
+    if (!categoryId) {
+      try {
+        const mlRecos = await mlRecommendationService.getRecommendations(userId, excludeIds, null, limit);
+        recommendedIds = (mlRecos || []).map(r => new mongoose.Types.ObjectId(typeof r === "object" ? (r.feed_id || r._id) : r));
+      } catch (mlErr) { console.warn("⚠️ ML Service Slow:", mlErr.message); }
+    }
 
     let viewerVisibility = null;
-
     if (viewerProfile?.visibility) {
       viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
     }
 
-    const viewerUser = await User.findById(userId).select("email").lean();
-
-
     // Format viewer social icons safely
     let viewerSocialIcons = [];
-
     if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
       viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
         .map(([platform, url]) => ({
@@ -110,13 +149,11 @@ exports.getAllFeedsByUserId = async (req, res) => {
         .filter((i) => i.url); // ✅ keep only valid links
     }
 
-
     // ✅ Social Icons Filter based on visibility rules
     const safeSocialLinks = viewerSocialIcons.filter((icon) => {
       const rule = viewerVisibility?.socialLinks || "private";
       return canShow(rule) && icon.visible !== false && !!icon.url;
     });
-
 
     // ✅ Footer visibility config
     const footerVisibilityConfig = {
@@ -134,9 +171,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
       }))
     };
 
-
-
-
     const viewer = {
       id: userId,
       name: canShow(viewerVisibility?.name || "public")
@@ -148,56 +182,27 @@ exports.getAllFeedsByUserId = async (req, res) => {
       email: canShow(viewerVisibility?.email || "private")
         ? viewerUser?.email || null
         : null,
-
       phoneNumber: canShow(viewerVisibility?.phoneNumber || "private")
         ? viewerProfile?.phoneNumber || null
         : null,
-
       profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar) || "https://via.placeholder.com/150",
-      socialLinks: safeSocialLinks // Use filtered social links
     };
 
-
     /* -----------------------------------------------------
-       ✅ 2️⃣ FETCH HIDDEN POSTS & BLOCKED CATEGORIES & WATCHED FEEDS
-    ------------------------------------------------------*/
-    const hiddenPosts = await HiddenPost.find({ userId }).select("postId -_id").lean();
-    hiddenPostIds = hiddenPosts.map(h => h.postId);
-
-    const userCategories = await UserCategory.findOne({ userId }).select("nonInterestedCategories").lean();
-    notInterestedCategoryIds = userCategories?.nonInterestedCategories || [];
-
-    // 🆕 FETCH WATCHED FEEDS
-    const userActions = await UserFeedActions.findOne({ userId }).select("watchedFeeds.feedId").lean();
-    const watchedFeedIds = (userActions?.watchedFeeds || []).map(w => w.feedId);
-
-    // Combine hidden and watched
-    // const excludeIds = [...hiddenPostIds, ...watchedFeedIds];
-    const excludeIds = [...hiddenPostIds];
-
-    const EXCLUDED_CATEGORY_IDS = [
-      new mongoose.Types.ObjectId("699ee0e420120ebc1d3e7725"),
-      new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b"),
-      new mongoose.Types.ObjectId("6990071590a65cd9632b2327")
-    ];
-
-    /* -----------------------------------------------------
-       ✅ 3️⃣ AGGREGATION PIPELINE
+       ✅ 3️⃣ AGGREGATION PIPELINE (Hybrid Sort & Randomization)
     ------------------------------------------------------*/
     const feeds = await Feed.aggregate([
       {
         $match: {
           _id: { $nin: excludeIds },
+          isApproved: true,
+          isDeleted: false,
+          status: "published",
           category: categoryId
             ? new mongoose.Types.ObjectId(categoryId)
             : { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
           // ✅ Filter 1: Visibility — only published feeds where schedule has elapsed
-          // ✅ Using $and to avoid duplicate $or keys (JS object key overwrite bug)
           $and: [
-            // Schedule visibility filter
-            // • Non-scheduled published feeds: always visible
-            // • Scheduled + published + scheduleDate already passed: visible
-            // • Scheduled + future scheduleDate: HIDDEN
             {
               $or: [
                 { status: "published", isScheduled: { $ne: true } },
@@ -209,17 +214,29 @@ exports.getAllFeedsByUserId = async (req, res) => {
               ]
             }
           ],
-          isApproved: true,
-          isDeleted: false,
-          ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
+          ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } :
             postType ? { postType } : {})
         },
       },
-      { $sort: { createdAt: -1 } },
+      // 📊 SCORING: Prioritize recommended IDs if available
+      {
+        $addFields: {
+          recoScore: {
+            $cond: {
+              if: { $in: ["$_id", recommendedIds] },
+              then: { $subtract: [100, { $indexOfArray: [recommendedIds, "$_id"] }] },
+              else: 0
+            }
+          },
+          randomBoost: { $rand: {} } // Freshness boost
+        }
+      },
+      // PRIORITY: Reco Score -> Random Discovery -> Newest
+      { $sort: { recoScore: -1, randomBoost: -1, createdAt: -1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit },
 
-      // 🛑 OPTIMIZED LOOKUPS: Only project needed fields to keep pipeline memory low
+      // 🛑 OPTIMIZED LOOKUPS
       { $addFields: { effectiveCreatorId: { $ifNull: ["$postedBy.userId", "$createdByAccount"] } } },
       { $lookup: { from: "Admin", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "admin" } },
       { $lookup: { from: "Child_Admin", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "childAdmin" } },
@@ -335,24 +352,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
           }
         }
       },
-      // 📊 USER INTERACTIONS: Check if current user liked/saved/followed
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { fid: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$userId", userId] } } },
-            {
-              $project: {
-                isLiked: { $in: ["$$fid", { $map: { input: "$likedFeeds", as: "i", in: "$$i.feedId" } }] },
-                isSaved: { $in: ["$$fid", { $map: { input: "$savedFeeds", as: "i", in: "$$i.feedId" } }] },
-                isDisliked: { $in: ["$$fid", { $map: { input: "$disLikeFeeds", as: "i", in: "$$i.feedId" } }] },
-              }
-            }
-          ],
-          as: "userActions"
-        }
-      },
       {
         $lookup: {
           from: "Follows",
@@ -371,9 +370,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
           downloadCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCountArr.count", 0] }, 0] },
           commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCountArr.count", 0] }, 0] },
           viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCountArr.count", 0] }, 0] },
-          isLiked: { $arrayElemAt: ["$userActions.isLiked", 0] },
-          isSaved: { $arrayElemAt: ["$userActions.isSaved", 0] },
-          isDisliked: { $arrayElemAt: ["$userActions.isDisliked", 0] },
           isFollowing: { $gt: [{ $size: "$followInfo" }, 0] },
           creatorData: {
             $let: {
@@ -391,18 +387,16 @@ exports.getAllFeedsByUserId = async (req, res) => {
               },
               in: {
                 id: "$effectiveCreatorId",
-                // Prefer data from ProfileSettings, fallback to Account info
                 userName: { $ifNull: ["$creatorProfile.userName", "$$rawAccount.userName", "unknown"] },
                 name: { $ifNull: ["$creatorProfile.name", "$$rawAccount.name", "User"] },
-                // 🔒 Privacy-Aware Avatar Priority:
                 avatar: {
                   $cond: {
                     if: {
                       $or: [
-                        { $eq: ["$effectiveCreatorId", userId] }, // Always show to owner
-                        { $eq: ["$fieldVisibility.profileAvatar", "public"] }, // Show if public
-                        { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] }, // Show if following
-                        { $eq: ["$roleRef", "Admin"] }, // Admins are always public
+                        { $eq: ["$effectiveCreatorId", userId] },
+                        { $eq: ["$fieldVisibility.profileAvatar", "public"] },
+                        { $and: [{ $eq: ["$fieldVisibility.profileAvatar", "followers"] }, { $eq: ["$isFollowing", true] }] },
+                        { $eq: ["$roleRef", "Admin"] },
                         { $eq: ["$roleRef", "Child_Admin"] }
                       ]
                     },
@@ -413,7 +407,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
                         "https://via.placeholder.com/150"
                       ]
                     },
-                    else: "https://via.placeholder.com/150" // Mask if private/not-following
+                    else: "https://via.placeholder.com/150"
                   }
                 },
                 role: "$roleRef"
@@ -422,18 +416,10 @@ exports.getAllFeedsByUserId = async (req, res) => {
           }
         }
       },
-      // FINAL CLEANUP: Remove lookup artifacts
       {
         $project: {
-          admin: 0,
-          childAdmin: 0,
-          userAccount: 0,
-          creatorProfile: 0,
-          postedBy: 0,
-          createdByAccount: 0,
-          effectiveCreatorId: 0,
-          fileHash: 0,
-          __v: 0
+          admin: 0, childAdmin: 0, userAccount: 0, creatorProfile: 0, postedBy: 0, createdByAccount: 0,
+          effectiveCreatorId: 0, fileHash: 0, __v: 0
         }
       }
     ]);
@@ -441,11 +427,25 @@ exports.getAllFeedsByUserId = async (req, res) => {
     /* -----------------------------------------------------
        ✅ 4️⃣ POST-PROCESSING (Normal vs Template Logic)
     ------------------------------------------------------*/
-    const enrichedFeeds = feeds.map(feed => {
+    let categoryStreak = 0;
+    let lastCategoryId = null;
+    const finalEnrichedFeeds = [];
+
+    for (const feed of feeds) {
+      // 🛑 Diversity Check: Max 5 consecutive feeds from same category (Requirement #8)
+      const currentCatId = feed.category?.toString();
+      if (currentCatId === lastCategoryId) {
+        categoryStreak++;
+      } else {
+        categoryStreak = 1;
+        lastCategoryId = currentCatId;
+      }
+
+      if (categoryStreak > 5) continue; // Skip if too many consecutive from same category
+
       const isTemplateMode = feed.uploadType === 'template';
       const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
 
-      // Simplified designState for Template feeds
       let designState = null;
       if (isTemplateMode && feed.designMetadata) {
         designState = {
@@ -456,79 +456,63 @@ exports.getAllFeedsByUserId = async (req, res) => {
         };
       }
 
-      return {
+      finalEnrichedFeeds.push({
         ...feed,
+        isLiked: userLikedSet.has(feed._id.toString()),
+        isSaved: userSavedSet.has(feed._id.toString()),
+        isDisliked: userDislikedSet.has(feed._id.toString()),
         feedId: feed._id,
         uploadType: feed.uploadType || 'normal',
         mediaUrl: getMediaUrl(feed.mediaUrl),
-
-        creatorData: {
-          ...feed.creatorData,
-          avatar: getMediaUrl(feed.creatorData?.avatar)
-        },
-
-        // ✅ Footer Configuration with Privacy-Aware Social Icons
+        creatorData: { ...feed.creatorData, avatar: getMediaUrl(feed.creatorData?.avatar) },
         footerDisplay: isTemplateMode
-          ? {
-            ...(feed.designMetadata?.footerConfig || {}),
-            ...footerVisibilityConfig,
-            colors: themeColor
-          }
+          ? { ...(feed.designMetadata?.footerConfig || {}), ...footerVisibilityConfig, colors: themeColor }
           : { enabled: false },
-
         designState,
-
-        // Final Interaction Stats
         stats: {
-          likes: feed.likesCount || 0,
-          views: feed.viewsCount || 0,
-          comments: feed.commentsCount || 0,
-          shares: feed.shareCount || 0,
+          likes: feed.likesCount || 0, views: feed.viewsCount || 0,
+          comments: feed.commentsCount || 0, shares: feed.shareCount || 0,
           downloads: feed.downloadCount || 0
         }
-      };
-    });
+      });
+    }
 
     const responseData = {
       success: true,
       data: {
         viewer,
-        feeds: enrichedFeeds,
+        feeds: finalEnrichedFeeds,
         pagination: {
-          page,
-          limit,
-          total: await Feed.countDocuments({
-            _id: { $nin: excludeIds },
-            ...(categoryId
-              ? { category: new mongoose.Types.ObjectId(categoryId) }
-              : { category: { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] } }
-            ),
-            $and: [
-              {
-                $or: [
-                  { isScheduled: { $ne: true } },
-                  { $and: [{ isScheduled: true }, { scheduleDate: { $lte: new Date() } }] }
-                ]
-              }
-            ],
-            isApproved: true,
-            isDeleted: false,
-            status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
-            ...(postType === 'image' ? { postType: { $in: ['image', 'image+audio'] } } :
-              postType ? { postType } : {})
-          })
+          page, 
+          limit, 
+          hasMore: finalEnrichedFeeds.length === limit
         }
       }
     };
 
-    // 🟢 Store in Redis for 1 hour
+
     if (redisClient && redisClient.status === 'ready') {
       try {
-        await redisClient.setex(cacheKey, 3600, JSON.stringify(responseData));
+        await redisClient.setex(cacheKey, 300, JSON.stringify(responseData)); // Lower TTL for testing
       } catch (err) {
         console.warn("⚠️ Redis Set Error:", err.message);
       }
     }
+
+    // 🆕 TRACK SHOWN FEEDS (Requirement #6)
+    if (finalEnrichedFeeds.length > 0) {
+      await mlRecommendationService.trackShownFeeds(userId, finalEnrichedFeeds.map(f => f.feedId.toString()));
+    }
+
+    // 📊 DEBUG DASHBOARD (Requirement #9)
+    console.table({
+      userId: userId.toString(),
+      page,
+      excluded: excludeIds.length,
+      mlRecos: recommendedIds.length,
+      finalReturned: finalEnrichedFeeds.length,
+      status: "SUCCESS"
+    });
 
     res.status(200).json(responseData);
   } catch (err) {
@@ -546,9 +530,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
 exports.getBirthdayFeeds = async (req, res) => {
   console.log("🎂 START: getBirthdayFeeds");
 
-  const BIRTHDAY_CATEGORY_ID = new mongoose.Types.ObjectId("6990071590a65cd9632b2327");
 
-  let hiddenPostIds = [];
   const canShow = (rule) => rule === "public";
 
   try {
@@ -832,9 +814,7 @@ exports.getBirthdayFeeds = async (req, res) => {
 exports.getAnniversaryFeeds = async (req, res) => {
   console.log("💍 START: getAnniversaryFeeds");
 
-  const ANNIVERSARY_CATEGORY_ID = new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b");
 
-  let hiddenPostIds = [];
   const canShow = (rule) => rule === "public";
 
   try {
@@ -1118,9 +1098,7 @@ exports.getAnniversaryFeeds = async (req, res) => {
 exports.getPoliticsFeeds = async (req, res) => {
   console.log("🗳️ START: getPoliticsFeeds");
 
-  const POLITICS_CATEGORY_ID = new mongoose.Types.ObjectId("699ee0e420120ebc1d3e7725");
 
-  let hiddenPostIds = [];
   const canShow = (rule) => rule === "public";
 
   try {
@@ -2773,14 +2751,19 @@ exports.getTrendingFeeds = async (req, res) => {
     trendingStart.setHours(0, 0, 0, 0);
 
     // 1️⃣ Get exclusions (Hidden & Not Interested)
-    const [hiddenPostDocs, userCat, viewerProfile] = await Promise.all([
+    const mlRecommendationService = require("../../services/mlRecommendationService");
+    const [hiddenPostDocs, userCat, viewerProfile, shownFeedIds, userActionsDoc] = await Promise.all([
       HiddenPost.find({ userId }).select("postId -_id").lean(),
       UserCategory.findOne({ userId }).select("nonInterestedCategories").lean(),
-      ProfileSettings.findOne({ userId }).select("userName profileAvatar modifyAvatar").lean()
+      ProfileSettings.findOne({ userId }).select("userName profileAvatar modifyAvatar").lean(),
+      mlRecommendationService.getShownFeeds(userId),
+      UserFeedActions.findOne({ userId }).select("likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean()
     ]);
-
     const hiddenPostIds = hiddenPostDocs.map(x => x.postId);
     const notInterestedCategoryIds = userCat?.nonInterestedCategories || [];
+    const userLikedSet = new Set((userActionsDoc?.likedFeeds || []).map(l => l.feedId.toString()));
+    const userSavedSet = new Set((userActionsDoc?.savedFeeds || []).map(s => s.feedId.toString()));
+    const userDislikedSet = new Set((userActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString()));
 
     // Construct viewer object
     const viewer = {
@@ -2789,18 +2772,18 @@ exports.getTrendingFeeds = async (req, res) => {
       profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar) || null,
     };
 
-    const EXCLUDED_CATEGORY_IDS = [
-      new mongoose.Types.ObjectId("699ee0e420120ebc1d3e7725"),
-      new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b"),
-      new mongoose.Types.ObjectId("6990071590a65cd9632b2327")
-    ];
 
     // 2️⃣ Optimized Aggregation Pipeline
     const feeds = await Feed.aggregate([
       // A. Initial Filter
       {
         $match: {
-          _id: { $nin: hiddenPostIds },
+          _id: { $nin: [
+            ...new Set([
+              ...hiddenPostIds.map(id => id.toString()),
+              ...shownFeedIds.map(id => id.toString())
+            ])
+          ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) },
           category: { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
           createdAt: { $gte: trendingStart },
           isApproved: true,
@@ -2865,24 +2848,6 @@ exports.getTrendingFeeds = async (req, res) => {
         }
       },
 
-      // D. Lookup Current User Action (Did I like it?)
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { feedId: "$_id" },
-          pipeline: [
-            { $match: { userId: userId } },
-            {
-              $project: {
-                isLiked: { $in: ["$$feedId", "$likedFeeds.feedId"] },
-                isSaved: { $in: ["$$feedId", "$savedFeeds.feedId"] },
-                isDisliked: { $in: ["$$feedId", "$disLikeFeeds.feedId"] }
-              }
-            }
-          ],
-          as: "currentUserActions"
-        }
-      },
 
       // E. Lookup Creator Profile
       {
@@ -2920,9 +2885,6 @@ exports.getTrendingFeeds = async (req, res) => {
               { $ifNull: [{ $arrayElemAt: ["$vidStats.totalViews", 0] }, 0] }
             ]
           },
-          isLiked: { $ifNull: [{ $arrayElemAt: ["$currentUserActions.isLiked", 0] }, false] },
-          isSaved: { $ifNull: [{ $arrayElemAt: ["$currentUserActions.isSaved", 0] }, false] },
-          isDisliked: { $ifNull: [{ $arrayElemAt: ["$currentUserActions.isDisliked", 0] }, false] },
           // Time decay score calculation
           score: {
             $multiply: [
@@ -2986,9 +2948,9 @@ exports.getTrendingFeeds = async (req, res) => {
         views: f.viewsCount || 0
       },
       userInteractions: {
-        isLiked: f.isLiked || false,
-        isSaved: f.isSaved || false,
-        isDisliked: f.isDisliked || false
+        isLiked: userLikedSet.has(f.feedId.toString()),
+        isSaved: userSavedSet.has(f.feedId.toString()),
+        isDisliked: userDislikedSet.has(f.feedId.toString())
       },
       timeAgo: feedTimeCalculator(f.createdAt),
       rank: ((page - 1) * limit) + index + 1
@@ -3006,6 +2968,11 @@ exports.getTrendingFeeds = async (req, res) => {
 
     // Cache for 1 minute (Trending updates frequently)
     await redisClient.set(redisKey, JSON.stringify(response), "EX", 60);
+
+    // 🆕 Track shown feeds from Trending
+    if (finalFeeds.length > 0) {
+      await mlRecommendationService.trackShownFeeds(userId, finalFeeds.map(f => f.feedId.toString()));
+    }
 
     res.status(200).json(response);
 
