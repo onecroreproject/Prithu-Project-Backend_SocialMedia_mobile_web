@@ -1,7 +1,7 @@
 const axios = require("axios");
 const redisClient = require("../Config/redisConfig");
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://localhost:8000";
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://localhost:8001";
 const SHOWN_PREFIX = "shown_feeds:";
 const SHOWN_TTL = 86400; // 24 hours
 
