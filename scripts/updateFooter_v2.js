@@ -19,9 +19,9 @@ async function updateFooter() {
                 {
                     title: "Column 1 – Company",
                     links: [
-                        { label: "About Prithu", href: "/about" },
+                        { label: "About Prithu", href: "/about-us" },
                         { label: "Privacy Policy", href: "/privacy-policy" },
-                        { label: "Terms & Conditions", href: "/terms" },
+                        { label: "Terms & Conditions", href: "/terms-conditions" },
                     ],
                 },
                 {

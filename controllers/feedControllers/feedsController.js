@@ -12,6 +12,11 @@ const EXCLUDED_CATEGORY_IDS = [
   new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b"),
   new mongoose.Types.ObjectId("6990071590a65cd9632b2327")
 ];
+
+// Special Category IDs for Sidebar Menus
+const BIRTHDAY_CATEGORY_ID = new mongoose.Types.ObjectId("6990071590a65cd9632b2327");
+const ANNIVERSARY_CATEGORY_ID = new mongoose.Types.ObjectId("699ee86c20120ebc1d3e929b");
+const POLITICS_CATEGORY_ID = new mongoose.Types.ObjectId("699ee0e420120ebc1d3e7725");
 const UserComment = require("../../models/userCommentModel.js");
 const UserView = require("../../models/userModels/userViewFeedsModel.js");
 const UserLanguage = require('../../models/userModels/userLanguageModel.js');
