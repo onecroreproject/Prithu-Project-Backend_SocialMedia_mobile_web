@@ -349,6 +349,7 @@ router.get("/admin/analytics/feed-performance", auth, checkPermission('canManage
 router.get("/admin/analytics/search-analytics", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getSearchAnalytics);
 router.get("/admin/analytics/live-monitoring", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getLiveMonitoring);
 router.get("/admin/analytics/recommendation-performance", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getRecommendationPerformance);
+router.post("/admin/analytics/trigger-ml-training", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.triggerMLTraining);
 
 router.get("/admin/analytics/top-categories", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getTopCategories);
 router.get("/admin/analytics/top-feeds", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getTopFeeds);

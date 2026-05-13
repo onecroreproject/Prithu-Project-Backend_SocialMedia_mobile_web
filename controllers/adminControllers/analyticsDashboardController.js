@@ -4,6 +4,8 @@ const Feed = require("../../models/feedModel");
 const Categories = require("../../models/categorySchema");
 const User = require("../../models/userModels/userModel");
 const mongoose = require("mongoose");
+const { recalculateAllScores } = require("../../scripts/recalculateRecommendations");
+const mlRecommendationService = require("../../services/mlRecommendationService");
 
 /**
  * 📈 Get Comprehensive Recommendation KPIs
@@ -639,5 +641,29 @@ exports.searchUsersForExport = async (req, res) => {
   } catch (err) {
     console.error("❌ searchUsersForExport Error:", err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * 🚀 Manual Trigger for ML Training & Score Recalculation
+ */
+exports.triggerMLTraining = async (req, res) => {
+  try {
+    console.log("🚀 Manual ML Training Triggered...");
+    
+    // 1. Recalculate Node.js engagement scores
+    await recalculateAllScores();
+    
+    // 2. Trigger external Python ML service refresh
+    const mlRefresh = await mlRecommendationService.triggerRefresh();
+    
+    res.status(200).json({ 
+      success: true, 
+      message: "ML Engine Training & Score Recalculation completed successfully",
+      mlServiceStatus: mlRefresh.success ? "Refreshed" : "External Service Unavailable"
+    });
+  } catch (err) {
+    console.error("❌ triggerMLTraining Error:", err);
+    res.status(500).json({ message: "Failed to trigger ML training" });
   }
 };

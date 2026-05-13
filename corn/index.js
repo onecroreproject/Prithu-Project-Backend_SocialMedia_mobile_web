@@ -171,7 +171,11 @@ const taskRegistry = [
     name: "Recalculate Recommendations",
     schedule: "0 */1 * * *", // Every hour
     description: "Recalculates personalized recommendation scores for active users (Hourly)",
-    action: () => recalculateAllScores()
+    action: async () => {
+      await recalculateAllScores();
+      const mlRecommendationService = require("../services/mlRecommendationService");
+      await mlRecommendationService.triggerRefresh();
+    }
   }
 ];
 
