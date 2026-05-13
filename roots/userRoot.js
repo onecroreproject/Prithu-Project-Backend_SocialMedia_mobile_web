@@ -39,6 +39,9 @@ const {
     getBirthdayFeeds,
     getAnniversaryFeeds,
     getPoliticsFeeds,
+    getViewerMetadata,
+    enrichFeedData,
+    getRecommendedFeedsRoute,
 } = require('../controllers/feedControllers/feedsController');
 
 const {
@@ -189,6 +192,17 @@ const {
     fetchUserNonInterested,
     getUserdetailWithinTheFeed,
 } = require('../controllers/userControllers/userFeedController');
+
+const {
+    trackFeedView,
+    trackWatchTime,
+    trackScroll,
+    logSearchHistory,
+} = require('../controllers/analytics/trackController');
+
+const {
+    getRecommendedFeeds,
+} = require('../services/analytics/recommendationService');
 
 const {
     getStartQuestion,
@@ -425,6 +439,13 @@ router.post('/user/image/view/count', auth, userImageViewCount);
 router.post('/feed/view/image/:id', auth, userImageViewCount); // Alias
 router.post('/user/not-interested', auth, userNotInterestedCategory); // Alias
 router.post('/user/block', auth, (req, res) => res.status(501).json({ message: "Block feature not implemented" })); // Placeholder for plan completeness
+
+/* --------------------- Feed Analytics & Recommendation --------------------- */
+router.post('/track-feed-view', optionalAuth, trackFeedView);
+router.post('/track-watch-time', optionalAuth, trackWatchTime);
+router.post('/track-scroll', optionalAuth, trackScroll);
+router.post('/search-history', auth, logSearchHistory);
+router.get('/recommended-feeds', optionalAuth, getRecommendedFeedsRoute);
 
 /* --------------------- Creator Specific --------------------- */
 router.post("/creator/feed/upload", auth, feedUpload.single("file"), attachFeedFile, creatorFeedUpload);

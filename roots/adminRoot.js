@@ -98,6 +98,8 @@ const {
     sendAdminNotification,
 } = require('../controllers/adminControllers/notificationController');
 
+const analyticsDashboardController = require("../controllers/adminControllers/analyticsDashboardController");
+
 const {
     getSystemMetrics,
 } = require('../controllers/adminControllers/systemMetricsController');
@@ -133,6 +135,12 @@ const { exploreFolder } = require('../controllers/adminControllers/folderExplore
 const { getDatabaseStats, triggerBackup } = require('../controllers/adminControllers/dbManagementController');
 const { getRedisStats, flushRedis, deleteByPrefix, getKeyInfo } = require('../controllers/adminControllers/redisManagementController');
 const { getCronStatus, triggerCron } = require('../controllers/adminControllers/cronManagementController');
+
+const {
+    getTopCategories,
+    getTopFeeds,
+    getEngagementTrends,
+} = require('../controllers/adminControllers/analyticsDashboardController');
 
 const {
     getHelpFAQ,
@@ -335,10 +343,20 @@ router.get("/nonInterested/:userId", auth, checkPermission('canManageUsers'), fe
 router.get("/admin/dashboard/metricks/counts", auth, getDashboardMetricCount); // Generic dashboard, auth only
 router.get("/admin/users/monthly-registrations", auth, checkPermission('canManageUsers'), getDashUserRegistrationRatio);
 router.get("/admin/dashboard/heartbeat", auth, getDashboardHeartbeat);
-router.get("/admin/user/subscriptionration", auth, checkPermission('canManageSubscriptions'), getDashUserSubscriptionRatio);
-router.get('/admin/posts/daily', auth, checkPermission('canManageFeeds'), getPostVolumeDaily);
-router.get('/admin/posts/weekly', auth, checkPermission('canManageFeeds'), getPostVolumeWeekly);
-router.get('/admin/posts/monthly', auth, checkPermission('canManageFeeds'), getPostVolumeMonthly);
+router.get("/admin/dashboard/user-subscription-counts", auth, checkPermission('canManageSalesDashboard'), getUserAndSubscriptionCountsDaily);
+router.get("/admin/analytics/recommendation-kpis", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getRecommendationKPIs);
+router.get("/admin/analytics/feed-performance", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getFeedPerformanceTable);
+router.get("/admin/analytics/search-analytics", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getSearchAnalytics);
+router.get("/admin/analytics/live-monitoring", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getLiveMonitoring);
+router.get("/admin/analytics/recommendation-performance", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getRecommendationPerformance);
+
+router.get("/admin/analytics/top-categories", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getTopCategories);
+router.get("/admin/analytics/top-feeds", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getTopFeeds);
+router.get("/admin/analytics/engagement-trends", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getEngagementTrends);
+router.get("/admin/analytics/time-insights", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getTimeOfDayInsights);
+router.get("/admin/analytics/day-insights", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getDayOfWeekInsights);
+router.get("/admin/analytics/export-csv", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.exportAnalyticsCSV);
+router.get("/admin/analytics/search-users", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.searchUsersForExport);
 
 /* --------------------- Admin Creator API --------------------- */
 router.get('/admin/getall/creators', auth, checkPermission('canManageCreators'), require('../controllers/creatorControllers/creatorDetailController').getAllCreatorDetails);

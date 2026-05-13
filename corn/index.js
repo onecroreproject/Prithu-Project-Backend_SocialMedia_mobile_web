@@ -12,6 +12,7 @@ const hashtagTrendingQueue = require("../queue/hashTagTrendingQueue");
 const promotionalEmailQueue = require("../queue/promotionalEmailQueue");
 const cleanupInactiveSessions = require("../scripts/sessionCleanup");
 const redisClient = require("../Config/redisConfig");
+const { recalculateAllScores } = require("../scripts/recalculateRecommendations");
 
 const CAMPAIGN_PAUSE_KEY = "promo_campaign_paused";
 
@@ -164,6 +165,13 @@ const taskRegistry = [
 
       return { processed: eligibleUsers.length };
     }
+  },
+  {
+    id: "recalculate_recommendations",
+    name: "Recalculate Recommendations",
+    schedule: "0 */1 * * *", // Every hour
+    description: "Recalculates personalized recommendation scores for active users (Hourly)",
+    action: () => recalculateAllScores()
   }
 ];
 

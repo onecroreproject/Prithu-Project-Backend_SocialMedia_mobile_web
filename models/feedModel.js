@@ -438,8 +438,20 @@ const feedSchema = new mongoose.Schema(
     }],
     playbackStats: {
       totalViews: { type: Number, default: 0 },
+      uniqueViewers: { type: Number, default: 0 },
       averageViewTime: { type: Number, default: 0 },
-      completionRate: { type: Number, default: 0 }
+      completionRate: { type: Number, default: 0 },
+      totalWatchTime: { type: Number, default: 0 },
+      replays: { type: Number, default: 0 },
+      pauses: { type: Number, default: 0 },
+      skips: { type: Number, default: 0 },
+    },
+    engagementStats: {
+      likes: { type: Number, default: 0 },
+      shares: { type: Number, default: 0 },
+      saves: { type: Number, default: 0 },
+      comments: { type: Number, default: 0 },
+      dislikes: { type: Number, default: 0 },
     },
     seoMetadata: {
       title: { type: String },

@@ -63,14 +63,117 @@ exports.clearFeedsCache = clearFeedsCache;
 
 
 
+const getViewerMetadata = async (userId) => {
+  const canShow = (rule) => rule === "public";
+  
+  const [viewerProfile, viewerUser] = await Promise.all([
+    ProfileSettings.findOne({ userId }).select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility").lean(),
+    User.findById(userId).select("email").lean()
+  ]);
+
+  if (!viewerProfile) return { viewer: null, footerVisibilityConfig: null };
+
+  let viewerVisibility = null;
+  if (viewerProfile?.visibility) {
+    viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
+  }
+
+  let viewerSocialIcons = [];
+  if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
+    viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
+      .map(([platform, url]) => ({
+        platform,
+        url: typeof url === "string" ? url.trim() : "",
+        visible: true,
+      }))
+      .filter((i) => i.url);
+  }
+
+  const safeSocialLinks = viewerSocialIcons.filter((icon) => {
+    const rule = viewerVisibility?.socialLinks || "private";
+    return canShow(rule) && icon.visible !== false && !!icon.url;
+  });
+
+  const footerVisibilityConfig = {
+    showElements: {
+      name: canShow(viewerVisibility?.name || "public"),
+      userName: canShow(viewerVisibility?.userName || "public"),
+      email: canShow(viewerVisibility?.email || "private"),
+      phone: canShow(viewerVisibility?.phoneNumber || "private"),
+      socialIcons: safeSocialLinks.length > 0
+    },
+    socialIcons: safeSocialLinks.map((icon) => ({
+      platform: icon.platform,
+      visible: true,
+      urlTemplate: icon.url
+    }))
+  };
+
+  const viewer = {
+    id: userId,
+    name: canShow(viewerVisibility?.name || "public")
+      ? viewerProfile?.name || "User"
+      : "Private User",
+    userName: canShow(viewerVisibility?.userName || "public")
+      ? viewerProfile?.userName || "user"
+      : "private_user",
+    email: canShow(viewerVisibility?.email || "private")
+      ? viewerUser?.email || null
+      : null,
+    phoneNumber: canShow(viewerVisibility?.phoneNumber || "private")
+      ? viewerProfile?.phoneNumber || null
+      : null,
+    profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar) || "https://via.placeholder.com/150",
+  };
+
+  return { viewer, footerVisibilityConfig };
+};
+
+exports.getViewerMetadata = getViewerMetadata;
+
+const enrichFeedData = (feed, userLikedSet, userSavedSet, userDislikedSet, footerVisibilityConfig) => {
+  const isTemplateMode = feed.uploadType === 'template';
+  const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
+
+  let designState = null;
+  if (isTemplateMode && feed.designMetadata) {
+    designState = {
+      elements: feed.designMetadata.overlayElements || [],
+      mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
+      audioConfig: feed.designMetadata.audioConfig || null,
+      themeColors: themeColor
+    };
+  }
+
+  return {
+    ...feed,
+    isLiked: userLikedSet.has(feed._id.toString()),
+    isSaved: userSavedSet.has(feed._id.toString()),
+    isDisliked: userDislikedSet.has(feed._id.toString()),
+    feedId: feed._id,
+    uploadType: feed.uploadType || 'normal',
+    mediaUrl: getMediaUrl(feed.mediaUrl),
+    creatorData: feed.creatorData ? { ...feed.creatorData, avatar: getMediaUrl(feed.creatorData?.avatar) } : {},
+    footerDisplay: isTemplateMode
+      ? { ...(feed.designMetadata?.footerConfig || {}), ...footerVisibilityConfig, colors: themeColor }
+      : { enabled: false },
+    designState,
+    stats: {
+      likes: feed.likesCount || 0,
+      views: feed.viewsCount || 0,
+      comments: feed.commentsCount || 0,
+      shares: feed.shareCount || 0,
+      downloads: feed.downloadCount || 0
+    }
+  };
+};
+
+exports.enrichFeedData = enrichFeedData;
+
 exports.getAllFeedsByUserId = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const dashboard = { startTime: Date.now() };
   console.log(`\n--- 🔵 FEED_FETCH_START [${new Date().toISOString()}] ---`);
-
-
-  // Helper function for visibility check
-  const canShow = (rule) => rule === "public"; // ONLY public visible
 
   try {
     const rawUserId = req.Id || req.body.userId;
@@ -80,37 +183,14 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
     const { categoryId, postType } = req.query;
 
-    console.log(`📡 REDIS_STATUS: ${redisClient?.status || "disconnected"}`);
-
-    const cacheKey = `${FEEDS_CACHE_PREFIX}${userId}:${page}:${limit}:${categoryId || "all"}:${postType || "all"}`;
-    /* 🟢 Redis Caching (Temporarily Disabled for Recommendation Testing)
-    const cacheKey = `${FEEDS_CACHE_PREFIX}${userId}:${page}:${limit}:${categoryId || 'all'}:${postType || 'all'}`;
-    if (redisClient && redisClient.status === 'ready') {
-      try {
-        const cachedFeeds = await redisClient.get(cacheKey);
-        if (cachedFeeds) {
-          return res.status(200).json(JSON.parse(cachedFeeds));
-        }
-      } catch (err) {
-        console.warn("⚠️ Redis Get Error:", err.message);
-      }
-    }
-    */
-
-    /* -----------------------------------------------------
-       ✅ 1️⃣ GATHER EXCLUSIONS & ML RECOMMENDATIONS
-    ------------------------------------------------------*/
     const mlRecommendationService = require("../../services/mlRecommendationService");
 
-    // 1. Gather all exclusion sources
-    // 🚀 Speed Optimization: Parallelize all metadata fetches
-    const [hiddenPosts, userFeedActionsDoc, shownFeedIds, userCategories, viewerProfile, viewerUser] = await Promise.all([
+    const [hiddenPosts, userFeedActionsDoc, shownFeedIds, userCategories, { viewer, footerVisibilityConfig }] = await Promise.all([
       HiddenPost.find({ userId }).select("postId -_id").lean(),
       UserFeedActions.findOne({ userId }).select("watchedFeeds.feedId likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean(),
       mlRecommendationService.getShownFeeds(userId),
       UserCategory.findOne({ userId }).select("nonInterestedCategories").lean(),
-      ProfileSettings.findOne({ userId }).select("name userName profileAvatar phoneNumber socialLinks privacy modifyAvatar visibility").lean(),
-      User.findById(userId).select("email").lean()
+      getViewerMetadata(userId)
     ]);
 
     const hiddenPostIds = hiddenPosts.map(h => h.postId);
@@ -128,7 +208,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
       ])
     ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
 
-    // 2. Fetch ML Recommendations while metadata is ready
     let recommendedIds = [];
     if (!categoryId) {
       try {
@@ -136,62 +215,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
         recommendedIds = (mlRecos || []).map(r => new mongoose.Types.ObjectId(typeof r === "object" ? (r.feed_id || r._id) : r));
       } catch (mlErr) { console.warn("⚠️ ML Service Slow:", mlErr.message); }
     }
-
-    let viewerVisibility = null;
-    if (viewerProfile?.visibility) {
-      viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
-    }
-
-    // Format viewer social icons safely
-    let viewerSocialIcons = [];
-    if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
-      viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
-        .map(([platform, url]) => ({
-          platform,
-          url: typeof url === "string" ? url.trim() : "",
-          visible: true,
-        }))
-        .filter((i) => i.url); // ✅ keep only valid links
-    }
-
-    // ✅ Social Icons Filter based on visibility rules
-    const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-      const rule = viewerVisibility?.socialLinks || "private";
-      return canShow(rule) && icon.visible !== false && !!icon.url;
-    });
-
-    // ✅ Footer visibility config
-    const footerVisibilityConfig = {
-      showElements: {
-        name: canShow(viewerVisibility?.name || "public"),
-        userName: canShow(viewerVisibility?.userName || "public"),
-        email: canShow(viewerVisibility?.email || "private"),
-        phone: canShow(viewerVisibility?.phoneNumber || "private"),
-        socialIcons: safeSocialLinks.length > 0
-      },
-      socialIcons: safeSocialLinks.map((icon) => ({
-        platform: icon.platform,
-        visible: true,
-        urlTemplate: icon.url
-      }))
-    };
-
-    const viewer = {
-      id: userId,
-      name: canShow(viewerVisibility?.name || "public")
-        ? viewerProfile?.name || "User"
-        : "Private User",
-      userName: canShow(viewerVisibility?.userName || "public")
-        ? viewerProfile?.userName || "user"
-        : "private_user",
-      email: canShow(viewerVisibility?.email || "private")
-        ? viewerUser?.email || null
-        : null,
-      phoneNumber: canShow(viewerVisibility?.phoneNumber || "private")
-        ? viewerProfile?.phoneNumber || null
-        : null,
-      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar) || "https://via.placeholder.com/150",
-    };
 
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE (Hybrid Sort & Randomization)
@@ -282,101 +305,30 @@ exports.getAllFeedsByUserId = async (req, res) => {
       },
       { $unwind: { path: "$fieldVisibility", preserveNullAndEmptyArrays: true } },
 
-      // 📊 COUNTS AGGREGATION: Dynamically calculate interaction counts
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { fid: "$_id" },
-          pipeline: [
-            { $unwind: "$likedFeeds" },
-            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$fid"] } } },
-            { $count: "count" }
-          ],
-          as: "likesCountArr"
-        }
-      },
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { fid: "$_id" },
-          pipeline: [
-            { $unwind: "$sharedFeeds" },
-            { $match: { $expr: { $eq: ["$sharedFeeds.feedId", "$$fid"] } } },
-            { $count: "count" }
-          ],
-          as: "sharesCountArr"
-        }
-      },
-      {
-        $lookup: {
-          from: "UserFeedActions",
-          let: { fid: "$_id" },
-          pipeline: [
-            { $unwind: "$downloadedFeeds" },
-            { $match: { $expr: { $eq: ["$downloadedFeeds.feedId", "$$fid"] } } },
-            { $count: "count" }
-          ],
-          as: "downloadsCountArr"
-        }
-      },
-      {
-        $lookup: {
-          from: "UserComments",
-          let: { fid: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$feedId", "$$fid"] } } },
-            { $count: "count" }
-          ],
-          as: "commentsCountArr"
-        }
-      },
-      {
-        $lookup: {
-          from: "ImageStats",
-          localField: "_id",
-          foreignField: "imageId",
-          as: "imageStats"
-        }
-      },
-      {
-        $lookup: {
-          from: "VideoStats",
-          localField: "_id",
-          foreignField: "videoId",
-          as: "videoStats"
-        }
-      },
       {
         $addFields: {
-          viewsCountArr: {
-            $cond: {
-              if: { $eq: ["$postType", "image"] },
-              then: [{ count: { $ifNull: [{ $arrayElemAt: ["$imageStats.totalViews", 0] }, 0] } }],
-              else: [{ count: { $ifNull: [{ $arrayElemAt: ["$videoStats.totalViews", 0] }, 0] } }]
-            }
-          }
-        }
+          likesCount: { $ifNull: ["$engagementStats.likes", 0] },
+          shareCount: { $ifNull: ["$engagementStats.shares", 0] },
+          downloadCount: { $ifNull: ["$engagementStats.downloads", 0] },
+          commentsCount: { $ifNull: ["$engagementStats.comments", 0] },
+          viewsCount: { $ifNull: ["$playbackStats.totalViews", 0] },
       },
-      {
-        $lookup: {
-          from: "Follows",
-          let: { creatorId: "$effectiveCreatorId" },
-          pipeline: [
-            { $match: { $expr: { $and: [{ $eq: ["$creatorId", "$$creatorId"] }, { $eq: ["$followerId", userId] }] } } },
-            { $limit: 1 }
-          ],
-          as: "followInfo"
-        }
-      },
-      {
-        $addFields: {
-          likesCount: { $ifNull: [{ $arrayElemAt: ["$likesCountArr.count", 0] }, 0] },
-          shareCount: { $ifNull: [{ $arrayElemAt: ["$sharesCountArr.count", 0] }, 0] },
-          downloadCount: { $ifNull: [{ $arrayElemAt: ["$downloadsCountArr.count", 0] }, 0] },
-          commentsCount: { $ifNull: [{ $arrayElemAt: ["$commentsCountArr.count", 0] }, 0] },
-          viewsCount: { $ifNull: [{ $arrayElemAt: ["$viewsCountArr.count", 0] }, 0] },
-          isFollowing: { $gt: [{ $size: "$followInfo" }, 0] },
-          creatorData: {
+    },
+    {
+      $lookup: {
+        from: "Follows",
+        let: { creatorId: "$effectiveCreatorId" },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ["$creatorId", "$$creatorId"] }, { $eq: ["$followerId", userId] }] } } },
+          { $limit: 1 }
+        ],
+        as: "followInfo"
+      }
+    },
+    {
+      $addFields: {
+        isFollowing: { $gt: [{ $size: "$followInfo" }, 0] },
+        creatorData: {
             $let: {
               vars: {
                 rawAccount: {
@@ -437,7 +389,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const finalEnrichedFeeds = [];
 
     for (const feed of feeds) {
-      // 🛑 Diversity Check: Max 5 consecutive feeds from same category (Requirement #8)
+      // 🛑 Diversity Check: Max 5 consecutive feeds from same category
       const currentCatId = feed.category?.toString();
       if (currentCatId === lastCategoryId) {
         categoryStreak++;
@@ -445,41 +397,9 @@ exports.getAllFeedsByUserId = async (req, res) => {
         categoryStreak = 1;
         lastCategoryId = currentCatId;
       }
+      if (categoryStreak > 5) continue;
 
-      if (categoryStreak > 5) continue; // Skip if too many consecutive from same category
-
-      const isTemplateMode = feed.uploadType === 'template';
-      const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
-
-      let designState = null;
-      if (isTemplateMode && feed.designMetadata) {
-        designState = {
-          elements: feed.designMetadata.overlayElements || [],
-          mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
-          audioConfig: feed.designMetadata.audioConfig || null,
-          themeColors: themeColor
-        };
-      }
-
-      finalEnrichedFeeds.push({
-        ...feed,
-        isLiked: userLikedSet.has(feed._id.toString()),
-        isSaved: userSavedSet.has(feed._id.toString()),
-        isDisliked: userDislikedSet.has(feed._id.toString()),
-        feedId: feed._id,
-        uploadType: feed.uploadType || 'normal',
-        mediaUrl: getMediaUrl(feed.mediaUrl),
-        creatorData: { ...feed.creatorData, avatar: getMediaUrl(feed.creatorData?.avatar) },
-        footerDisplay: isTemplateMode
-          ? { ...(feed.designMetadata?.footerConfig || {}), ...footerVisibilityConfig, colors: themeColor }
-          : { enabled: false },
-        designState,
-        stats: {
-          likes: feed.likesCount || 0, views: feed.viewsCount || 0,
-          comments: feed.commentsCount || 0, shares: feed.shareCount || 0,
-          downloads: feed.downloadCount || 0
-        }
-      });
+      finalEnrichedFeeds.push(enrichFeedData(feed, userLikedSet, userSavedSet, userDislikedSet, footerVisibilityConfig));
     }
 
     const responseData = {
@@ -3178,6 +3098,58 @@ exports.deleteFeed = async (req, res) => {
 
 
 
+exports.getRecommendedFeedsRoute = async (req, res) => {
+  const userId = req.Id;
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: "Authentication required" });
+  }
+
+  try {
+    const mlRecommendationService = require("../../services/mlRecommendationService");
+    const { getRecommendedFeeds } = require("../../services/analytics/recommendationService");
+
+    // 1. Parallelize data fetching
+    const [feeds, metadata, userFeedActionsDoc] = await Promise.all([
+      getRecommendedFeeds(userId, page, limit),
+      getViewerMetadata(userId),
+      UserFeedActions.findOne({ userId }).select("likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean()
+    ]);
+
+    const userLikedSet = new Set((userFeedActionsDoc?.likedFeeds || []).map(l => l.feedId.toString()));
+    const userSavedSet = new Set((userFeedActionsDoc?.savedFeeds || []).map(s => s.feedId.toString()));
+    const userDislikedSet = new Set((userFeedActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString()));
+
+    // 2. Enrich feeds with interaction data and visibility configs
+    const enrichedFeeds = feeds.map(feed => 
+      enrichFeedData(feed, userLikedSet, userSavedSet, userDislikedSet, metadata.footerVisibilityConfig)
+    );
+
+    // 3. Track shown feeds
+    if (enrichedFeeds.length > 0) {
+      await mlRecommendationService.trackShownFeeds(userId, enrichedFeeds.map(f => f.feedId.toString()));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        viewer: metadata.viewer,
+        feeds: enrichedFeeds,
+        footerVisibilityConfig: metadata.footerVisibilityConfig,
+        pagination: {
+          page,
+          limit,
+          hasMore: enrichedFeeds.length === limit
+        }
+      }
+    });
+  } catch (err) {
+    console.error("❌ Recommendation Route Error:", err.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 
 

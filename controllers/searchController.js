@@ -86,6 +86,16 @@ exports.globalSearch = async (req, res) => {
       { $limit: 10 }
     ]);
 
+    // 2️⃣ Log search history if userId is available
+    if (userId) {
+      const SearchHistory = require("../models/analytics/searchHistoryModel");
+      await SearchHistory.create({
+        userId,
+        query,
+        timestamp: new Date()
+      }).catch(err => console.error("❌ Search history log failed:", err));
+    }
+
     /* -------------------------------------------
        RETURN FINAL RESPONSE
     --------------------------------------------*/

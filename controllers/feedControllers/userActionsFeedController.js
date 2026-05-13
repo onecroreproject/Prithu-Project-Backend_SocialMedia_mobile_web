@@ -20,6 +20,7 @@ const Notification = require("../../models/notificationModel.js");
 const { createAndSendNotification } = require("../../middlewares/helper/socketNotification.js");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 const { getMediaUrl } = require("../../utils/storageEngine");
+const UserFeedAnalytics = require("../../models/analytics/userFeedAnalyticsModel");
 const idToString = (id) => (id ? id.toString() : null);
 const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
@@ -64,6 +65,12 @@ exports.likeFeed = async (req, res) => {
         { $pull: { likedFeeds: { feedId } } },
         { new: true }
       );
+      
+      // Update Feed stats
+      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.likes": -1 } });
+      // Update Analytics
+      await UserFeedAnalytics.findOneAndUpdate({ userId, feedId }, { liked: false });
+
       message = "Unliked successfully";
       isLike = false;
     } else {
@@ -72,6 +79,16 @@ exports.likeFeed = async (req, res) => {
         { $push: { likedFeeds: { feedId, likedAt: new Date() } } },
         { upsert: true, new: true }
       );
+
+      // Update Feed stats
+      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.likes": 1 } });
+      // Update Analytics
+      await UserFeedAnalytics.findOneAndUpdate(
+        { userId, feedId }, 
+        { liked: true },
+        { upsert: true }
+      );
+
       message = "Liked successfully";
       isLike = true;
     }
@@ -159,6 +176,11 @@ exports.toggleDislikeFeed = async (req, res) => {
         $pull: { disLikeFeeds: { feedId: new mongoose.Types.ObjectId(feedId) } },
       });
 
+      // Update Feed stats
+      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.dislikes": -1 } });
+      // Update Analytics
+      await UserFeedAnalytics.findOneAndUpdate({ userId, feedId }, { notInterested: false });
+
       return res.status(200).json({
         success: true,
         message: "Dislike removed successfully",
@@ -176,6 +198,15 @@ exports.toggleDislikeFeed = async (req, res) => {
             },
           },
         },
+        { upsert: true }
+      );
+
+      // Update Feed stats
+      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.dislikes": 1 } });
+      // Update Analytics
+      await UserFeedAnalytics.findOneAndUpdate(
+        { userId, feedId }, 
+        { notInterested: true },
         { upsert: true }
       );
 
@@ -229,6 +260,12 @@ exports.toggleSaveFeed = async (req, res) => {
         { $pull: { savedFeeds: { feedId: feedObjectId } } },
         { new: true }
       );
+
+      // Update Feed stats
+      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.saves": -1 } });
+      // Update Analytics
+      await UserFeedAnalytics.findOneAndUpdate({ userId, feedId }, { saved: false });
+
       message = "Unsaved successfully";
     } else {
       // Not saved → push new feed object with timestamp
@@ -237,6 +274,16 @@ exports.toggleSaveFeed = async (req, res) => {
         { $push: { savedFeeds: { feedId: feedObjectId, savedAt: new Date() } } },
         { upsert: true, new: true }
       );
+
+      // Update Feed stats
+      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.saves": 1 } });
+      // Update Analytics
+      await UserFeedAnalytics.findOneAndUpdate(
+        { userId, feedId }, 
+        { saved: true },
+        { upsert: true }
+      );
+
       message = "Saved successfully";
     }
 
@@ -1351,6 +1398,15 @@ exports.shareFeed = async (req, res) => {
       { upsert: true }
     );
 
+    // Update Feed stats
+    await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.shares": 1 } });
+    // Update Analytics
+    await UserFeedAnalytics.findOneAndUpdate(
+      { userId, feedId }, 
+      { shared: true },
+      { upsert: true }
+    );
+
     await logUserActivity({
       userId,
       actionType: "SHARE_POST",
@@ -1869,6 +1925,15 @@ exports.postComment = async (req, res) => {
       targetModel: "Feed",
       metadata: { platform: "web" },
     });
+
+    // Update Feed stats
+    await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.comments": 1 } });
+    // Update Analytics
+    await UserFeedAnalytics.findOneAndUpdate(
+      { userId, feedId }, 
+      { commented: true },
+      { upsert: true }
+    );
 
 
     if (feed && feed.createdByAccount.toString() !== userId.toString()) {

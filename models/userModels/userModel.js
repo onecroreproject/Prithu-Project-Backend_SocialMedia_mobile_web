@@ -120,6 +120,22 @@ const UserSchema = new mongoose.Schema(
     // ------------ PROMOTIONAL CAMPAIGN --------------
     lastPromotionalEmailDate: { type: Date },
     promoTemplateIndex: { type: Number, default: 0 },
+
+    // ------------ ANALYTICS & RECOMMENDATION --------------
+    interestScore: {
+      type: Map,
+      of: Number,
+      default: {},
+    }, // categoryId -> score
+    categoryPreference: [{
+      categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Categories" },
+      score: { type: Number, default: 0 },
+    }],
+    engagementScore: { type: Number, default: 0 },
+    watchBehavior: {
+      averageWatchTime: { type: Number, default: 0 },
+      completionRate: { type: Number, default: 0 },
+    },
   },
   {
     timestamps: true,
