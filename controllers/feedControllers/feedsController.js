@@ -208,11 +208,18 @@ exports.getAllFeedsByUserId = async (req, res) => {
       ])
     ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
 
-    let recommendedIds = [];
+    let recoIds = [];
+    let recoScores = [];
+    let recoSources = [];
+
     if (!categoryId) {
       try {
         const mlRecos = await mlRecommendationService.getRecommendations(userId, excludeIds, null, limit);
-        recommendedIds = (mlRecos || []).map(r => new mongoose.Types.ObjectId(typeof r === "object" ? (r.feed_id || r._id) : r));
+        if (mlRecos && mlRecos.length > 0) {
+          recoIds = mlRecos.map(r => new mongoose.Types.ObjectId(r.feed_id));
+          recoScores = mlRecos.map(r => r.score || 0.5);
+          recoSources = mlRecos.map(r => r.reason || "recommended");
+        }
       } catch (mlErr) { console.warn("⚠️ ML Service Slow:", mlErr.message); }
     }
 
@@ -250,10 +257,27 @@ exports.getAllFeedsByUserId = async (req, res) => {
       {
         $addFields: {
           recoScore: {
-            $cond: {
-              if: { $in: ["$_id", recommendedIds] },
-              then: { $subtract: [100, { $indexOfArray: [recommendedIds, "$_id"] }] },
-              else: 0
+            $let: {
+              vars: { index: { $indexOfArray: [recoIds, "$_id"] } },
+              in: {
+                $cond: {
+                  if: { $eq: ["$$index", -1] },
+                  then: 0,
+                  else: { $arrayElemAt: [recoScores, "$$index"] }
+                }
+              }
+            }
+          },
+          recoSource: {
+            $let: {
+              vars: { index: { $indexOfArray: [recoIds, "$_id"] } },
+              in: {
+                $cond: {
+                  if: { $eq: ["$$index", -1] },
+                  then: "organic",
+                  else: { $arrayElemAt: [recoSources, "$$index"] }
+                }
+              }
             }
           },
           randomBoost: { $rand: {} } // Freshness boost

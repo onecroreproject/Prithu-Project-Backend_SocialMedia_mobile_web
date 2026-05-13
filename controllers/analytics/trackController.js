@@ -10,7 +10,7 @@ const mongoose = require("mongoose");
  */
 exports.trackFeedView = async (req, res) => {
   try {
-    const { feedId, deviceType, location, sessionId } = req.body;
+    const { feedId, deviceType, location, sessionId, recoScore, recoSource } = req.body;
     const userId = req.Id || null;
 
     if (!feedId) return res.status(400).json({ message: "feedId is required" });
@@ -23,6 +23,8 @@ exports.trackFeedView = async (req, res) => {
           openTimestamp: new Date(),
           deviceType: deviceType || "web",
           location: location || { type: "Point", coordinates: [0, 0] },
+          recoScore: Number(recoScore) || 0,
+          recoSource: recoSource || "organic",
         },
         $inc: { clickCount: 1 }
       },
@@ -50,7 +52,7 @@ exports.trackFeedView = async (req, res) => {
  */
 exports.trackWatchTime = async (req, res) => {
   try {
-    const { feedId, watchTime, percentageWatched, sessionId } = req.body;
+    const { feedId, watchTime, percentageWatched, sessionId, recoScore, recoSource } = req.body;
     const userId = req.Id || null;
 
     if (!feedId || watchTime === undefined) {
@@ -63,6 +65,8 @@ exports.trackWatchTime = async (req, res) => {
         $set: { 
           watchTime, 
           percentageWatched,
+          recoScore: Number(recoScore) || 0,
+          recoSource: recoSource || "organic",
           closeTimestamp: new Date() 
         }
       },
