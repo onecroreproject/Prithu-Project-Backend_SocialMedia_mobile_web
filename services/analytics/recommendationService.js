@@ -88,8 +88,8 @@ exports.getRecommendedFeeds = async (userId, page = 1, limit = 10) => {
     
     let query = {
       isApproved: true,
-      status: "published",
-      _id: { $nin: [...seenFeedIds, ...mlFeedIds] } // Exclude seen and already fetched by ML
+      status: "published"
+      // Removed exclusion of seenFeedIds to ensure content is always available
     };
 
     if (preferredCategoryIds.length > 0) {

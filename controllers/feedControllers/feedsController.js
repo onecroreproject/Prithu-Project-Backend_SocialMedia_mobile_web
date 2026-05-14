@@ -203,8 +203,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const excludeIds = [
       ...new Set([
         ...hiddenPostIds.map(id => id.toString()),
-        ...watchedFeedIds.map(id => id.toString()),
-        ...shownFeedIds.map(id => id.toString())
+        ...watchedFeedIds.map(id => id.toString())
+        // Removed shownFeedIds (Redis) from exclusion to ensure content availability for small datasets
       ])
     ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
 
@@ -458,7 +458,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
       userId: userId.toString(),
       page,
       excluded: excludeIds.length,
-      mlRecos: recommendedIds.length,
+      mlRecos: recoIds.length,
       finalReturned: finalEnrichedFeeds.length,
       status: "SUCCESS"
     });
@@ -2696,7 +2696,7 @@ exports.getTrendingFeeds = async (req, res) => {
     if (cached) return res.status(200).json(JSON.parse(cached));
 
     const trendingStart = new Date();
-    trendingStart.setDate(trendingStart.getDate() - 30);
+    trendingStart.setDate(trendingStart.getDate() - 365); // Loosened from 30 to 365 days
     trendingStart.setHours(0, 0, 0, 0);
 
     // 1️⃣ Get exclusions (Hidden & Not Interested)
@@ -2729,8 +2729,8 @@ exports.getTrendingFeeds = async (req, res) => {
         $match: {
           _id: { $nin: [
             ...new Set([
-              ...hiddenPostIds.map(id => id.toString()),
-              ...shownFeedIds.map(id => id.toString())
+              ...hiddenPostIds.map(id => id.toString())
+              // Removed shownFeedIds from exclusion
             ])
           ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) },
           category: { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
