@@ -440,13 +440,6 @@ exports.getAllFeedsByUserId = async (req, res) => {
     };
 
 
-    if (redisClient && redisClient.status === 'ready') {
-      try {
-        await redisClient.setex(cacheKey, 300, JSON.stringify(responseData)); // Lower TTL for testing
-      } catch (err) {
-        console.warn("⚠️ Redis Set Error:", err.message);
-      }
-    }
 
     // 🆕 TRACK SHOWN FEEDS (Requirement #6)
     if (finalEnrichedFeeds.length > 0) {
