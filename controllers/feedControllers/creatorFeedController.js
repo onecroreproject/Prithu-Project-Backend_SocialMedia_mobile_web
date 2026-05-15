@@ -1,6 +1,7 @@
 const Feed = require('../../models/feedModel');
 const Categories = require('../../models/categorySchema');
 const feedQueue = require("../../queue/feedPostQueue");
+const videoCompressionQueue = require("../../queues/videoCompressionQueue");
 const { logUserActivity } = require("../../middlewares/helper/logUserActivity.js");
 const User = require("../../models/userModels/userModel");
 const { saveFile } = require("../../utils/storageEngine");
@@ -164,6 +165,17 @@ exports.creatorFeedUpload = async (req, res) => {
       const notificationMessage = "Administrator just posted a new feed. Check it out now!";
       // Using an async call but not awaiting to avoid blocking response
       notifyAllUsersNewFeed(userId, newFeed._id, notificationTitle, notificationMessage, url);
+    }
+
+    // 🎬 QUEUE VIDEO COMPRESSION
+    if (type === "video") {
+      try {
+        await videoCompressionQueue.add("compress", { feedId: newFeed._id });
+        console.log(`🎬 Queued video compression for feed: ${newFeed._id}`);
+      } catch (queueErr) {
+        console.error(`❌ Failed to queue video compression: ${queueErr.message}`);
+        // Non-blocking error, we can still return success for the upload
+      }
     }
 
     return res.status(201).json({

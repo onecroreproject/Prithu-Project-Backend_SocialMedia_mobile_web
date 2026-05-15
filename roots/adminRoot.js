@@ -199,6 +199,12 @@ const {
 } = require('../controllers/profileControllers/profileController');
 
 const {
+    getCompressionStats,
+    triggerBulkCompression,
+    retryCompression
+} = require('../controllers/adminControllers/videoCompressionController');
+
+const {
     getPromoDashboardStats,
     getPromotionTemplates,
     getTemplateContent,
@@ -506,5 +512,10 @@ router.delete('/admin/updates/delete/:id', auth, checkPermission('canManageUpdat
 
 // System Metrics
 router.get("/admin/system/metrics", auth, checkPermission('canViewSystemLogs'), getSystemMetrics);
+
+/* --------------------- Admin Video Compression API --------------------- */
+router.get("/admin/video-compression/stats", auth, checkPermission('canManageFeeds'), getCompressionStats);
+router.post("/admin/video-compression/bulk-start", auth, checkPermission('canManageFeeds'), triggerBulkCompression);
+router.post("/admin/video-compression/retry/:feedId", auth, checkPermission('canManageFeeds'), retryCompression);
 
 module.exports = router;

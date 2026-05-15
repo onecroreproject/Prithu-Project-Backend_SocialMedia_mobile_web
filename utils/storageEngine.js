@@ -155,4 +155,19 @@ exports.getMediaUrl = (pathOrUrl) => {
     return `${finalBaseUrl}${normalizedPath}`;
 };
 
+exports.urlToPath = (url) => {
+    if (!url || typeof url !== 'string') return null;
+    
+    // Remove domain if present
+    let relativePath = url.replace(/^https?:\/\/[^\/]+/, "");
+    
+    // Remove /media/ prefix to get path relative to BASE_MEDIA_DIR
+    relativePath = relativePath.replace(/^\/media\//, "");
+    
+    // Replace forward slashes with system-specific separator
+    const normalizedRelative = relativePath.replace(/\//g, path.sep);
+    
+    return path.join(BASE_MEDIA_DIR, normalizedRelative);
+};
+
 exports.BASE_MEDIA_DIR = BASE_MEDIA_DIR;
