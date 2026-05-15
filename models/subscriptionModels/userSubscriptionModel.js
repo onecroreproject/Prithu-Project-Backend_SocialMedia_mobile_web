@@ -17,11 +17,9 @@ const userSubscriptionSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ["pending", "success", "failed"], default: "pending", index: true },
   createdAt: { type: Date, default: Date.now, index: true },
 
-  // Razorpay details
-  razorpayOrderId: { type: String },        // Order ID created before payment
-  razorpaySubscriptionId: { type: String }, // (Optional) Subscription ID if using Recurring
-  razorpayPaymentId: { type: String },      // Payment ID after success
-  razorpaySignature: { type: String },      // Signature for verification
+  // Instifi details
+  instifiMerchantTxnId: { type: String },
+  instifiOrderId: { type: String },
 
   invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" }, // Linked Invoice
   lastExpiryReminderDate: { type: String }, // Format: YYYY-MM-DD to track daily reminders

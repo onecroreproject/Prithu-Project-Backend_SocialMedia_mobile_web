@@ -136,10 +136,10 @@ const {
     userTrialPlanActive,
     checkUserActiveSubscription,
     checkTrialEligibility,
-    createSubscriptionOrder,
-    verifySubscriptionPayment,
-    recordPaymentFailure,
-    recordPaymentCancel,
+    // createSubscriptionOrder,
+    // verifySubscriptionPayment,
+    // recordPaymentFailure,
+    // recordPaymentCancel,
     downloadInvoice,
     getUserInvoices,
 } = require('../controllers/userControllers/userSubscriptionController');
@@ -460,11 +460,11 @@ router.put('/subscription/cancel', auth, cancelSubscription);
 router.post('/subscription/activate-trial', auth, userTrialPlanActive);
 router.get('/subscription/check-active', auth, checkUserActiveSubscription);
 router.get('/subscription/trial-eligible', auth, checkTrialEligibility);
-router.post('/subscription/create-order', auth, createSubscriptionOrder);
-router.post('/user/subscription/create-order', auth, createSubscriptionOrder); // Alias for frontend consistency
-router.post('/subscription/verify-payment', auth, verifySubscriptionPayment);
-router.post('/subscription/payment-failure', auth, recordPaymentFailure);
-router.post('/subscription/payment-cancel', auth, recordPaymentCancel);
+    // router.post('/subscription/create-order', auth, createSubscriptionOrder);
+    // router.post('/user/subscription/create-order', auth, createSubscriptionOrder); // Alias for frontend consistency
+    // router.post('/subscription/verify-payment', auth, verifySubscriptionPayment);
+    // router.post('/subscription/payment-failure', auth, recordPaymentFailure);
+    // router.post('/subscription/payment-cancel', auth, recordPaymentCancel);
 router.get('/subscription/invoice/download/:invoiceId', auth, downloadInvoice);
 router.get('/subscription/invoices', auth, getUserInvoices);
 

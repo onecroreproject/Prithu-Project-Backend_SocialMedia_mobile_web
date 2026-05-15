@@ -11,6 +11,7 @@ const { monitorMiddleware } = require("./middlewares/monitor");
 const { sharePostOG } = require("./controllers/feedControllers/userActionsFeedController");
 const adminRoot = require("./roots/adminRoot");
 const userRoot = require("./roots/userRoot");
+const paymentRoutes = require("./routes/paymentRoutes");
 
 // 🟢 MULTI-DB Connection
 require("./database");
@@ -89,6 +90,7 @@ app.get("/share/post/:feedId", sharePostOG);
 //
 app.use("/api", adminRoot);
 app.use("/web/api", userRoot);
+app.use("/web/api/payment", paymentRoutes);
 
 
 // 🟢 Cron

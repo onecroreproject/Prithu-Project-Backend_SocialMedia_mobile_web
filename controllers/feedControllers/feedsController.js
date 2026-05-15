@@ -35,6 +35,7 @@ const path = require("path");
 // const { oAuth2Client } = require("../../middlewares/services/googleDriveMedia/googleDriverAuth");
 const ProfileVisibility = require("../../models/profileVisibilitySchema.js")
 const { getMediaUrl } = require("../../utils/storageEngine");
+const mlRecommendationService = require("../../services/mlRecommendationService");
 
 const FEEDS_CACHE_PREFIX = 'user_feeds:';
 
@@ -131,6 +132,46 @@ const getViewerMetadata = async (userId) => {
 
 exports.getViewerMetadata = getViewerMetadata;
 
+/**
+ * Helper to fetch all IDs that should be excluded for a specific user.
+ * Consolidates: Hidden, Watched, Shown (Redis), Liked, Saved, Disliked.
+ */
+const getExclusionList = async (userId) => {
+  const [hiddenPosts, userFeedActionsDoc, shownFeedIds] = await Promise.all([
+    HiddenPost.find({ userId }).select("postId -_id").lean(),
+    UserFeedActions.findOne({ userId }).select("watchedFeeds.feedId likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean(),
+    mlRecommendationService.getShownFeeds(userId)
+  ]);
+
+  const hiddenPostIds = hiddenPosts.map(h => h.postId.toString());
+  const watchedFeedIds = (userFeedActionsDoc?.watchedFeeds || []).map(w => w.feedId.toString());
+  const likedFeedIds = (userFeedActionsDoc?.likedFeeds || []).map(l => l.feedId.toString());
+  const savedFeedIds = (userFeedActionsDoc?.savedFeeds || []).map(s => s.feedId.toString());
+  const dislikedFeedIds = (userFeedActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString());
+
+  const excludeIds = [
+    ...new Set([
+      ...hiddenPostIds,
+      ...watchedFeedIds,
+      ...shownFeedIds,
+      ...likedFeedIds,
+      ...savedFeedIds,
+      ...dislikedFeedIds
+    ])
+  ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+
+  return {
+    excludeIds,
+    hiddenPostIds,
+    watchedFeedIds,
+    shownFeedIds,
+    userLikedIds: likedFeedIds,
+    userSavedIds: savedFeedIds,
+    userDislikedIds: dislikedFeedIds,
+    userFeedActionsDoc
+  };
+};
+
 const enrichFeedData = (feed, userLikedSet, userSavedSet, userDislikedSet, footerVisibilityConfig) => {
   const isTemplateMode = feed.uploadType === 'template';
   const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
@@ -185,28 +226,25 @@ exports.getAllFeedsByUserId = async (req, res) => {
 
     const mlRecommendationService = require("../../services/mlRecommendationService");
 
-    const [hiddenPosts, userFeedActionsDoc, shownFeedIds, userCategories, { viewer, footerVisibilityConfig }] = await Promise.all([
-      HiddenPost.find({ userId }).select("postId -_id").lean(),
-      UserFeedActions.findOne({ userId }).select("watchedFeeds.feedId likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean(),
-      mlRecommendationService.getShownFeeds(userId),
+    const { 
+      excludeIds, 
+      userLikedIds, userSavedIds, userDislikedIds,
+      hiddenPostIds, watchedFeedIds, shownFeedIds,
+      userFeedActionsDoc 
+    } = await getExclusionList(userId);
+
+    const [userCategories, { viewer, footerVisibilityConfig }] = await Promise.all([
       UserCategory.findOne({ userId }).select("nonInterestedCategories").lean(),
       getViewerMetadata(userId)
     ]);
 
-    const hiddenPostIds = hiddenPosts.map(h => h.postId);
-    const watchedFeedIds = (userFeedActionsDoc?.watchedFeeds || []).map(w => w.feedId.toString());
-    const userLikedSet = new Set((userFeedActionsDoc?.likedFeeds || []).map(l => l.feedId.toString()));
-    const userSavedSet = new Set((userFeedActionsDoc?.savedFeeds || []).map(s => s.feedId.toString()));
-    const userDislikedSet = new Set((userFeedActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString()));
+    const userLikedSet = new Set(userLikedIds);
+    const userSavedSet = new Set(userSavedIds);
+    const userDislikedSet = new Set(userDislikedIds);
     const notInterestedCategoryIds = userCategories?.nonInterestedCategories || [];
 
-    const excludeIds = [
-      ...new Set([
-        ...hiddenPostIds.map(id => id.toString()),
-        ...watchedFeedIds.map(id => id.toString())
-        // Removed shownFeedIds (Redis) from exclusion to ensure content availability for small datasets
-      ])
-    ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+    // 🚀 DIAGNOSTIC: Log the state of exclusions
+    console.log(`🔍 FEED EXCLUSION [User: ${userId}]: Total=${excludeIds.length} (Hidden: ${hiddenPostIds.length}, Watched: ${watchedFeedIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
 
     let recoIds = [];
     let recoScores = [];
@@ -216,45 +254,54 @@ exports.getAllFeedsByUserId = async (req, res) => {
       try {
         const mlRecos = await mlRecommendationService.getRecommendations(userId, excludeIds, null, limit);
         if (mlRecos && mlRecos.length > 0) {
+          console.log(`🤖 ML Active: Delivering ${mlRecos.length} recommendations for user ${userId}`);
           recoIds = mlRecos.map(r => new mongoose.Types.ObjectId(r.feed_id));
           recoScores = mlRecos.map(r => r.score || 0.5);
           recoSources = mlRecos.map(r => r.reason || "recommended");
+        } else {
+          console.log(`🏠 ML Inactive/Empty: Falling back to organic randomized feed for user ${userId}`);
         }
-      } catch (mlErr) { console.warn("⚠️ ML Service Slow:", mlErr.message); }
+      } catch (mlErr) { 
+        console.warn("⚠️ ML Service Offline/Slow:", mlErr.message); 
+        console.log(`🏠 ML Inactive: Falling back to organic randomized feed for user ${userId}`);
+      }
+    } else {
+       console.log(`📂 Category Feed: Delivering organic feeds for category ${categoryId}`);
     }
 
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE (Hybrid Sort & Randomization)
     ------------------------------------------------------*/
-    const feeds = await Feed.aggregate([
+    const finalExcludeIds = categoryId 
+      ? hiddenPostIds.map(id => new mongoose.Types.ObjectId(id))
+      : excludeIds;
+
+    const pipeline = [
       {
         $match: {
-          _id: { $nin: excludeIds },
+          _id: { $nin: finalExcludeIds },
           isApproved: true,
           isDeleted: false,
           status: "published",
           category: categoryId
             ? new mongoose.Types.ObjectId(categoryId)
             : { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
-          // ✅ Filter 1: Visibility — only published feeds where schedule has elapsed
           $and: [
             {
               $or: [
                 { status: "published", isScheduled: { $ne: true } },
-                {
-                  status: "published",
-                  isScheduled: true,
-                  scheduleDate: { $lte: new Date() }
-                }
+                { status: "published", isScheduled: true, scheduleDate: { $lte: new Date() } }
               ]
             }
           ],
-          ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } :
-            postType ? { postType } : {})
+          ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } : postType ? { postType } : {})
         },
-      },
-      // 📊 SCORING: Prioritize recommended IDs if available
-      {
+      }
+    ];
+
+    // 📊 SCORING: Only apply ML calculation for the "All" category (no categoryId)
+    if (!categoryId) {
+      pipeline.push({
         $addFields: {
           recoScore: {
             $let: {
@@ -280,14 +327,21 @@ exports.getAllFeedsByUserId = async (req, res) => {
               }
             }
           },
-          randomBoost: { $rand: {} } // Freshness boost
+          randomBoost: { $rand: {} }
         }
-      },
-      // PRIORITY: Reco Score -> Random Discovery -> Newest
-      { $sort: { recoScore: -1, randomBoost: -1, createdAt: -1 } },
-      { $skip: (page - 1) * limit },
-      { $limit: limit },
+      });
+      // ML Priority Sort
+      pipeline.push({ $sort: { recoScore: -1, createdAt: -1, randomBoost: -1 } });
+    } else {
+      // Shuffled Sort for specific categories (Random discovery)
+      pipeline.push({ $addFields: { randomShuffle: { $rand: {} } } });
+      pipeline.push({ $sort: { randomShuffle: 1 } });
+    }
 
+    pipeline.push({ $skip: (page - 1) * limit });
+    pipeline.push({ $limit: limit });
+
+    pipeline.push(
       // 🛑 OPTIMIZED LOOKUPS
       { $addFields: { effectiveCreatorId: { $ifNull: ["$postedBy.userId", "$createdByAccount"] } } },
       { $lookup: { from: "Admin", localField: "effectiveCreatorId", foreignField: "_id", pipeline: [{ $project: { userName: 1, name: 1 } }], as: "admin" } },
@@ -403,7 +457,9 @@ exports.getAllFeedsByUserId = async (req, res) => {
           effectiveCreatorId: 0, fileHash: 0, __v: 0
         }
       }
-    ]);
+    );
+
+    const feeds = await Feed.aggregate(pipeline);
 
     /* -----------------------------------------------------
        ✅ 4️⃣ POST-PROCESSING (Normal vs Template Logic)
@@ -413,15 +469,17 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const finalEnrichedFeeds = [];
 
     for (const feed of feeds) {
-      // 🛑 Diversity Check: Max 5 consecutive feeds from same category
-      const currentCatId = feed.category?.toString();
-      if (currentCatId === lastCategoryId) {
-        categoryStreak++;
-      } else {
-        categoryStreak = 1;
-        lastCategoryId = currentCatId;
+      // 🛑 Diversity Check: Max 5 consecutive feeds from same category (Only active for main feed)
+      if (!categoryId) {
+        const currentCatId = feed.category?.toString();
+        if (currentCatId === lastCategoryId) {
+          categoryStreak++;
+        } else {
+          categoryStreak = 1;
+          lastCategoryId = currentCatId;
+        }
+        if (categoryStreak > 5) continue;
       }
-      if (categoryStreak > 5) continue;
 
       finalEnrichedFeeds.push(enrichFeedData(feed, userLikedSet, userSavedSet, userDislikedSet, footerVisibilityConfig));
     }
@@ -528,15 +586,16 @@ exports.getBirthdayFeeds = async (req, res) => {
       socialLinks: safeSocialLinks,
     };
 
-    /* ── 2. HIDDEN POSTS & NOT-INTERESTED CATEGORIES ─── */
-    const hiddenPosts = await HiddenPost.find({ userId }).select("postId -_id").lean();
-    hiddenPostIds = hiddenPosts.map((h) => h.postId);
+    /* ── 2. EXCLUSIONS (Standardized) ─── */
+    const { excludeIds, hiddenPostIds, watchedFeedIds, shownFeedIds, userLikedIds, userSavedIds } = await getExclusionList(userId);
+
+    console.log(`🏠 Organic: Generating Birthday feed for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
 
     /* ── 3. AGGREGATION (Birthday category hardcoded) ── */
     const feeds = await Feed.aggregate([
       {
         $match: {
-          _id: { $nin: hiddenPostIds },
+          _id: { $nin: hiddenPostIds.map(id => new mongoose.Types.ObjectId(id)) },
           category: BIRTHDAY_CATEGORY_ID,
           $or: [
             { isScheduled: { $ne: true } },
@@ -552,7 +611,8 @@ exports.getBirthdayFeeds = async (req, res) => {
               : {}),
         },
       },
-      { $sort: { createdAt: -1 } },
+      { $addFields: { randomShuffle: { $rand: {} } } },
+      { $sort: { randomShuffle: 1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit },
 
@@ -722,7 +782,7 @@ exports.getBirthdayFeeds = async (req, res) => {
     });
 
     const total = await Feed.countDocuments({
-      _id: { $nin: hiddenPostIds },
+      _id: { $nin: excludeIds },
       category: BIRTHDAY_CATEGORY_ID,
       $or: [
         { isScheduled: { $ne: true } },
@@ -733,6 +793,11 @@ exports.getBirthdayFeeds = async (req, res) => {
       status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
       ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } : postType ? { postType } : {}),
     });
+
+    // 🆕 TRACK SHOWN FEEDS
+    if (enrichedFeeds.length > 0) {
+      await mlRecommendationService.trackShownFeeds(userId, enrichedFeeds.map(f => f.feedId.toString()));
+    }
 
     res.status(200).json({
       success: true,
@@ -812,15 +877,16 @@ exports.getAnniversaryFeeds = async (req, res) => {
       socialLinks: safeSocialLinks,
     };
 
-    /* ── 2. HIDDEN POSTS & NOT-INTERESTED CATEGORIES ─── */
-    const hiddenPosts = await HiddenPost.find({ userId }).select("postId -_id").lean();
-    hiddenPostIds = hiddenPosts.map((h) => h.postId);
+    /* ── 2. EXCLUSIONS (Standardized) ─── */
+    const { excludeIds, hiddenPostIds, watchedFeedIds, shownFeedIds, userLikedIds, userSavedIds } = await getExclusionList(userId);
+
+    console.log(`🏠 Organic: Generating Anniversary feed for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
 
     /* ── 3. AGGREGATION (Anniversary category hardcoded) ── */
     const feeds = await Feed.aggregate([
       {
         $match: {
-          _id: { $nin: hiddenPostIds },
+          _id: { $nin: hiddenPostIds.map(id => new mongoose.Types.ObjectId(id)) },
           category: ANNIVERSARY_CATEGORY_ID,
           $or: [
             { isScheduled: { $ne: true } },
@@ -836,7 +902,8 @@ exports.getAnniversaryFeeds = async (req, res) => {
               : {}),
         },
       },
-      { $sort: { createdAt: -1 } },
+      { $addFields: { randomShuffle: { $rand: {} } } },
+      { $sort: { randomShuffle: 1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit },
 
@@ -1006,7 +1073,7 @@ exports.getAnniversaryFeeds = async (req, res) => {
     });
 
     const total = await Feed.countDocuments({
-      _id: { $nin: hiddenPostIds },
+      _id: { $nin: excludeIds },
       category: ANNIVERSARY_CATEGORY_ID,
       $or: [
         { isScheduled: { $ne: true } },
@@ -1017,6 +1084,11 @@ exports.getAnniversaryFeeds = async (req, res) => {
       status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
       ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } : postType ? { postType } : {}),
     });
+
+    // 🆕 TRACK SHOWN FEEDS
+    if (enrichedFeeds.length > 0) {
+      await mlRecommendationService.trackShownFeeds(userId, enrichedFeeds.map(f => f.feedId.toString()));
+    }
 
     res.status(200).json({
       success: true,
@@ -1096,15 +1168,16 @@ exports.getPoliticsFeeds = async (req, res) => {
       socialLinks: safeSocialLinks,
     };
 
-    /* ── 2. HIDDEN POSTS & NOT-INTERESTED CATEGORIES ─── */
-    const hiddenPosts = await HiddenPost.find({ userId }).select("postId -_id").lean();
-    hiddenPostIds = hiddenPosts.map((h) => h.postId);
+    /* ── 2. EXCLUSIONS (Standardized) ─── */
+    const { excludeIds, hiddenPostIds, watchedFeedIds, shownFeedIds, userLikedIds, userSavedIds } = await getExclusionList(userId);
+
+    console.log(`🏠 Organic: Generating Politics feed for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
 
     /* ── 3. AGGREGATION (Politics category hardcoded) ── */
     const feeds = await Feed.aggregate([
       {
         $match: {
-          _id: { $nin: hiddenPostIds },
+          _id: { $nin: hiddenPostIds.map(id => new mongoose.Types.ObjectId(id)) },
           category: POLITICS_CATEGORY_ID,
           $or: [
             { isScheduled: { $ne: true } },
@@ -1120,7 +1193,8 @@ exports.getPoliticsFeeds = async (req, res) => {
               : {}),
         },
       },
-      { $sort: { createdAt: -1 } },
+      { $addFields: { randomShuffle: { $rand: {} } } },
+      { $sort: { randomShuffle: 1 } },
       { $skip: (page - 1) * limit },
       { $limit: limit },
 
@@ -1290,7 +1364,7 @@ exports.getPoliticsFeeds = async (req, res) => {
     });
 
     const total = await Feed.countDocuments({
-      _id: { $nin: hiddenPostIds },
+      _id: { $nin: excludeIds },
       category: POLITICS_CATEGORY_ID,
       $or: [
         { isScheduled: { $ne: true } },
@@ -1301,6 +1375,11 @@ exports.getPoliticsFeeds = async (req, res) => {
       status: { $in: ["Published", "Scheduled", "published", "scheduled"] },
       ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } : postType ? { postType } : {}),
     });
+
+    // 🆕 TRACK SHOWN FEEDS
+    if (enrichedFeeds.length > 0) {
+      await mlRecommendationService.trackShownFeeds(userId, enrichedFeeds.map(f => f.feedId.toString()));
+    }
 
     res.status(200).json({
       success: true,
@@ -1349,19 +1428,12 @@ exports.getFeedsByHashtag = async (req, res) => {
     const limit = Math.max(5, Math.min(50, Number(req.query.limit || 10)));
     const skip = (page - 1) * limit;
 
-    /* -------------------------------------------------
-       1) Hidden Posts
-    -------------------------------------------------- */
-    const hiddenPosts = await HiddenPost.find({ userId })
-      .select("postId -_id")
-      .lean();
-    const hiddenPostIds = hiddenPosts.map((x) => x.postId);
-
-    /* -------------------------------------------------
-       2) User "Not Interested" Categories
-    -------------------------------------------------- */
+    /* ── 1. EXCLUSIONS (Standardized) ─── */
+    const { excludeIds, hiddenPostIds, watchedFeedIds, shownFeedIds, userLikedIds, userSavedIds } = await getExclusionList(userId);
     const userCat = await UserCategory.findOne({ userId }).lean();
     const notCats = userCat?.nonInterestedCategories || [];
+
+    console.log(`🏠 Organic: Generating Hashtag feed (#${tag}) for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
 
     /* -------------------------------------------------
        3) AGGREGATION PIPELINE
@@ -1369,7 +1441,7 @@ exports.getFeedsByHashtag = async (req, res) => {
     const pipeline = [
       {
         $match: {
-          _id: { $nin: hiddenPostIds },
+          _id: { $nin: excludeIds },
           category: { $nin: notCats },
           hashtags: { $in: [tag] },
           $or: [
@@ -1381,7 +1453,8 @@ exports.getFeedsByHashtag = async (req, res) => {
         }
       },
 
-      { $sort: { createdAt: -1 } },
+      { $addFields: { randomShuffle: { $rand: {} } } },
+      { $sort: { randomShuffle: 1 } },
       { $skip: skip },
       { $limit: limit },
 
@@ -1624,6 +1697,11 @@ exports.getFeedsByHashtag = async (req, res) => {
           gradient: "linear-gradient(135deg,#fff,#ccc,#999)"
         }
     }));
+
+    // 🆕 TRACK SHOWN FEEDS
+    if (finalFeeds.length > 0) {
+      await mlRecommendationService.trackShownFeeds(userId, feeds.map(f => f._id.toString()));
+    }
 
     return res.json({
       success: true,
