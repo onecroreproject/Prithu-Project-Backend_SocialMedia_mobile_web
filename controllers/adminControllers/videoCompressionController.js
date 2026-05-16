@@ -19,6 +19,9 @@ exports.getCompressionStats = async (req, res) => {
       .limit(5)
       .lean();
 
+    const isPaused = await videoCompressionQueue.isPaused();
+    const waitingCount = await videoCompressionQueue.getWaitingCount();
+
     return res.status(200).json({
       success: true,
       stats: {
@@ -28,7 +31,9 @@ exports.getCompressionStats = async (req, res) => {
         pending,
         processing,
         failed,
-        percentage: totalVideos > 0 ? Math.round((compressed / totalVideos) * 100) : 0
+        percentage: totalVideos > 0 ? Math.round((compressed / totalVideos) * 100) : 0,
+        isPaused,
+        waitingCount
       },
       recentFailures
     });
@@ -95,6 +100,49 @@ exports.retryCompression = async (req, res) => {
     return res.status(200).json({ success: true, message: "Compression job retried" });
   } catch (error) {
     console.error("Error retrying compression:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+/**
+ * Pause or Resume the compression queue
+ */
+exports.toggleQueue = async (req, res) => {
+  try {
+    const isPaused = await videoCompressionQueue.isPaused();
+    if (isPaused) {
+      await videoCompressionQueue.resume();
+      return res.status(200).json({ success: true, message: "Compression queue resumed", isPaused: false });
+    } else {
+      await videoCompressionQueue.pause();
+      return res.status(200).json({ success: true, message: "Compression queue paused", isPaused: true });
+    }
+  } catch (error) {
+    console.error("Error toggling queue:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+/**
+ * Stop all and clear queue
+ */
+exports.stopAllCompression = async (req, res) => {
+  try {
+    // 1. Drain the queue (remove waiting jobs)
+    await videoCompressionQueue.drain();
+    
+    // 2. Clear all failed/completed jobs if needed (optional)
+    await videoCompressionQueue.clean(0, 1000, 'wait');
+    await videoCompressionQueue.clean(0, 1000, 'active'); // Note: cleaning active won't kill the process, just remove the job from redis tracking
+    
+    // 3. Reset processing feeds in DB
+    await Feed.updateMany(
+      { compressionStatus: "processing" },
+      { compressionStatus: "pending", compressionLocked: false }
+    );
+
+    return res.status(200).json({ success: true, message: "All compression jobs stopped and queue cleared" });
+  } catch (error) {
+    console.error("Error stopping compression:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

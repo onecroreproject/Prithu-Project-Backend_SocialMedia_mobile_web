@@ -201,7 +201,9 @@ const {
 const {
     getCompressionStats,
     triggerBulkCompression,
-    retryCompression
+    retryCompression,
+    toggleQueue,
+    stopAllCompression
 } = require('../controllers/adminControllers/videoCompressionController');
 
 const {
@@ -364,6 +366,7 @@ router.get("/admin/analytics/time-insights", auth, checkPermission('canManageSal
 router.get("/admin/analytics/day-insights", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getDayOfWeekInsights);
 router.get("/admin/analytics/export-csv", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.exportAnalyticsCSV);
 router.get("/admin/analytics/search-users", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.searchUsersForExport);
+router.get("/admin/analytics/get-feed-analysis/:feedId", auth, checkPermission('canManageSalesDashboard'), analyticsDashboardController.getFeedAnalysis);
 
 /* --------------------- Admin Creator API --------------------- */
 router.get('/admin/getall/creators', auth, checkPermission('canManageCreators'), require('../controllers/creatorControllers/creatorDetailController').getAllCreatorDetails);
@@ -516,6 +519,8 @@ router.get("/admin/system/metrics", auth, checkPermission('canViewSystemLogs'), 
 /* --------------------- Admin Video Compression API --------------------- */
 router.get("/admin/video-compression/stats", auth, checkPermission('canManageFeeds'), getCompressionStats);
 router.post("/admin/video-compression/bulk-start", auth, checkPermission('canManageFeeds'), triggerBulkCompression);
+router.post("/admin/video-compression/toggle-queue", auth, checkPermission('canManageFeeds'), toggleQueue);
+router.post("/admin/video-compression/stop-all", auth, checkPermission('canManageFeeds'), stopAllCompression);
 router.post("/admin/video-compression/retry/:feedId", auth, checkPermission('canManageFeeds'), retryCompression);
 
 module.exports = router;

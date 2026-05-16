@@ -667,3 +667,74 @@ exports.triggerMLTraining = async (req, res) => {
     res.status(500).json({ message: "Failed to trigger ML training" });
   }
 };
+/**
+ * 📊 Get Detailed Analysis for a specific feed
+ */
+exports.getFeedAnalysis = async (req, res) => {
+  try {
+    const { feedId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(feedId)) {
+      return res.status(400).json({ message: "Invalid Feed ID" });
+    }
+
+    const [stats, feed] = await Promise.all([
+      UserFeedAnalytics.aggregate([
+        { $match: { feedId: new mongoose.Types.ObjectId(feedId) } },
+        {
+          $group: {
+            _id: null,
+            views: { $sum: 1 },
+            totalWatchTime: { $sum: "$watchTime" },
+            avgWatchTime: { $avg: "$watchTime" },
+            avgCompletion: { $avg: "$percentageWatched" },
+            likes: { $sum: { $cond: ["$liked", 1, 0] } },
+            shares: { $sum: { $cond: ["$shared", 1, 0] } },
+            saves: { $sum: { $cond: ["$saved", 1, 0] } },
+            replays: { $sum: { $cond: [{ $gt: ["$replayCount", 0] }, 1, 0] } },
+            sourceBreakdown: {
+              $push: {
+                source: { $ifNull: ["$recoSource", "organic"] },
+                watched: "$percentageWatched"
+              }
+            }
+          }
+        }
+      ]),
+      Feed.findById(feedId).select("caption mediaUrl engagementStats playbackStats recoScore recoSource").lean()
+    ]);
+
+    if (!feed) {
+      return res.status(404).json({ message: "Feed not found" });
+    }
+
+    const s = stats[0] || { views: 0, totalWatchTime: 0, avgWatchTime: 0, avgCompletion: 0, likes: 0, shares: 0, saves: 0, replays: 0, sourceBreakdown: [] };
+
+    // Calculate source metrics
+    const sources = {};
+    s.sourceBreakdown.forEach(item => {
+      if (!sources[item.source]) {
+        sources[item.source] = { count: 0, totalCompletion: 0 };
+      }
+      sources[item.source].count++;
+      sources[item.source].totalCompletion += item.watched;
+    });
+
+    const formattedSources = Object.keys(sources).map(key => ({
+      name: key,
+      count: sources[key].count,
+      avgCompletion: (sources[key].totalCompletion / sources[key].count).toFixed(1)
+    }));
+
+    res.status(200).json({
+      success: true,
+      feed,
+      stats: {
+        ...s,
+        sourceBreakdown: formattedSources
+      }
+    });
+  } catch (err) {
+    console.error("❌ getFeedAnalysis Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
