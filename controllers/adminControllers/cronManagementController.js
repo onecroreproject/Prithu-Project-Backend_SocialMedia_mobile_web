@@ -55,3 +55,71 @@ exports.triggerCron = async (req, res) => {
         res.status(500).json({ success: false, message: err.message || "Failed to trigger task" });
     }
 };
+
+/**
+ * Get ML Metadata Analysis stats
+ * GET /api/admin/ml-metadata/stats
+ */
+exports.getMLMetadataStats = async (req, res) => {
+    try {
+        const Feed = require("../../models/feedModel");
+        const mlMetadataQueue = require("../../queue/mlMetadataQueue");
+
+        const [total, analyzed, pending, failed, processing] = await Promise.all([
+            Feed.countDocuments({ isDeleted: false, status: "published" }),
+            Feed.countDocuments({ isDeleted: false, status: "published", "mlMetadata.analyzed": true }),
+            Feed.countDocuments({ isDeleted: false, status: "published", $or: [{ "mlMetadata.analyzed": { $ne: true } }, { "mlMetadata": { $exists: false } }] }),
+            Feed.countDocuments({ isDeleted: false, status: "published", "mlMetadata.processingStatus": "failed" }),
+            Feed.countDocuments({ isDeleted: false, status: "published", "mlMetadata.processingStatus": "processing" })
+        ]);
+
+        const waitingCount = await mlMetadataQueue.getWaitingCount();
+        const activeCount = await mlMetadataQueue.getActiveCount();
+        const isPaused = await mlMetadataQueue.isPaused();
+
+        res.status(200).json({
+            success: true,
+            stats: {
+                total,
+                analyzed,
+                pending,
+                failed,
+                processing,
+                queue: {
+                    waiting: waitingCount,
+                    active: activeCount,
+                    isPaused
+                }
+            }
+        });
+    } catch (err) {
+        console.error("Get ML stats error:", err);
+        res.status(500).json({ success: false, message: "Failed to fetch ML stats" });
+    }
+};
+
+/**
+ * Toggle ML Metadata Queue (Pause/Resume)
+ * POST /api/admin/ml-metadata/toggle
+ */
+exports.toggleMLMetadataQueue = async (req, res) => {
+    try {
+        const mlMetadataQueue = require("../../queue/mlMetadataQueue");
+        const isPaused = await mlMetadataQueue.isPaused();
+
+        if (isPaused) {
+            await mlMetadataQueue.resume();
+        } else {
+            await mlMetadataQueue.pause();
+        }
+
+        res.status(200).json({
+            success: true,
+            message: isPaused ? "ML Analysis service RESUMED" : "ML Analysis service PAUSED",
+            isPaused: !isPaused
+        });
+    } catch (err) {
+        console.error("Toggle ML queue error:", err);
+        res.status(500).json({ success: false, message: "Failed to toggle ML service" });
+    }
+};

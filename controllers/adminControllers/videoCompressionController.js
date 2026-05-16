@@ -22,6 +22,33 @@ exports.getCompressionStats = async (req, res) => {
     const isPaused = await videoCompressionQueue.isPaused();
     const waitingCount = await videoCompressionQueue.getWaitingCount();
 
+    const compressedFeeds = await Feed.find({
+      postType: "video",
+      isCompressed: true,
+      isDeleted: false
+    }).select("files mediaUrl").lean();
+
+    let totalOriginalSize = 0;
+    let totalCompressedSize = 0;
+    const fs = require('fs');
+    const { urlToPath } = require("../../utils/storageEngine");
+
+    for (const feed of compressedFeeds) {
+      const dbSize = feed.files[0]?.size || 0;
+      const url = feed.files[0]?.url || feed.mediaUrl;
+      const filePath = urlToPath(url);
+
+      if (dbSize > 0 && filePath && fs.existsSync(filePath)) {
+        try {
+          const actualSize = fs.statSync(filePath).size;
+          totalOriginalSize += dbSize;
+          totalCompressedSize += actualSize;
+        } catch (e) {
+          // Skip if error reading file
+        }
+      }
+    }
+
     return res.status(200).json({
       success: true,
       stats: {
@@ -33,7 +60,10 @@ exports.getCompressionStats = async (req, res) => {
         failed,
         percentage: totalVideos > 0 ? Math.round((compressed / totalVideos) * 100) : 0,
         isPaused,
-        waitingCount
+        waitingCount,
+        totalOriginalSize,
+        totalCompressedSize,
+        savingsBytes: totalOriginalSize - totalCompressedSize
       },
       recentFailures
     });
@@ -48,20 +78,31 @@ exports.getCompressionStats = async (req, res) => {
  */
 exports.triggerBulkCompression = async (req, res) => {
   try {
+    // Find videos that are NOT compressed, NOT currently processing, and NOT locked
     const feeds = await Feed.find({
       postType: "video",
       isCompressed: { $ne: true },
+      compressionStatus: { $nin: ["processing", "completed"] },
+      compressionLocked: { $ne: true },
       isDeleted: false
     }).select("_id");
 
     if (feeds.length === 0) {
-      return res.status(200).json({ success: true, message: "All videos are already compressed" });
+      return res.status(200).json({ success: true, message: "All videos are already compressed or in queue" });
     }
 
+    // Mark as pending to prevent immediate re-triggering while queuing
+    await Feed.updateMany(
+      { _id: { $in: feeds.map(f => f._id) } },
+      { compressionStatus: "pending", compressionLocked: false }
+    );
+
     let queuedCount = 0;
-    console.log(`🚀 [Bulk Compression] Found ${feeds.length} uncompressed videos. Queuing...`);
+    console.log(`🚀 [Bulk Compression] Found ${feeds.length} eligible videos. Queuing...`);
     for (const feed of feeds) {
-      await videoCompressionQueue.add("compress", { feedId: feed._id });
+      await videoCompressionQueue.add("compress", { feedId: feed._id }, {
+        jobId: `compress_${feed._id}` // Use jobId to prevent BullMQ duplicates
+      });
       queuedCount++;
     }
     console.log(`✅ [Bulk Compression] Successfully queued ${queuedCount} jobs.`);

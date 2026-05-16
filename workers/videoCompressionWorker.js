@@ -33,7 +33,13 @@ const worker = new Worker(
       return;
     }
 
-    // 1. Lock Check
+    // 1. Double Check: Skip if already compressed
+    if (feed.isCompressed) {
+      console.log(`✅ [Worker] Feed ${feedId} is already compressed. Skipping.`);
+      return;
+    }
+
+    // 2. Lock Check
     if (feed.compressionLocked) {
       console.warn(`⏳ [Worker] Feed ${feedId} is already being processed. Skipping.`);
       return;

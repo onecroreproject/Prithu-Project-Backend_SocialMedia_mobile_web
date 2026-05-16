@@ -13,6 +13,8 @@ const promotionalEmailQueue = require("../queue/promotionalEmailQueue");
 const cleanupInactiveSessions = require("../scripts/sessionCleanup");
 const redisClient = require("../Config/redisConfig");
 const { recalculateAllScores } = require("../scripts/recalculateRecommendations");
+const mlMetadataQueue = require("../queue/mlMetadataQueue");
+require("../workers/mlMetadataWorker"); // Start the worker
 
 const CAMPAIGN_PAUSE_KEY = "promo_campaign_paused";
 
@@ -175,6 +177,40 @@ const taskRegistry = [
       await recalculateAllScores();
       const mlRecommendationService = require("../services/mlRecommendationService");
       await mlRecommendationService.triggerRefresh();
+    }
+  },
+  {
+    id: "ml_metadata_generation",
+    name: "ML Metadata Generation",
+    schedule: "0 0 * * *", // Midnight daily
+    description: "Generates ML recommendation metadata for new feeds (Midnight)",
+    action: async () => {
+      console.log("🚀 Starting Midnight ML Metadata Generation...");
+      const Feed = require("../models/feedModel");
+
+      // Find feeds that are published, not deleted, and NOT yet analyzed
+      const feeds = await Feed.find({
+        status: "published",
+        isDeleted: false,
+        $or: [
+          { "mlMetadata.analyzed": { $ne: true } },
+          { "mlMetadata": { $exists: false } }
+        ]
+      }).select("_id").lean();
+
+      console.log(`📊 Found ${feeds.length} feeds needing ML analysis.`);
+
+      // Batch add to queue (50 at a time logic is handled by the worker concurrency, 
+      // but we add them all to the queue here)
+      for (const feed of feeds) {
+        await mlMetadataQueue.add({ feedId: feed._id }, {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60000 }, // Retry after 1 min
+          removeOnComplete: true
+        });
+      }
+
+      return { totalFound: feeds.length };
     }
   }
 ];

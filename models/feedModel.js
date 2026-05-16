@@ -485,7 +485,28 @@ const feedSchema = new mongoose.Schema(
       index: true
     },
     compressionStartedAt: { type: Date },
-    compressionCompletedAt: { type: Date }
+    compressionCompletedAt: { type: Date },
+    // ========== ML RECOMMENDATION METADATA ==========
+    mlMetadata: {
+      analyzed: { type: Boolean, default: false, index: true },
+      analyzedAt: { type: Date },
+      topics: [{ type: String }],
+      detectedObjects: [{ type: String }],
+      speechKeywords: [{ type: String }],
+      recommendationTags: [{ type: String }],
+      contentType: { type: String },
+      subCategory: { type: String },
+      freshnessScore: { type: Number, default: 0 },
+      confidenceScore: { type: Number, default: 0 },
+      embeddingGenerated: { type: Boolean, default: false },
+      processingStatus: {
+        type: String,
+        enum: ["pending", "processing", "completed", "failed"],
+        default: "pending",
+        index: true
+      },
+      errorMessage: { type: String }
+    }
   },
   {
     timestamps: true,

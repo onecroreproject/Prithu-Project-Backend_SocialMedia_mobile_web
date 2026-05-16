@@ -523,4 +523,8 @@ router.post("/admin/video-compression/toggle-queue", auth, checkPermission('canM
 router.post("/admin/video-compression/stop-all", auth, checkPermission('canManageFeeds'), stopAllCompression);
 router.post("/admin/video-compression/retry/:feedId", auth, checkPermission('canManageFeeds'), retryCompression);
 
+/* --------------------- Admin ML Metadata API --------------------- */
+router.get("/admin/ml-metadata/stats", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/cronManagementController').getMLMetadataStats);
+router.post("/admin/ml-metadata/toggle", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/cronManagementController').toggleMLMetadataQueue);
+
 module.exports = router;
