@@ -101,13 +101,22 @@ exports.getRecommendedFeeds = async (userId, page = 1, limit = 10) => {
       .limit(limit) 
       .lean();
 
-    // 3. Blend Results
+    // 3. Cold Start / New Content Discovery (10%)
+    const freshFeeds = await Feed.find({
+      isApproved: true,
+      status: "published",
+      createdAt: { $gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+      "playbackStats.totalViews": { $lt: 500 }
+    }).limit(2).lean();
+
+    // 4. Blend Results
     const mlFeeds = await Feed.find({ _id: { $in: mlFeedIds } }).lean();
     
     // Maintain ML order but keep feed objects
     const sortedMlFeeds = mlFeedIds.map(id => mlFeeds.find(f => f._id.toString() === id.toString())).filter(Boolean);
 
-    const finalFeeds = [...sortedMlFeeds, ...localFeeds].slice(0, limit);
+    // Final Blend: ML (60%) + Local/Trending (30%) + Fresh (10%)
+    const finalFeeds = [...sortedMlFeeds, ...freshFeeds, ...localFeeds].slice(0, limit);
 
     return finalFeeds;
   } catch (err) {

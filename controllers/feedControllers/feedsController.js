@@ -154,8 +154,6 @@ const getExclusionList = async (userId) => {
       ...hiddenPostIds,
       ...watchedFeedIds,
       ...shownFeedIds,
-      ...likedFeedIds,
-      ...savedFeedIds,
       ...dislikedFeedIds
     ])
   ].filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
@@ -459,7 +457,19 @@ exports.getAllFeedsByUserId = async (req, res) => {
       }
     );
 
-    const feeds = await Feed.aggregate(pipeline);
+    let feeds = await Feed.aggregate(pipeline);
+
+    // 🔄 FALLBACK: If pool is empty on Page 1, clear shown history to prevent "No Content" error
+    if (feeds.length === 0 && page === 1 && !categoryId) {
+      const redisClient = require("../../Config/redisConfig");
+      if (redisClient && redisClient.status === "ready") {
+        await redisClient.del(`shown_feeds:${userId}`);
+        // Re-run query one last time without the "shown" filter
+        const { excludeIds: freshExcludeIds } = await getExclusionList(userId); // This will now have empty shownFeedIds
+        pipeline[0].$match._id.$nin = categoryId ? hiddenPostIds : freshExcludeIds;
+        feeds = await Feed.aggregate(pipeline);
+      }
+    }
 
     /* -----------------------------------------------------
        ✅ 4️⃣ POST-PROCESSING (Normal vs Template Logic)
