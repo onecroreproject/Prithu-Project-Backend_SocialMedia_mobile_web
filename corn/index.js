@@ -181,36 +181,55 @@ const taskRegistry = [
   },
   {
     id: "ml_metadata_generation",
-    name: "ML Metadata Generation",
-    schedule: "0 0 * * *", // Midnight daily
-    description: "Generates ML recommendation metadata for new feeds (Midnight)",
+    name: "ML Metadata Intelligence (v2)",
+    schedule: "0 2 * * *", // 2 AM daily (Low Traffic)
+    description: "Deep AI content analysis & metadata upgrade (v2)",
     action: async () => {
-      console.log("🚀 Starting Midnight ML Metadata Generation...");
+      console.log("🚀 Starting Deep AI Metadata Generation (v2)...");
       const Feed = require("../models/feedModel");
 
-      // Find feeds that are published, not deleted, and NOT yet analyzed
-      const feeds = await Feed.find({
+      // Find feeds that:
+      // 1. Are published & not deleted
+      // 2. Are NOT currently being processed
+      // 3. EITHER never analyzed OR analyzed with old version (v1)
+      const query = {
         status: "published",
         isDeleted: false,
+        "mlMetadata.processingStatus": { $ne: "processing" },
         $or: [
           { "mlMetadata.analyzed": { $ne: true } },
+          { "mlMetadata.aiVersion": { $lt: 2 } },
           { "mlMetadata": { $exists: false } }
         ]
-      }).select("_id").lean();
+      };
 
-      console.log(`📊 Found ${feeds.length} feeds needing ML analysis.`);
+      // DYNAMIC BATCHING STRATEGY
+      // Image feeds: ~50 feeds
+      // Short videos: ~10 feeds
+      // Long videos: ~3 feeds
+      
+      const [images, shortVideos, longVideos] = await Promise.all([
+        Feed.find({ ...query, postType: "image" }).select("_id").limit(50).sort({ "mlMetadata.aiVersion": 1 }).lean(),
+        Feed.find({ ...query, postType: "video" }).select("_id").limit(10).sort({ "mlMetadata.aiVersion": 1 }).lean(),
+        Feed.find({ ...query, postType: "video" }).select("_id").skip(10).limit(3).sort({ "mlMetadata.aiVersion": 1 }).lean() // Simple proxy for "Longer"
+      ]);
 
-      // Batch add to queue (50 at a time logic is handled by the worker concurrency, 
-      // but we add them all to the queue here)
-      for (const feed of feeds) {
+      const allFeeds = [...images, ...shortVideos, ...longVideos];
+      console.log(`📊 Batching ${allFeeds.length} feeds (Images: ${images.length}, Videos: ${shortVideos.length + longVideos.length})`);
+
+      for (const feed of allFeeds) {
         await mlMetadataQueue.add({ feedId: feed._id }, {
           attempts: 3,
-          backoff: { type: 'exponential', delay: 60000 }, // Retry after 1 min
+          backoff: { type: 'exponential', delay: 60000 },
           removeOnComplete: true
         });
       }
 
-      return { totalFound: feeds.length };
+      return { 
+        totalBatched: allFeeds.length,
+        images: images.length,
+        videos: shortVideos.length + longVideos.length
+      };
     }
   }
 ];

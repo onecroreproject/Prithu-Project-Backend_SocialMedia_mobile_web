@@ -14,9 +14,9 @@ mlMetadataQueue.process(5, async (job) => {
         return;
     }
 
-    // Double check if already analyzed to prevent redundant processing
-    if (feed.mlMetadata?.analyzed) {
-        console.log(`[ML-WORKER] Feed ${feedId} already analyzed, skipping.`);
+    // Skip only if analyzed WITH current AI version (v2)
+    if (feed.mlMetadata?.analyzed && (feed.mlMetadata?.aiVersion || 0) >= 2) {
+        console.log(`[ML-WORKER] Feed ${feedId} already analyzed with v2, skipping.`);
         return;
     }
 
@@ -26,6 +26,10 @@ mlMetadataQueue.process(5, async (job) => {
             "mlMetadata.processingStatus": "processing"
         });
 
+        // Dynamic timeout based on content type (Video needs more time)
+        const isVideo = feed.postType === "video";
+        const timeout = isVideo ? 120000 : 30000; // 2 minutes for video, 30s for images
+
         // Call Python ML service for analysis
         const response = await axios.post(`${ML_SERVICE_URL}/analyze`, {
             feed_id: feedId,
@@ -34,29 +38,39 @@ mlMetadataQueue.process(5, async (job) => {
             category: feed.category,
             postType: feed.postType,
             mediaUrl: feed.mediaUrl
-        }, { timeout: 30000 });
+        }, { timeout });
 
         const { metadata } = response.data;
 
-        // Update Feed with generated metadata
+        // Update Feed with generated metadata v2
         await Feed.findByIdAndUpdate(feedId, {
             mlMetadata: {
                 analyzed: true,
                 analyzedAt: new Date(),
+                aiVersion: 2,
+                
+                contentType: metadata.contentType,
+                subCategory: metadata.subCategory,
+                emotion: metadata.emotion,
+                
                 topics: metadata.topics || [],
                 detectedObjects: metadata.detectedObjects || [],
                 speechKeywords: metadata.speechKeywords || [],
+                extractedText: metadata.extractedText || [],
+                
                 recommendationTags: metadata.recommendationTags || [],
-                contentType: metadata.contentType,
-                subCategory: metadata.subCategory,
-                freshnessScore: metadata.freshnessScore || 0,
+                autoKeywords: metadata.autoKeywords || [],
+                generatedHashtags: metadata.generatedHashtags || [],
+                
+                freshnessScore: metadata.freshnessScore || 1,
                 confidenceScore: metadata.confidenceScore || 0,
+                
                 embeddingGenerated: metadata.embeddingGenerated || false,
                 processingStatus: "completed"
             }
         });
 
-        console.log(`[ML-WORKER] Successfully analyzed feed: ${feedId}`);
+        console.log(`[ML-WORKER] Successfully analyzed feed (v2): ${feedId}`);
 
     } catch (error) {
         console.error(`[ML-WORKER] Error analyzing feed ${feedId}:`, error.message);

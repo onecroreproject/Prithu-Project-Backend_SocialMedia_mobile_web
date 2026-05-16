@@ -486,26 +486,36 @@ const feedSchema = new mongoose.Schema(
     },
     compressionStartedAt: { type: Date },
     compressionCompletedAt: { type: Date },
-    // ========== ML RECOMMENDATION METADATA ==========
+    // ========== ML RECOMMENDATION METADATA (v2) ==========
     mlMetadata: {
-      analyzed: { type: Boolean, default: false, index: true },
-      analyzedAt: { type: Date },
-      topics: [{ type: String }],
-      detectedObjects: [{ type: String }],
-      speechKeywords: [{ type: String }],
-      recommendationTags: [{ type: String }],
-      contentType: { type: String },
-      subCategory: { type: String },
-      freshnessScore: { type: Number, default: 0 },
-      confidenceScore: { type: Number, default: 0 },
-      embeddingGenerated: { type: Boolean, default: false },
-      processingStatus: {
-        type: String,
-        enum: ["pending", "processing", "completed", "failed"],
-        default: "pending",
-        index: true
-      },
-      errorMessage: { type: String }
+        analyzed: { type: Boolean, default: false, index: true },
+        analyzedAt: { type: Date },
+        aiVersion: { type: Number, default: 1 }, // v1 = Basic, v2 = Deep AI
+        
+        contentType: { type: String }, // e.g., "repair-engineering", "love"
+        subCategory: { type: String }, // e.g., "electronics-repair", "romantic"
+        emotion: { type: String },     // e.g., "happy", "motivational"
+        
+        topics: [{ type: String }],
+        detectedObjects: [{ type: String }],
+        speechKeywords: [{ type: String }],
+        extractedText: [{ type: String }],       // From OCR
+        
+        recommendationTags: [{ type: String }],
+        autoKeywords: [{ type: String }],        // NLP keywords
+        generatedHashtags: [{ type: String }],   // AI-suggested hashtags
+        
+        freshnessScore: { type: Number, default: 1 },
+        confidenceScore: { type: Number, default: 0 },
+        
+        embeddingGenerated: { type: Boolean, default: false },
+        processingStatus: { 
+            type: String, 
+            enum: ["pending", "processing", "completed", "failed"], 
+            default: "pending",
+            index: true
+        },
+        errorMessage: { type: String }
     }
   },
   {
