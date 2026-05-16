@@ -65,9 +65,8 @@ exports.getMLMetadataStats = async (req, res) => {
         const Feed = require("../../models/feedModel");
         const mlMetadataQueue = require("../../queue/mlMetadataQueue");
 
-        const [total, analyzedV1, analyzedV2, pending, failed, processing] = await Promise.all([
+        const [total, analyzed, pending, failed, processing] = await Promise.all([
             Feed.countDocuments({ isDeleted: false, status: "published" }),
-            Feed.countDocuments({ isDeleted: false, status: "published", "mlMetadata.analyzed": true, "mlMetadata.aiVersion": 1 }),
             Feed.countDocuments({ isDeleted: false, status: "published", "mlMetadata.analyzed": true, "mlMetadata.aiVersion": { $gte: 2 } }),
             Feed.countDocuments({ isDeleted: false, status: "published", $or: [{ "mlMetadata.analyzed": { $ne: true } }, { "mlMetadata.aiVersion": { $lt: 2 } }, { "mlMetadata": { $exists: false } }] }),
             Feed.countDocuments({ isDeleted: false, status: "published", "mlMetadata.processingStatus": "failed" }),
@@ -82,8 +81,7 @@ exports.getMLMetadataStats = async (req, res) => {
             success: true,
             stats: {
                 total,
-                analyzedV1,
-                analyzedV2,
+                analyzed,
                 pending,
                 failed,
                 processing,
@@ -117,7 +115,7 @@ exports.toggleMLMetadataQueue = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: isPaused ? "ML Analysis service RESUMED" : "ML Analysis service PAUSED",
+            message: isPaused ? "ML Analysis service STARTED" : "ML Analysis service STOPPED",
             isPaused: !isPaused
         });
     } catch (err) {

@@ -181,17 +181,16 @@ const taskRegistry = [
   },
   {
     id: "ml_metadata_generation",
-    name: "ML Metadata Intelligence (v2)",
-    schedule: "0 2 * * *", // 2 AM daily (Low Traffic)
-    description: "Deep AI content analysis & metadata upgrade (v2)",
+    name: "ML Content Intelligence",
+    schedule: "0 2 * * *", // 2 AM daily
+    description: "Deep content analysis for feeds missing metadata",
     action: async () => {
-      console.log("🚀 Starting Deep AI Metadata Generation (v2)...");
+      console.log("🚀 Starting ML Content Intelligence Batch...");
       const Feed = require("../models/feedModel");
 
       // Find feeds that:
-      // 1. Are published & not deleted
-      // 2. Are NOT currently being processed
-      // 3. EITHER never analyzed OR analyzed with old version (v1)
+      // 1. Are NOT analyzed yet OR
+      // 2. Have old v1 metadata (we want to upgrade them to v2)
       const query = {
         status: "published",
         isDeleted: false,
@@ -203,24 +202,26 @@ const taskRegistry = [
         ]
       };
 
-      // DYNAMIC BATCHING STRATEGY
-      // Image feeds: ~50 feeds
-      // Short videos: ~10 feeds
-      // Long videos: ~3 feeds
-      
+      // Fetch in safe batches as requested: 50 images, 10 short videos, 3 long videos
       const [images, shortVideos, longVideos] = await Promise.all([
-        Feed.find({ ...query, postType: "image" }).select("_id").limit(50).sort({ "mlMetadata.aiVersion": 1 }).lean(),
-        Feed.find({ ...query, postType: "video" }).select("_id").limit(10).sort({ "mlMetadata.aiVersion": 1 }).lean(),
-        Feed.find({ ...query, postType: "video" }).select("_id").skip(10).limit(3).sort({ "mlMetadata.aiVersion": 1 }).lean() // Simple proxy for "Longer"
+        Feed.find({ ...query, postType: "image" }).select("_id").limit(50).lean(),
+        Feed.find({ ...query, postType: "video" }).select("_id").limit(10).lean(),
+        Feed.find({ ...query, postType: "video" }).select("_id").skip(10).limit(3).lean()
       ]);
 
       const allFeeds = [...images, ...shortVideos, ...longVideos];
-      console.log(`📊 Batching ${allFeeds.length} feeds (Images: ${images.length}, Videos: ${shortVideos.length + longVideos.length})`);
+      
+      if (allFeeds.length === 0) {
+        console.log("✅ No new feeds to analyze.");
+        return { totalBatched: 0 };
+      }
+
+      console.log(`📊 Processing ${allFeeds.length} new feeds...`);
 
       for (const feed of allFeeds) {
         await mlMetadataQueue.add({ feedId: feed._id }, {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 60000 },
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 30000 },
           removeOnComplete: true
         });
       }

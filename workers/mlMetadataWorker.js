@@ -14,9 +14,10 @@ mlMetadataQueue.process(5, async (job) => {
         return;
     }
 
-    // Skip only if analyzed WITH current AI version (v2)
+    // SKIP POLICY: Only skip if already analyzed with the latest Deep AI version (v2)
+    // If it has old v1 metadata, we want to upgrade it to v2.
     if (feed.mlMetadata?.analyzed && (feed.mlMetadata?.aiVersion || 0) >= 2) {
-        console.log(`[ML-WORKER] Feed ${feedId} already analyzed with v2, skipping.`);
+        console.log(`[ML-WORKER] Feed ${feedId} already has Deep AI v2 metadata, skipping.`);
         return;
     }
 
