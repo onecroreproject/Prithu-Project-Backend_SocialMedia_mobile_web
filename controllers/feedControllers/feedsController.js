@@ -214,7 +214,7 @@ exports.enrichFeedData = enrichFeedData;
 exports.getAllFeedsByUserId = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const dashboard = { startTime: Date.now() };
-  console.log(`\n--- 🔵 FEED_FETCH_START [${new Date().toISOString()}] ---`);
+
 
   try {
     const rawUserId = req.Id || req.body.userId;
@@ -244,7 +244,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     const notInterestedCategoryIds = userCategories?.nonInterestedCategories || [];
 
     // 🚀 DIAGNOSTIC: Log the state of exclusions
-    console.log(`🔍 FEED EXCLUSION [User: ${userId}]: Total=${excludeIds.length} (Hidden: ${hiddenPostIds.length}, Watched: ${watchedFeedIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
+
 
     let recoIds = [];
     let recoScores = [];
@@ -254,19 +254,19 @@ exports.getAllFeedsByUserId = async (req, res) => {
       try {
         const mlRecos = await mlRecommendationService.getRecommendations(userId, excludeIds, null, limit);
         if (mlRecos && mlRecos.length > 0) {
-          console.log(`🤖 ML Active: Delivering ${mlRecos.length} recommendations for user ${userId}`);
+
           recoIds = mlRecos.map(r => new mongoose.Types.ObjectId(r.feed_id));
           recoScores = mlRecos.map(r => r.score || 0.5);
           recoSources = mlRecos.map(r => r.reason || "recommended");
         } else {
-          console.log(`🏠 ML Inactive/Empty: Falling back to organic randomized feed for user ${userId}`);
+
         }
       } catch (mlErr) { 
         console.warn("⚠️ ML Service Offline/Slow:", mlErr.message); 
-        console.log(`🏠 ML Inactive: Falling back to organic randomized feed for user ${userId}`);
+
       }
     } else {
-       console.log(`📂 Category Feed: Delivering organic feeds for category ${categoryId}`);
+
     }
 
     /* -----------------------------------------------------
@@ -505,14 +505,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
     }
 
     // 📊 DEBUG DASHBOARD (Requirement #9)
-    console.table({
-      userId: userId.toString(),
-      page,
-      excluded: excludeIds.length,
-      mlRecos: recoIds.length,
-      finalReturned: finalEnrichedFeeds.length,
-      status: "SUCCESS"
-    });
+
 
     res.status(200).json(responseData);
   } catch (err) {
@@ -528,7 +521,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
    Category ID: 6990071590a65cd9632b2327
 --------------------------------------------------- */
 exports.getBirthdayFeeds = async (req, res) => {
-  console.log("🎂 START: getBirthdayFeeds");
+
 
 
   const canShow = (rule) => rule === "public";
@@ -589,7 +582,7 @@ exports.getBirthdayFeeds = async (req, res) => {
     /* ── 2. EXCLUSIONS (Standardized) ─── */
     const { excludeIds, hiddenPostIds, watchedFeedIds, shownFeedIds, userLikedIds, userSavedIds } = await getExclusionList(userId);
 
-    console.log(`🏠 Organic: Generating Birthday feed for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
+
 
     /* ── 3. AGGREGATION (Birthday category hardcoded) ── */
     const feeds = await Feed.aggregate([
@@ -819,7 +812,7 @@ exports.getBirthdayFeeds = async (req, res) => {
    Category ID: 699ee86c20120ebc1d3e929b
 --------------------------------------------------- */
 exports.getAnniversaryFeeds = async (req, res) => {
-  console.log("💍 START: getAnniversaryFeeds");
+
 
 
   const canShow = (rule) => rule === "public";
@@ -880,7 +873,7 @@ exports.getAnniversaryFeeds = async (req, res) => {
     /* ── 2. EXCLUSIONS (Standardized) ─── */
     const { excludeIds, hiddenPostIds, watchedFeedIds, shownFeedIds, userLikedIds, userSavedIds } = await getExclusionList(userId);
 
-    console.log(`🏠 Organic: Generating Anniversary feed for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
+
 
     /* ── 3. AGGREGATION (Anniversary category hardcoded) ── */
     const feeds = await Feed.aggregate([
@@ -1110,7 +1103,7 @@ exports.getAnniversaryFeeds = async (req, res) => {
    Category ID: 699ee0e420120ebc1d3e7725
 --------------------------------------------------- */
 exports.getPoliticsFeeds = async (req, res) => {
-  console.log("🗳️ START: getPoliticsFeeds");
+
 
 
   const canShow = (rule) => rule === "public";
@@ -1171,7 +1164,7 @@ exports.getPoliticsFeeds = async (req, res) => {
     /* ── 2. EXCLUSIONS (Standardized) ─── */
     const { excludeIds, hiddenPostIds, watchedFeedIds, shownFeedIds, userLikedIds, userSavedIds } = await getExclusionList(userId);
 
-    console.log(`🏠 Organic: Generating Politics feed for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
+
 
     /* ── 3. AGGREGATION (Politics category hardcoded) ── */
     const feeds = await Feed.aggregate([
@@ -1433,7 +1426,7 @@ exports.getFeedsByHashtag = async (req, res) => {
     const userCat = await UserCategory.findOne({ userId }).lean();
     const notCats = userCat?.nonInterestedCategories || [];
 
-    console.log(`🏠 Organic: Generating Hashtag feed (#${tag}) for user ${userId} (Excluding ${excludeIds.length} items: Hidden: ${hiddenPostIds.length}, Shown: ${shownFeedIds.length}, Liked/Saved: ${userLikedIds.length + userSavedIds.length})`);
+
 
     /* -------------------------------------------------
        3) AGGREGATION PIPELINE
@@ -1725,8 +1718,8 @@ exports.getSingleFeedById = async (req, res) => {
   try {
     const rawUserId = req.Id || req.body.userId;
     const feedId = req.params.feedId;
-    console.log("userid", rawUserId)
-    console.log("feedid", feedId)
+
+
     if (!rawUserId)
       return res.status(404).json({ message: "User ID Required" });
 
@@ -1960,7 +1953,7 @@ exports.getSingleFeedById = async (req, res) => {
       profileAvatar: result[0].profileAvatar ? getMediaUrl(result[0].profileAvatar) : "https://via.placeholder.com/150"
     };
 
-    console.log("✅ [getSingleFeedById] Feed retrieved successfully:", enrichedFeed._id);
+
 
     res.status(200).json({
       success: true,

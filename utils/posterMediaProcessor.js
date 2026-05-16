@@ -274,7 +274,7 @@ exports.processPosterMedia = async ({
                 // TRY LOCAL RESOLUTION FIRST
                 const localOverlayPath = resolveLocalPath(url);
                 if (localOverlayPath && fs.existsSync(localOverlayPath)) {
-                    console.log(`[Processor] Using local overlay: ${localOverlayPath}`);
+
                     fs.copyFileSync(localOverlayPath, overlayDest);
                 } else {
                     await downloadFile(getMediaUrl(url), overlayDest);

@@ -62,10 +62,7 @@ async getAccessToken(orderId) {
             }
         );
 
-        console.log(
-          "AUTH RESPONSE:",
-          response.data
-        );
+
 
         if (
           response.data?.responseCode
@@ -151,10 +148,7 @@ process.env.FRONTEND_URL?.split(",")[0];
               "INR"
         };
 
-        console.log(
-          "CREATE ORDER PAYLOAD:",
-          payload
-        );
+
 
         const response =
         await axios.post(
@@ -166,10 +160,7 @@ process.env.FRONTEND_URL?.split(",")[0];
             }
         );
 
-        console.log(
-          "CREATE ORDER RESPONSE:",
-          response.data
-        );
+
 
         if (
           response.data?.responseCode
@@ -239,10 +230,7 @@ async checkStatus(orderId) {
             }
         );
 
-        console.log(
-          "STATUS RESPONSE:",
-          response.data
-        );
+
 
         return response.data;
 

@@ -17,7 +17,7 @@ const getPromotionalStats = async () => {
         }
 
         // 2. Aggregate if not cached
-        console.log("📊 Aggregating promotional stats from DB...");
+
 
         const [userCount, feedCount] = await Promise.all([
             User.countDocuments({}),

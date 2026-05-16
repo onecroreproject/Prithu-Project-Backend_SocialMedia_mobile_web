@@ -36,7 +36,7 @@ function makeSessionService(UserModel) {
     user.lastLoginAt = new Date();
     await user.save();
 
-   console.log('session id created')
+
    
     return sessionId;
 

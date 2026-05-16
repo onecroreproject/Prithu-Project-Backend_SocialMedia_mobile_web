@@ -217,7 +217,7 @@ exports.checkUsernameAvailability = async (req, res) => {
 exports.checkEmailAvailability = async (req, res) => {
   try {
     const { email } = req.query;
-    console.log(email)
+
 
     if (!email || email.trim() === "") {
       return res.status(400).json({ message: "Email is required" });
@@ -237,10 +237,7 @@ exports.checkEmailAvailability = async (req, res) => {
         message: "Email not available",
       });
     }
-    console.log({
-      available: true,
-      message: "Email available",
-    })
+
 
     return res.status(200).json({
       available: true,
@@ -276,7 +273,7 @@ exports.getUserReferalCode = async (req, res) => {
       user.referralCode = `${letters}${digits}`;
       user.referralCodeIsValid = true;
       await user.save();
-      console.log(`Generated new referral code for user ${userId}: ${user.referralCode}`);
+
     }
 
     // Check if user's subscription is active using central helper
@@ -312,7 +309,7 @@ exports.blockUserById = async (req, res) => {
     // Toggle block state
     user.isBlocked = !user.isBlocked;
     await user.save();
-    console.log(user.isBlocked)
+
     return res.status(200).json({
       message: user.isBlocked ? "User Blocked Successfully" : "User Unblocked Successfully",
       isBlocked: user.isBlocked,

@@ -26,6 +26,7 @@ const worker = new Worker(
     const { feedId } = job.data;
     console.log(`🎬 [Worker] Received job for Feed: ${feedId}`);
 
+
     const feed = await Feed.findById(feedId);
     if (!feed) {
       console.error(`❌ [Worker] Feed ${feedId} not found`);
@@ -47,6 +48,7 @@ const worker = new Worker(
         compressionStartedAt: new Date(),
       }
     );
+    console.log(`🔒 [Worker] Feed ${feedId} locked and status set to processing.`);
 
     let originalPath = feed.files[0]?.path;
     if (!originalPath || !fs.existsSync(originalPath)) {
@@ -73,6 +75,9 @@ const worker = new Worker(
 
     try {
       console.log(`🎥 [Worker] Starting compression: ${fileName}`);
+      console.log(`📂 [Worker] Original path: ${originalPath}`);
+      console.log(`📁 [Worker] Temp path: ${tempFilePath}`);
+
       // 3. Compress
       await new Promise((resolve, reject) => {
         let command = ffmpeg(originalPath)
@@ -88,7 +93,7 @@ const worker = new Worker(
         // 720p only if source > 720p
         command.ffprobe((err, data) => {
           if (err) return reject(err);
-          
+
           const videoStream = data.streams.find(s => s.codec_type === "video");
           if (videoStream && videoStream.height > 720) {
             command.size("?x720");
@@ -100,8 +105,14 @@ const worker = new Worker(
                 console.log(`⏳ [Worker] Feed ${feedId}: ${Math.round(progress.percent)}%`);
               }
             })
-            .on("end", resolve)
-            .on("error", reject)
+            .on("end", () => {
+              console.log(`✅ [Worker] FFmpeg finished for Feed: ${feedId}`);
+              resolve();
+            })
+            .on("error", (err) => {
+              console.error(`❌ [Worker] FFmpeg error for Feed ${feedId}:`, err.message);
+              reject(err);
+            })
             .save(tempFilePath);
         });
       });
@@ -115,9 +126,11 @@ const worker = new Worker(
       fs.renameSync(originalPath, backupFilePath);
       console.log(`📂 [Worker] Original backed up to: ${backupFilePath}`);
 
+
       // 6. Move Temp to Original Path
       fs.renameSync(tempFilePath, originalPath);
-      console.log(`✅ [Worker] Compressed file moved to: ${originalPath}`);
+      console.log(`🚚 [Worker] Compressed file moved to: ${originalPath}`);
+
 
       // 7. Success - Delete Backup & Update DB
       if (fs.existsSync(backupFilePath)) {
@@ -133,7 +146,8 @@ const worker = new Worker(
           compressionCompletedAt: new Date(),
         }
       );
-      console.log(`🎊 [Worker] Compression completed for Feed: ${feedId}`);
+      console.log(`🎊 [Worker] Compression completed and DB updated for Feed: ${feedId}`);
+
 
     } catch (error) {
       console.error(`❌ [Worker] Compression failed for Feed ${feedId}:`, error.message);

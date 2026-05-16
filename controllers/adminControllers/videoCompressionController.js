@@ -54,10 +54,12 @@ exports.triggerBulkCompression = async (req, res) => {
     }
 
     let queuedCount = 0;
+    console.log(`🚀 [Bulk Compression] Found ${feeds.length} uncompressed videos. Queuing...`);
     for (const feed of feeds) {
       await videoCompressionQueue.add("compress", { feedId: feed._id });
       queuedCount++;
     }
+    console.log(`✅ [Bulk Compression] Successfully queued ${queuedCount} jobs.`);
 
     return res.status(200).json({
       success: true,

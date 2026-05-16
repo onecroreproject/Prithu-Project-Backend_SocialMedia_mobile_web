@@ -465,7 +465,27 @@ const feedSchema = new mongoose.Schema(
       ogDescription: { type: String },
       jsonLd: { type: String },
       seoScore: { type: Number, default: 0 }
-    }
+    },
+    // ========== VIDEO COMPRESSION TRACKING ==========
+    isCompressed: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    compressionStatus: {
+      type: String,
+      enum: ["pending", "processing", "completed", "failed"],
+      default: "pending",
+      index: true
+    },
+    compressionError: { type: String },
+    compressionLocked: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    compressionStartedAt: { type: Date },
+    compressionCompletedAt: { type: Date }
   },
   {
     timestamps: true,

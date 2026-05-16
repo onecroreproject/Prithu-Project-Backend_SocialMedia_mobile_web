@@ -274,7 +274,7 @@ exports.processFeedMedia = async ({
         localPath = resolveLocalPath(mediaUrl);
     }
 
-    console.log(`[Processor] Resolved media source: ${localPath || mediaUrl}`);
+
 
     const postType = feed.postType || "image";
     const isVideoPost = postType === "video";
@@ -282,19 +282,19 @@ exports.processFeedMedia = async ({
     const tempSourcePath = path.join(tempDir, isVideoPost ? "source.mp4" : "source.jpg");
 
     if (localPath && fs.existsSync(localPath)) {
-        console.log(`[Processor] Copying local file instead of downloading: ${localPath}`);
+
         fs.copyFileSync(localPath, tempSourcePath);
     } else {
-        console.log(`[Processor] Downloading source media to: ${tempSourcePath}`);
+
         await downloadFile(mediaUrl, tempSourcePath);
     }
-    console.log(`[Processor] Source media ready.`);
+
     if (onProgress) onProgress(30);
 
     // 2. METADATA & DIMENSIONS
-    console.log(`[Processor] Extracting metadata from source...`);
+
     const sourceMeta = await getVideoMetadata(tempSourcePath);
-    console.log(`[Processor] Metadata: ${JSON.stringify(sourceMeta)}`);
+
 
     const footerConfig = designMetadata?.footerConfig;
     const footerEnabled = !!footerConfig?.enabled;
@@ -317,12 +317,12 @@ exports.processFeedMedia = async ({
     const yOffset = 0; // Start at the very top (remove top space)
     const footerY = actualMediaH; // Footer sits exactly below media
 
-    console.log(`[Processor] Dimensions: actualMediaH=${actualMediaH}, footerH=${footerH}, totalH=${combinedBlockH}, finalOUT_H=${finalOUT_H}, footerY=${footerY}`);
+
 
     let dominantColor = footerConfig?.backgroundColor || "#1a1a1a";
     if (footerConfig?.useDominantColor) {
         dominantColor = await getDominantColor(tempSourcePath, isVideoPost, tempDir);
-        console.log(`[Processor] Content-aware dominant color: ${dominantColor}`);
+
     }
     const footerBgColor = normalizeFfmpegColor(dominantColor);
 
@@ -356,7 +356,7 @@ exports.processFeedMedia = async ({
     }
 
     // Base Canvas: Normalize to RGBA to prevent re-init errors with overlays
-    console.log(`[Processor] Configuring base canvas filters...`);
+
     combinedFilters.push(
         { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
         { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=oh-ih:color=black`, inputs: "scaled_base", outputs: "padded_base" },
@@ -367,7 +367,7 @@ exports.processFeedMedia = async ({
     // 4. OVERLAYS
     const overlayElements = [...(designMetadata?.overlayElements || []).filter(el => el.visible !== false)]
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
-    console.log(`[Processor] Processing ${overlayElements.length} overlay elements...`);
+
 
     let filterIndex = 1;
 
@@ -525,8 +525,7 @@ exports.processFeedMedia = async ({
 
     // 5. FOOTER
     if (footerEnabled) {
-        console.log(`[Processor] Adding footer... footerConfig:`, JSON.stringify(footerConfig, null, 2));
-        console.log(`[Processor] Viewer data:`, JSON.stringify(viewer, null, 2));
+
         combinedFilters.push({ filter: "drawbox", options: { x: Math.round(paddingX), y: footerY, w: Math.round(actualMediaW), h: footerH, c: footerBgColor, t: "fill" }, inputs: currentBase, outputs: "footer_bg" });
         currentBase = "footer_bg";
 
@@ -599,7 +598,7 @@ exports.processFeedMedia = async ({
     }
 
     // 6. FINAL BUILD
-    console.log(`[Processor] Finalizing FFmpeg build...`);
+
     ffmpegCommand.complexFilter(combinedFilters);
 
 

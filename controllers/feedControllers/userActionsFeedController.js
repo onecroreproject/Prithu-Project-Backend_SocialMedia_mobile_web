@@ -375,10 +375,10 @@ exports.directDownloadFeed = async (req, res) => {
   }
 
   const tempDir = path.join(__dirname, "../../uploads/temp_direct", `dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
-  console.log(`[DirectDL] Initializing temp directory: ${tempDir}`);
+
 
   try {
-    console.log(`[DirectDL] Processing feedId: ${feedId} for userId: ${userId}`);
+
     const feed = await Feed.findById(feedId);
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
@@ -413,7 +413,7 @@ exports.directDownloadFeed = async (req, res) => {
 
     // MERGE CUSTOM METADATA FROM CLIENT (Avatar positions, etc.)
     if (customMetadata && Object.keys(customMetadata).length > 0) {
-      console.log(`[DirectDL] Merging custom metadata:`, JSON.stringify(customMetadata));
+
 
       // Override Footer Config
       if (customMetadata.footerConfig) {
@@ -449,16 +449,11 @@ exports.directDownloadFeed = async (req, res) => {
     }
 
     const visibility = profile?.visibility || {};
-    console.log(`[DirectDL] User privacy/visibility:`, JSON.stringify({
-      userId,
-      profileId: profile?._id,
-      visibility,
-      privacy: profile?.privacy
-    }, null, 2));
 
-    console.log(`[DirectDL] RAW Profile ProfileAvatar:`, profile?.profileAvatar);
-    console.log(`[DirectDL] RAW Profile ModifyAvatar:`, profile?.modifyAvatar);
-    console.log(`[DirectDL] Resolved Avatar URL:`, getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null));
+
+
+
+
 
     const viewer = {
       id: user._id,
@@ -493,7 +488,7 @@ exports.directDownloadFeed = async (req, res) => {
       }
       // Fallback: If template wants social icons but hasn't specified which ones, show all available from profile
       else if (designMetadata.footerConfig.showElements?.socialIcons && isSocialPublic) {
-        console.log(`[DirectDL] Profiling social links for fallback population:`, JSON.stringify(socialLinks, null, 2));
+
         designMetadata.footerConfig.socialIcons = Object.keys(socialLinks)
           .filter(platform => socialLinks[platform] && String(socialLinks[platform]).trim().length > 0)
           .map(platform => ({
@@ -501,11 +496,11 @@ exports.directDownloadFeed = async (req, res) => {
             visible: true,
             url: socialLinks[platform]
           }));
-        console.log(`[DirectDL] Populated ${designMetadata.footerConfig.socialIcons.length} icons from profile.`);
+
       }
     }
 
-    console.log(`[DirectDL] Starting media processing...`);
+
     const { ffmpegCommand, tempSourcePath } = await processFeedMedia({
       feed,
       viewer,
@@ -513,7 +508,7 @@ exports.directDownloadFeed = async (req, res) => {
       tempDir,
       isStreaming: false
     });
-    console.log(`[DirectDL] Media processing configured. Source: ${tempSourcePath}`);
+
 
     const finalOutputPath = path.join(tempDir, `final_output_${feedId}.mp4`);
     const randomSuffix = Math.floor(100 + Math.random() * 900);
@@ -531,7 +526,7 @@ exports.directDownloadFeed = async (req, res) => {
     // Run FFmpeg to a temporary file instead of piping directly
     // This allows the 'faststart' flag to properly relocate the moov atom for social media compatibility
     ffmpegCommand
-      .on('start', (cmdLine) => console.log(`[DirectDL] Started: ${cmdLine}`))
+
       .on('stderr', (line) => {
         if (line.includes('Error') || line.includes('error') || line.includes('Invalid') || line.includes('failed')) {
           console.error(`[DirectDL] FFmpeg STDERR: ${line}`);
@@ -545,7 +540,7 @@ exports.directDownloadFeed = async (req, res) => {
         cleanup();
       })
       .on('end', async () => {
-        console.log("[DirectDL] Encoding finished successfully. Sending file...");
+
 
         if (fs.existsSync(finalOutputPath)) {
           res.download(finalOutputPath, filename, async (err) => {
@@ -646,7 +641,7 @@ exports.birthdayDownloadFeed = async (req, res) => {
   };
 
   try {
-    console.log(`[BirthdayDL] feedId=${feedId} userId=${userId}`);
+
 
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
@@ -763,7 +758,7 @@ exports.birthdayDownloadFeed = async (req, res) => {
     req.on('close', () => console.warn(`[BirthdayDL] Client disconnected early`));
 
     ffmpegCommand
-      .on('start', (cmd) => console.log(`[BirthdayDL] FFmpeg start: ${cmd}`))
+
       .on('stderr', (line) => {
         if (/error|invalid|failed/i.test(line)) console.error(`[BirthdayDL] STDERR: ${line}`);
       })
@@ -773,7 +768,7 @@ exports.birthdayDownloadFeed = async (req, res) => {
         cleanup();
       })
       .on('end', async () => {
-        console.log('[BirthdayDL] Encoding done. Sending file...');
+
         if (!fs.existsSync(finalOutputPath)) {
           if (!res.headersSent) res.status(500).json({ error: 'Output file missing' });
           return cleanup();
@@ -858,7 +853,7 @@ exports.anniversaryDownloadFeed = async (req, res) => {
   };
 
   try {
-    console.log(`[AnniversaryDL] feedId=${feedId} userId=${userId}`);
+
 
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
@@ -974,7 +969,7 @@ exports.anniversaryDownloadFeed = async (req, res) => {
     req.on('close', () => console.warn(`[AnniversaryDL] Client disconnected early`));
 
     ffmpegCommand
-      .on('start', (cmd) => console.log(`[AnniversaryDL] FFmpeg start: ${cmd}`))
+
       .on('stderr', (line) => {
         if (/error|invalid|failed/i.test(line)) console.error(`[AnniversaryDL] STDERR: ${line}`);
       })
@@ -984,7 +979,7 @@ exports.anniversaryDownloadFeed = async (req, res) => {
         cleanup();
       })
       .on('end', async () => {
-        console.log('[AnniversaryDL] Encoding done. Sending file...');
+
         if (!fs.existsSync(finalOutputPath)) {
           if (!res.headersSent) res.status(500).json({ error: 'Output file missing' });
           return cleanup();
@@ -1069,7 +1064,7 @@ exports.politicsDownloadFeed = async (req, res) => {
   };
 
   try {
-    console.log(`[PoliticsDL] feedId=${feedId} userId=${userId}`);
+
 
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
@@ -1191,7 +1186,7 @@ exports.politicsDownloadFeed = async (req, res) => {
     req.on('close', () => console.warn(`[PoliticsDL] Client disconnected early`));
 
     ffmpegCommand
-      .on('start', (cmd) => console.log(`[PoliticsDL] FFmpeg start: ${cmd}`))
+
       .on('stderr', (line) => {
         if (/error|invalid|failed/i.test(line)) console.error(`[PoliticsDL] STDERR: ${line}`);
       })
@@ -1201,7 +1196,7 @@ exports.politicsDownloadFeed = async (req, res) => {
         cleanup();
       })
       .on('end', async () => {
-        console.log('[PoliticsDL] Encoding done. Sending file...');
+
         if (!fs.existsSync(finalOutputPath)) {
           if (!res.headersSent) res.status(500).json({ error: 'Output file missing' });
           return cleanup();
@@ -1301,7 +1296,7 @@ exports.requestDownloadFeed = async (req, res) => {
       removeOnFail: false
     });
 
-    console.log(`[DownloadRequest] Job ${job.id} created for user ${userId}, feed ${feedId} `);
+
 
     // Record Activity
     await logUserActivity({
@@ -1339,7 +1334,7 @@ exports.getDownloadJobStatus = async (req, res) => {
 
     const state = await job.getState();
     const progress = job.progress();
-    console.log(`[JobStatus] Job ${jobId} state: ${state}, progress: ${progress}% `);
+
 
     let result = null;
     if (state === 'completed') {
@@ -2050,7 +2045,7 @@ exports.postReplyComment = async (req, res) => {
     const userId = req.Id || req.body.userId;
     const { commentText, parentCommentId, parentReplyId } = req.body;
 
-    console.log({ commentText, parentCommentId, parentReplyId });
+
 
     if (!userId || !commentText?.trim()) {
       return res.status(400).json({ message: "Invalid input" });
@@ -2934,7 +2929,7 @@ exports.processSharePreview = async (req, res) => {
   const userId = req.Id;
   let { type, customMetadata = {} } = req.body;
 
-  console.log("📥 [Backend] processSharePreview request received:", { feedId, userId, type });
+
 
   if (!userId || !feedId) {
     console.warn("⚠️ [Backend] Missing userId or feedId");
@@ -2983,7 +2978,7 @@ exports.processSharePreview = async (req, res) => {
     };
 
     // 🚀 STEP 3: ADD JOB TO QUEUE
-    console.log(`[SharePreview] Queueing job for user ${userId}, feed ${feedId}...`);
+
     const job = await downloadQueue.add({
       jobType: 'share-preview',
       feed: { ...feed, mediaUrl: getMediaUrl(feed.mediaUrl) },

@@ -42,7 +42,7 @@ const getRecommendations = async (userId, excludeIds = [], feedId = null, limit 
         const recommendations = response.data.recommended_reels || [];
         const duration = Date.now() - startTime;
         
-        console.log(`🎯 ML Integration: Fetched ${recommendations.length} items (User: ${userId}, Excluded: ${excludeIds.length}, Latency: ${duration}ms)`);
+
 
         return recommendations;
 

@@ -666,7 +666,7 @@ exports.getVisibilitySettingsWeb = async (req, res) => {
 exports.getUserVisibilityByUserId = async (req, res) => {
   try {
     const { userId } = req.body;
-    console.log(userId)
+
     // Validate input
     if (!userId) {
       return res.status(400).json({
@@ -723,7 +723,7 @@ exports.getUserVisibilityByUserId = async (req, res) => {
 exports.getUserProfileDetail = async (req, res) => {
   try {
     const userId = req.Id || req.query.id;
-    console.log("user", userId)
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
@@ -836,7 +836,7 @@ exports.getAdminProfileDetail = async (req, res) => {
     const userId = req.Id;
     const role = req.role;
 
-    console.log({ userId, role });
+
 
     if (!userId || !role) {
       return res.status(400).json({ message: "User ID and role are required" });

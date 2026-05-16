@@ -13,6 +13,9 @@ const adminRoot = require("./roots/adminRoot");
 const userRoot = require("./roots/userRoot");
 const paymentRoutes = require("./routes/paymentRoutes");
 
+// 🟢 Background Workers
+require("./workers/videoCompressionWorker");
+
 // 🟢 MULTI-DB Connection
 require("./database");
 

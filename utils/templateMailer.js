@@ -34,7 +34,7 @@ const sendTemplateEmail = async ({
         path: logoPath,
         cid: "prithu-logo", // use in template as src="cid:prithu-logo"
       };
-        console.log(logoAttachment)
+
       attachments = Array.isArray(attachments) ? attachments.concat(logoAttachment) : [logoAttachment];
       // provide placeholder so templates can use either {logoCid} or hard-coded cid
       placeholders.logoCid = "cid:prithu-logo";
@@ -49,7 +49,7 @@ const sendTemplateEmail = async ({
 
     // Finally send
     await sendMailSafeSafe({ to, subject, html, attachments });
-    console.log(`Template email "${templateName}" sent to ${to}`);
+
   } catch (err) {
     console.error(`Failed to send template email "${templateName}" to ${to}:`, err);
     throw err;
