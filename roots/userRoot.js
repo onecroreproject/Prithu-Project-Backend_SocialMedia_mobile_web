@@ -144,6 +144,9 @@ const {
     getUserInvoices,
 } = require('../controllers/userControllers/userSubscriptionController');
 
+const { getAllPrompts, getPromptById } = require('../controllers/promptController');
+const { getAllCategories } = require('../controllers/aiCategoryController');
+
 
 
 const {
@@ -525,5 +528,10 @@ router.get('/user/updates/public', getPublicUpdates);
 router.get('/user/updates/all', auth, getUpdatesForUser);
 router.get('/user/updates/unread-count', auth, getUnreadCount);
 router.post('/user/updates/mark-read/:updateId', auth, markAsRead);
+
+/* --------------------- CreativeAI Photo Prompts API --------------------- */
+router.get('/prompts', auth, getAllPrompts);
+router.get('/prompts/:id', auth, getPromptById);
+router.get('/aicategories', auth, getAllCategories);
 
 module.exports = router;

@@ -12,7 +12,7 @@ async function checkOneFeed() {
             await new Promise((resolve) => prithuDB.once('open', resolve));
         }
 
-        const feed = await Feed.findOne({ "mlMetadata.analyzed": true }).lean();
+        const feed = await Feed.findOne({ "mlMetadata.aiVersion": { $gte: 2 } }).lean();
 
         if (!feed) {
             console.log("❌ No analyzed feeds found in the database.");

@@ -19,6 +19,12 @@ require("./workers/videoCompressionWorker");
 // 🟢 MULTI-DB Connection
 require("./database");
 
+const { autoSeedPrompts } = require("./controllers/promptController");
+autoSeedPrompts();
+
+const { autoSeedCategories } = require("./controllers/aiCategoryController");
+autoSeedCategories();
+
 const app = express();
 const server = http.createServer(app);
 initSocket(server);

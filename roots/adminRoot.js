@@ -152,6 +152,21 @@ const {
 
 const { getAllUserFeedback, updateFeedbackStatus, getAllSupportQueries, updateSupportQueryStatus } = require('../controllers/feedBackController');
 const { updateFooterConfig } = require('../controllers/footerController');
+const {
+    createPrompt,
+    updatePrompt,
+    deletePrompt,
+    getAllPrompts,
+    manualSeedPrompts,
+    uploadPromptImage
+} = require("../controllers/promptController");
+const {
+    getAllCategories: getAllAICategories,
+    createCategory: createAICategory,
+    updateCategory: updateAICategory,
+    deleteCategory: deleteAICategory,
+    manualSeedCategories: manualSeedAICategories
+} = require("../controllers/aiCategoryController");
 const { updatePageBySlug } = require('../controllers/staticPageController');
 const {
     getAllBlogsAdmin,
@@ -293,7 +308,7 @@ router.delete('/admin/feed/category/:id', auth, checkPermission('canManageCatego
 router.delete('/admin/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category', auth, checkPermission('canManageCategories'), deleteCategory); // For body-based ID
-router.get('/admin/get/feed/category', auth, checkPermission('canManageCategories'), getAllCategories);
+router.get('/admin/get/feed/category', auth, checkPermission('canManageCategories'), getAllAICategories);
 router.put('/admin/update/category', auth, checkPermission('canManageCategories'), updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
@@ -526,5 +541,20 @@ router.post("/admin/video-compression/retry/:feedId", auth, checkPermission('can
 /* --------------------- Admin ML Metadata API --------------------- */
 router.get("/admin/ml-metadata/stats", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/cronManagementController').getMLMetadataStats);
 router.post("/admin/ml-metadata/toggle", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/cronManagementController').toggleMLMetadataQueue);
+
+/* --------------------- Admin Prompt Management API --------------------- */
+router.get('/admin/prompts', auth, checkPermission('canManageFeeds'), getAllPrompts);
+router.post('/admin/prompts', auth, checkPermission('canManageFeeds'), createPrompt);
+router.put('/admin/prompts/:id', auth, checkPermission('canManageFeeds'), updatePrompt);
+router.delete('/admin/prompts/:id', auth, checkPermission('canManageFeeds'), deletePrompt);
+router.post('/admin/prompts/seed', auth, checkPermission('canManageFeeds'), manualSeedPrompts);
+router.post('/admin/prompts/upload', auth, checkPermission('canManageFeeds'), adminUploadFeed.single('image'), uploadPromptImage);
+
+/* --------------------- Admin AI Prompt Categories API --------------------- */
+router.get('/admin/aicategories', auth, checkPermission('canManageFeeds'), getAllAICategories);
+router.post('/admin/aicategories', auth, checkPermission('canManageFeeds'), createAICategory);
+router.put('/admin/aicategories/:id', auth, checkPermission('canManageFeeds'), updateAICategory);
+router.delete('/admin/aicategories/:id', auth, checkPermission('canManageFeeds'), deleteAICategory);
+router.post('/admin/aicategories/seed', auth, checkPermission('canManageFeeds'), manualSeedAICategories);
 
 module.exports = router;
