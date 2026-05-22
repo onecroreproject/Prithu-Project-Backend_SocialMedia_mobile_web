@@ -7,6 +7,11 @@ const paymentTransactionSchema = new mongoose.Schema({
     ref: 'User',
     required: true 
   },
+  planId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubscriptionPlan',
+    required: true
+  },
   orderId: { 
     type: String, 
     required: true,
@@ -27,13 +32,45 @@ const paymentTransactionSchema = new mongoose.Schema({
     type: Number, 
     required: true 
   },
+  currencyCode: {
+    type: String,
+    default: "INR"
+  },
+  paymentMethod: {
+    type: String,
+    default: "Instifi"
+  },
   paymentStatus: { 
     type: String, 
-    enum: ["pending", "success", "failed", "cancelled"],
+    enum: ["pending", "success", "failed", "cancelled", "subscriptionPending"],
     default: "pending" 
+  },
+  transactionStatus: {
+    type: String,
+    enum: ["created", "pending", "success", "failed"],
+    default: "created"
+  },
+  invoiceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Invoice'
+  },
+  invoiceUrl: {
+    type: String
+  },
+  customerName: {
+    type: String
+  },
+  customerEmail: {
+    type: String
+  },
+  customerMobile: {
+    type: String
   },
   gatewayResponse: { 
     type: Object 
+  }, // Full response from Instifi (backward compatibility)
+  paymentGatewayResponse: {
+    type: Object
   }, // Full response from Instifi
   createdAt: { 
     type: Date, 

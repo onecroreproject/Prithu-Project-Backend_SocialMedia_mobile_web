@@ -308,13 +308,19 @@ router.delete('/admin/feed/category/:id', auth, checkPermission('canManageCatego
 router.delete('/admin/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category', auth, checkPermission('canManageCategories'), deleteCategory); // For body-based ID
-router.get('/admin/get/feed/category', auth, checkPermission('canManageCategories'), getAllAICategories);
+router.get('/admin/get/feed/category', auth, checkPermission('canManageCategories'), getAllCategories);
 router.put('/admin/update/category', auth, checkPermission('canManageCategories'), updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
 router.post('/admin/subscription/create', auth, checkPermission('canManageSubscriptions'), createPlan);
+router.post('/admin/create/subscription', auth, checkPermission('canManageSubscriptions'), createPlan); // Alias for Frontend
+
 router.put('/admin/subscription/update/:id', auth, checkPermission('canManageSubscriptions'), updatePlan);
+router.put('/admin/update/subscription/:id', auth, checkPermission('canManageSubscriptions'), updatePlan); // Alias for Frontend
+
 router.delete('/admin/subscription/delete/:id', auth, checkPermission('canManageSubscriptions'), deletePlan);
+router.delete('/admin/delete/subscription/:id', auth, checkPermission('canManageSubscriptions'), deletePlan); // Alias for Frontend
+
 router.get('/admin/subscription/all', auth, checkPermission('canManageSubscriptions'), getAllPlans);
 router.get('/admin/getall/subscriptions', auth, checkPermission('canManageSubscriptions'), getAllPlans); // Alias
 

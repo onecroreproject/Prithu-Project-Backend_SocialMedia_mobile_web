@@ -15,11 +15,15 @@ const userSubscriptionSchema = new mongoose.Schema({
   // Subscription status
   isActive: { type: Boolean, default: false, index: true },
   paymentStatus: { type: String, enum: ["pending", "success", "failed"], default: "pending", index: true },
+  subscriptionStatus: { type: String },
   createdAt: { type: Date, default: Date.now, index: true },
 
   // Instifi details
   instifiMerchantTxnId: { type: String },
   instifiOrderId: { type: String },
+  paymentId: { type: String },
+  activatedAt: { type: Date },
+  expiryDate: { type: Date },
 
   invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" }, // Linked Invoice
   lastExpiryReminderDate: { type: String }, // Format: YYYY-MM-DD to track daily reminders

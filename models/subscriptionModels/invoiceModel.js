@@ -11,8 +11,8 @@ const invoiceSchema = new mongoose.Schema({
     currency: { type: String, default: "INR" },
 
     status: { type: String, enum: ["paid", "pending", "failed"], default: "paid", index: true },
-    paymentMethod: { type: String, default: "Razorpay" },
-    razorpayPaymentId: { type: String },
+    paymentMethod: { type: String, default: "Instifi" },
+    razorpayPaymentId: { type: String }, // Stores either Razorpay Payment ID or Instifi Transaction ID
  
     paidAt: { type: Date, default: Date.now, index: true },
     emailSent: { type: Boolean, default: false },

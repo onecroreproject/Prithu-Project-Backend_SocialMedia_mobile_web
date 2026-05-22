@@ -6,13 +6,17 @@ class InstifiPaymentService {
       process.env.INSTIFI_BASE_URL;
 
     this.apiKey =
-      process.env.INSTIFI_API_KEY;
+      process.env.INSTIFI_CLIENT_KEY || process.env.INSTIFI_API_KEY;
 
     this.secretKey =
       process.env.INSTIFI_SECRET_KEY;
 
     this.clientId =
-      process.env.INSTIFI_CLIENT_ID;
+      process.env.INSTIFI_CLIENT_ID || process.env.INSTIFI_MERCHANT_ID;
+
+    // Numeric merchantId required by CreateOrder API (e.g. "349" not "INFI349")
+    const rawMerchantId = process.env.INSTIFI_MERCHANT_ID || this.clientId;
+    this.merchantId = rawMerchantId ? rawMerchantId.replace(/\D/g, '') : null;
 
     if (
         !this.baseURL ||
@@ -21,7 +25,7 @@ class InstifiPaymentService {
         !this.clientId
     ) {
         throw new Error(
-            "Instifi env missing"
+            "Instifi env missing: INSTIFI_BASE_URL, INSTIFI_CLIENT_KEY/INSTIFI_API_KEY, INSTIFI_SECRET_KEY, INSTIFI_CLIENT_ID are required."
         );
     }
 }
@@ -126,7 +130,7 @@ process.env.FRONTEND_URL?.split(",")[0];
               orderData.payMode || "all",
 
             merchantId:
-              this.clientId,
+              this.merchantId || this.clientId.replace(/\D/g, ''),
 
             productInfo:
               orderData.productInfo
@@ -142,7 +146,7 @@ process.env.FRONTEND_URL?.split(",")[0];
               orderData.customerEmail,
 
             redirectionURL:
-`${frontendURL}/payment-verification`,
+`${frontendURL}/subscription`,
 
             currencyCode:
               "INR"
@@ -194,7 +198,7 @@ process.env.FRONTEND_URL?.split(",")[0];
     /**
      * 3. Check Payment Status
      */
-async checkStatus(orderId) {
+async checkStatus(orderId, transactionId = "") {
     try {
 
         const url =
@@ -215,9 +219,9 @@ async checkStatus(orderId) {
         };
 
         const payload = {
-            searchType: "1",
-            orderId: orderId,
-            transactionId: ""
+            searchType: transactionId ? "2" : "1",
+            orderId: transactionId ? "" : orderId,
+            transactionId: transactionId || ""
         };
 
         const response =
