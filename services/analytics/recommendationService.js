@@ -72,24 +72,44 @@ exports.getRecommendedFeeds = async (userId, page = 1, limit = 10) => {
     const user = await User.findById(userId).lean();
     if (!user) return [];
 
-    // Fetch analytics for this user to calculate scores
-    const userAnalytics = await UserFeedAnalytics.find({ userId }).select("feedId").lean();
-    const seenFeedIds = userAnalytics.map(a => a.feedId);
-    
-    // In a real production app, we would use a pre-calculated RecommendationScore collection
-    // or an aggregation pipeline. For now, we'll build a hybrid approach.
-    
-    // 1. Fetch from ML Service (Advanced Content-Based Similarity)
-    const mlRecos = await fetchMLRecommendations(userId, null, seenFeedIds, limit);
+    const HiddenPost = require("../../models/userModels/hiddenPostSchema");
+    const UserFeedActions = require("../../models/userFeedInterSectionModel");
+    const mlRecommendationService = require("../mlRecommendationService");
+
+    // 1. Gather all exclusions (Hidden, Watched, Shown in Redis, Disliked)
+    const [hiddenPosts, userFeedActionsDoc, shownFeedIds] = await Promise.all([
+      HiddenPost.find({ userId }).select("postId -_id").lean(),
+      UserFeedActions.findOne({ userId }).select("watchedFeeds.feedId likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean(),
+      mlRecommendationService.getShownFeeds(userId)
+    ]);
+
+    const hiddenPostIds = hiddenPosts.map(h => h.postId.toString());
+    const watchedFeedIds = (userFeedActionsDoc?.watchedFeeds || []).map(w => w.feedId.toString());
+    const dislikedFeedIds = (userFeedActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString());
+
+    // Exclude list (as string array for API/Mongoose matching)
+    const excludeIdsStr = [
+      ...new Set([
+        ...hiddenPostIds,
+        ...watchedFeedIds,
+        ...shownFeedIds,
+        ...dislikedFeedIds
+      ])
+    ].filter(id => mongoose.Types.ObjectId.isValid(id));
+
+    const excludeObjectIds = excludeIdsStr.map(id => new mongoose.Types.ObjectId(id));
+
+    // 2. Fetch from ML Service using the V2 centralized wrapper (passes diversity boost, prefer short duration)
+    const mlRecos = await mlRecommendationService.getRecommendations(userId, excludeIdsStr, null, limit);
     const mlFeedIds = mlRecos.map(r => r.feed_id);
 
-    // 2. Fetch local potential feeds (trending + user preferences) for fallback/blending
+    // 3. Fetch local potential feeds (trending + user preferences) for fallback/blending
     const preferredCategoryIds = (user.categoryPreference || []).map(p => p.categoryId);
     
     let query = {
+      _id: { $nin: excludeObjectIds },
       isApproved: true,
       status: "published"
-      // Removed exclusion of seenFeedIds to ensure content is always available
     };
 
     if (preferredCategoryIds.length > 0) {
@@ -98,25 +118,62 @@ exports.getRecommendedFeeds = async (userId, page = 1, limit = 10) => {
 
     const localFeeds = await Feed.find(query)
       .sort({ "playbackStats.totalViews": -1, createdAt: -1 })
+      .skip((page - 1) * limit)
       .limit(limit) 
       .lean();
 
-    // 3. Cold Start / New Content Discovery (10%)
+    // 4. Cold Start / New Content Discovery (10%)
     const freshFeeds = await Feed.find({
+      _id: { $nin: excludeObjectIds },
       isApproved: true,
       status: "published",
       createdAt: { $gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
       "playbackStats.totalViews": { $lt: 500 }
-    }).limit(2).lean();
+    })
+      .skip((page - 1) * 2)
+      .limit(2)
+      .lean();
 
-    // 4. Blend Results
+    // 5. Blend Results
     const mlFeeds = await Feed.find({ _id: { $in: mlFeedIds } }).lean();
     
     // Maintain ML order but keep feed objects
     const sortedMlFeeds = mlFeedIds.map(id => mlFeeds.find(f => f._id.toString() === id.toString())).filter(Boolean);
 
-    // Final Blend: ML (60%) + Local/Trending (30%) + Fresh (10%)
-    const finalFeeds = [...sortedMlFeeds, ...freshFeeds, ...localFeeds].slice(0, limit);
+    // 5. Blend Results based on slots: ML (60%), Fresh (10%), Local (30%)
+    const mlCount = Math.ceil(limit * 0.6);
+    const freshCount = Math.ceil(limit * 0.1);
+    const localCount = limit - mlCount - freshCount;
+
+    const blendedFeeds = [
+      ...sortedMlFeeds.slice(0, mlCount),
+      ...freshFeeds.slice(0, freshCount),
+      ...localFeeds.slice(0, localCount)
+    ];
+
+    // Fill remaining if we are short of the requested limit
+    let finalFeeds = blendedFeeds;
+    if (finalFeeds.length < limit) {
+      const existingIds = new Set(finalFeeds.map(f => f._id.toString()));
+      const remainingPool = [...sortedMlFeeds, ...freshFeeds, ...localFeeds].filter(f => !existingIds.has(f._id.toString()));
+      finalFeeds = [...finalFeeds, ...remainingPool].slice(0, limit);
+    }
+
+    // 🔄 FALLBACK: If finalFeeds is empty on Page 1, clear shown filter and retry to prevent "No Content" error
+    if (finalFeeds.length === 0 && page === 1) {
+      const fallbackQuery = {
+        _id: { $nin: [...hiddenPostIds, ...watchedFeedIds, ...dislikedFeedIds].map(id => new mongoose.Types.ObjectId(id)) },
+        isApproved: true,
+        status: "published"
+      };
+      if (preferredCategoryIds.length > 0) {
+        fallbackQuery.category = { $in: preferredCategoryIds };
+      }
+      finalFeeds = await Feed.find(fallbackQuery)
+        .sort({ "playbackStats.totalViews": -1, createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     return finalFeeds;
   } catch (err) {

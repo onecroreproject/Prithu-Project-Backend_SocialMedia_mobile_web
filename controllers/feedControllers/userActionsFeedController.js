@@ -3003,3 +3003,89 @@ exports.processSharePreview = async (req, res) => {
     if (!res.headersSent) res.status(500).json({ message: "Internal server error" });
   }
 };
+
+/* -------------------------------------------------------------------------- */
+// 🆕 SUBMIT USER FEEDBACK POPUP OPTION & PREFERENCES LEARNING
+// -------------------------------------------------------------------------- */
+exports.submitFeedbackPopup = async (req, res) => {
+  try {
+    const userId = req.Id;
+    const { feedId, option } = req.body;
+
+    if (!feedId || !option) {
+      return res.status(400).json({ success: false, message: "feedId and option are required" });
+    }
+
+    const UserFeedback = require("../../models/UserFeedbackAndReport");
+    const UserCategory = require("../../models/userModels/userCategotyModel.js");
+    const Feed = require("../../models/feedModel.js");
+    const redisClient = require("../../Config/redisConfig");
+
+    // 1. Save feedback to database
+    const feedback = await UserFeedback.create({
+      userId,
+      section: "post",
+      type: "feedback",
+      entityId: feedId,
+      entityType: "Feed",
+      category: "other",
+      title: "Why are you not interested in this content?",
+      message: option,
+      platform: "web",
+      device: "desktop",
+      status: "pending"
+    });
+
+    // Emit live update for Admin Dashboard if WebSocket exists
+    try {
+      const { getIO } = require("../../middlewares/webSocket");
+      const io = getIO();
+      if (io) {
+        io.emit("newSupportQuery", feedback);
+      }
+    } catch (wsErr) {
+      console.warn("WebSocket update failed: ", wsErr.message);
+    }
+
+    // 2. Apply learning logic based on selected option
+    const feed = await Feed.findById(feedId);
+    if (feed) {
+      const categoryId = feed.category[0]; // first category
+
+      if (option === "Not my interest" || option === "Don't show similar videos") {
+        if (userId && categoryId) {
+          await UserCategory.findOneAndUpdate(
+            { userId },
+            { $addToSet: { nonInterestedCategories: categoryId } },
+            { upsert: true }
+          );
+        }
+      } else if (option === "Too repetitive") {
+        if (userId && redisClient && redisClient.status === "ready") {
+          const key = `user_diversity_boost:${userId}`;
+          await redisClient.set(key, "true", "EX", 86400); // 24 hours
+        }
+      } else if (option === "Too long") {
+        if (userId && redisClient && redisClient.status === "ready") {
+          const key = `user_prefer_short:${userId}`;
+          await redisClient.set(key, "true", "EX", 86400); // 24 hours
+        }
+      }
+    }
+
+    // Reset skip ignores counter and set a cooldown for 1 hour to prevent spamming
+    if (redisClient && redisClient.status === "ready") {
+      const trackerKey = userId ? userId.toString() : req.body.sessionId || "guest";
+      await redisClient.set(`consecutive_ignores:${trackerKey}`, "0");
+      await redisClient.set(`feedback_popup_cooldown:${trackerKey}`, "true", "EX", 3600);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Feedback submitted and preference learning updated successfully."
+    });
+  } catch (err) {
+    console.error("❌ Error in submitFeedbackPopup:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

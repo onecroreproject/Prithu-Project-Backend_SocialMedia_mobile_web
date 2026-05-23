@@ -3,6 +3,7 @@ const Feed = require("../../models/feedModel");
 const User = require("../../models/userModels/userModel");
 const SearchHistory = require("../../models/analytics/searchHistoryModel");
 const mongoose = require("mongoose");
+const redisClient = require("../../Config/redisConfig");
 
 /**
  * 🚀 Initialize feed view tracking
@@ -78,7 +79,33 @@ exports.trackWatchTime = async (req, res) => {
       $inc: { "playbackStats.totalWatchTime": watchTime }
     });
 
-    res.status(200).json({ success: true });
+    // 🆕 User Feedback Popup Skips Tracking Logic
+    let triggerFeedbackPopup = false;
+    if (redisClient && redisClient.status === "ready") {
+      const trackerKey = userId ? userId.toString() : sessionId;
+      const ignoreKey = `consecutive_ignores:${trackerKey}`;
+      const cooldownKey = `feedback_popup_cooldown:${trackerKey}`;
+
+      const isSkip = watchTime < 4 && percentageWatched < 15;
+      const isPositive = watchTime >= 10 || percentageWatched >= 50;
+
+      if (isSkip) {
+        const newCount = await redisClient.incr(ignoreKey);
+        await redisClient.expire(ignoreKey, 3600); // 1 hour TTL
+
+        const hasCooldown = await redisClient.get(cooldownKey);
+        if (newCount >= 3 && !hasCooldown) {
+          triggerFeedbackPopup = true;
+        }
+      } else if (isPositive) {
+        await redisClient.set(ignoreKey, "0");
+      }
+    }
+
+    res.status(200).json({ 
+      success: true,
+      triggerFeedbackPopup
+    });
   } catch (err) {
     console.error("❌ trackWatchTime Error:", err);
     res.status(500).json({ message: "Server error" });

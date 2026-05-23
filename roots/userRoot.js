@@ -126,6 +126,7 @@ const {
     anniversaryDownloadFeed,
     politicsDownloadFeed,
     processSharePreview,
+    submitFeedbackPopup,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 const {
@@ -377,6 +378,7 @@ router.post('/user/feed/save', auth, toggleSaveFeed);
 router.post('/user/feed/share', auth, shareFeed);
 router.post('/user/feed/hide', auth, userHideFeed);
 router.post('/user/hide/feed', auth, userHideFeed); // Alias for frontend compatibility
+router.post('/user/feedback-popup/submit', auth, submitFeedbackPopup);
 router.post('/user/feed/download', auth, requestDownloadFeed);
 router.get('/user/feed/liked', auth, getUserLikedFeeds);
 router.get('/user/feed/saved', auth, getUserSavedFeeds);

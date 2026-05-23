@@ -14,6 +14,25 @@ const SHOWN_TTL = 86400; // 24 hours
  */
 const getRecommendations = async (userId, excludeIds = [], feedId = null, limit = 10) => {
     try {
+        // Fetch user learning preferences from Redis if userId is present
+        let diversityBoost = false;
+        let preferShort = false;
+        if (redisClient && redisClient.status === "ready" && userId) {
+            try {
+                const [divVal, shortVal] = await Promise.all([
+                    redisClient.get(`user_diversity_boost:${userId}`),
+                    redisClient.get(`user_prefer_short:${userId}`)
+                ]);
+                diversityBoost = divVal === "true";
+                preferShort = shortVal === "true";
+            } catch (redisErr) {
+                console.warn("⚠️ Failed to load user preferences from Redis:", redisErr.message);
+            }
+        }
+
+        // V2 toggle check
+        const isV2Enabled = process.env.RECOMMENDATION_V2 !== "false";
+
         // 1. Call FastAPI Recommendation Engine
         const startTime = Date.now();
         
@@ -22,7 +41,10 @@ const getRecommendations = async (userId, excludeIds = [], feedId = null, limit 
                 user_id: userId,
                 feed_id: feedId,
                 exclude_ids: excludeIds, // Pass the exclusion list to Python
-                limit: limit
+                limit: limit,
+                v2: isV2Enabled,
+                diversity_boost: diversityBoost,
+                prefer_short: preferShort
             },
             paramsSerializer: params => {
                 // Handle array serialization for FastAPI List[str]
