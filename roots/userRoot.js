@@ -362,6 +362,8 @@ router.post("/single/get/profile/overview", getProfileOverview);
 router.get("/get/profile/completion", auth, getProfileCompletion);
 router.put("/put/profile/visibility", auth, toggleFieldVisibility);
 router.get("/get/profile/visibility-settings", auth, getVisibilitySettings);
+router.get("/profile/visibility", auth, getVisibilitySettings);
+router.put("/profile/toggle-visibility", auth, toggleFieldVisibility);
 
 router.get("/user/get/visibility/settings", auth, getUserVisibilitySettings);
 router.post("/user/update/visibility/settings", auth, updateUserVisibilitySettings);

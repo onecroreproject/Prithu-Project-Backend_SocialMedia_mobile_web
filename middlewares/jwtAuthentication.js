@@ -3,13 +3,21 @@ require("dotenv").config();
 
 exports.auth = (req, res, next) => {
   const authHeader = req.headers.authorization;
+  let token = null;
 
-  // 1️⃣ Quick check for missing/invalid header
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Token missing or invalid" });
+  // 1️⃣ Try Authorization header first (web app / normal API calls)
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.query.token) {
+    // 2️⃣ Fallback: query-param token for mobile native downloads
+    // (mobile apps cannot attach Authorization headers during native file download)
+    token = req.query.token;
   }
 
-  const token = authHeader.split(" ")[1];
+  // Quick check for missing/invalid token
+  if (!token) {
+    return res.status(401).json({ message: "Token missing or invalid" });
+  }
 
   try {
     // 2️⃣ Verify JWT (synchronously — very fast for short payloads)
