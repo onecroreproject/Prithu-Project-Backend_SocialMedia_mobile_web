@@ -631,7 +631,43 @@ exports.getUploadProgress = (req, res) => {
 
 exports.getAllFeedAdmin = async (req, res) => {
     try {
-        const feeds = await Feed.find().sort({ createdAt: -1 }).lean();
+        let matchQuery = {};
+        const { fromDate, toDate } = req.query;
+
+        if (fromDate && toDate) {
+            matchQuery.createdAt = {
+                $gte: new Date(fromDate),
+                $lte: new Date(new Date(toDate).setHours(23, 59, 59, 999))
+            };
+        }
+
+        // Aggregate statistics
+        const statsAgg = await Feed.aggregate([
+            { $match: matchQuery },
+            {
+                $facet: {
+                    totalFeeds: [{ $count: "count" }],
+                    totalImages: [
+                        { $unwind: "$files" },
+                        { $match: { "files.type": "image" } },
+                        { $count: "count" }
+                    ],
+                    totalVideos: [
+                        { $unwind: "$files" },
+                        { $match: { "files.type": "video" } },
+                        { $count: "count" }
+                    ]
+                }
+            }
+        ]);
+
+        const totalFeeds = statsAgg[0]?.totalFeeds[0]?.count || 0;
+        const totalImages = statsAgg[0]?.totalImages[0]?.count || 0;
+        const totalVideos = statsAgg[0]?.totalVideos[0]?.count || 0;
+
+        // Fetch feeds
+        const feeds = await Feed.find(matchQuery).sort({ createdAt: -1 }).lean();
+        
         const results = await Promise.all(
             feeds.map(async (feed) => {
                 let profile = null;
@@ -661,7 +697,14 @@ exports.getAllFeedAdmin = async (req, res) => {
                 };
             })
         );
-        res.status(200).json({ success: true, feeds: results });
+
+        res.status(200).json({ 
+            success: true, 
+            totalFeeds,
+            totalImages,
+            totalVideos,
+            feeds: results 
+        });
     } catch (err) {
         console.error("Error in getAllFeedAdmin:", err);
         res.status(500).json({ success: false, message: "Server error" });
