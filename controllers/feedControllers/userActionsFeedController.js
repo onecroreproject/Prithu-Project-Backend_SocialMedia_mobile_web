@@ -26,9 +26,59 @@ const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
 const { processPosterMedia } = require("../../utils/posterMediaProcessor");
 
-// 🔓 Helper to get dynamic download limit based on environment
-const getDownloadLimit = () => {
-  return process.env.NODE_ENV === 'production' ? 1 : 1000;
+// Helper to check active subscription and enforce download limit (1 video download per day for free users, unlimited for subscribers)
+const checkUserDownloadStatus = async (userId, feedId = null) => {
+  try {
+    const checkActiveSubscription = require('../../middlewares/subscriptionMiddlewares/checkActiveSubscription.js');
+    const subStatus = await checkActiveSubscription(userId);
+    
+    if (subStatus && subStatus.hasActive) {
+      // Subscribed users get unlimited downloads
+      return { allowed: true, hasSubscription: true, limit: Infinity, downloadCount: 0 };
+    }
+
+    // If feedId is provided, check if it's a video. Non-video downloads (images/audio) are unlimited.
+    if (feedId) {
+      const feedObj = await Feed.findById(feedId).lean();
+      if (feedObj && feedObj.postType !== 'video') {
+        return { allowed: true, hasSubscription: false, limit: Infinity, downloadCount: 0 };
+      }
+    }
+
+    // Non-subscribed users get 1 video download per day
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const actions = await UserFeedActions.findOne({ userId }).lean();
+    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
+      const dlDate = new Date(item.downloadedAt || item.addedAt);
+      return dlDate >= startOfDay;
+    });
+
+    // Query Feed collection to verify which daily downloads are video feeds
+    let videoDownloadCount = 0;
+    if (dailyDownloads.length > 0) {
+      const dailyFeedIds = dailyDownloads.map(item => item.feedId);
+      const feeds = await Feed.find({ _id: { $in: dailyFeedIds } }).select('postType').lean();
+      const videoFeedIds = new Set(
+        feeds.filter(f => f.postType === 'video').map(f => f._id.toString())
+      );
+      videoDownloadCount = dailyDownloads.filter(item => item.feedId && videoFeedIds.has(item.feedId.toString())).length;
+    }
+
+    const limit = 1; // 1 video download per day limit for non-subscribed users
+    const allowed = videoDownloadCount < limit;
+
+    return {
+      allowed,
+      hasSubscription: false,
+      limit,
+      downloadCount: videoDownloadCount
+    };
+  } catch (err) {
+    console.error("[checkUserDownloadStatus] Error:", err);
+    return { allowed: false, hasSubscription: false, limit: 1, downloadCount: 1 };
+  }
 };
 
 
@@ -43,10 +93,13 @@ exports.likeFeed = async (req, res) => {
   }
 
   try {
-    const existingAction = await UserFeedActions.findOne({
-      userId,
-      "likedFeeds.feedId": feedId,
-    });
+    let userAction = await UserFeedActions.findOne({ userId });
+    if (!userAction) {
+      userAction = await UserFeedActions.create({ userId, likedFeeds: [], savedFeeds: [] });
+    }
+
+    const isLiked = Array.isArray(userAction.likedFeeds) && userAction.likedFeeds.some(item => item.feedId && item.feedId.toString() === feedId.toString());
+    const isSaved = Array.isArray(userAction.savedFeeds) && userAction.savedFeeds.some(item => item.feedId && item.feedId.toString() === feedId.toString());
 
     let updatedDoc, message, isLike;
 
@@ -59,33 +112,63 @@ exports.likeFeed = async (req, res) => {
       metadata: { platform: "web" },
     });
 
-    if (existingAction) {
+    if (isLiked) {
+      const pullUpdate = {
+        $pull: {
+          likedFeeds: { feedId }
+        }
+      };
+      
+      const feedStatsUpdate = {
+        $inc: { "engagementStats.likes": -1 }
+      };
+
+      if (isSaved) {
+        pullUpdate.$pull.savedFeeds = { feedId };
+        feedStatsUpdate.$inc["engagementStats.saves"] = -1;
+      }
+
       updatedDoc = await UserFeedActions.findOneAndUpdate(
         { userId },
-        { $pull: { likedFeeds: { feedId } } },
+        pullUpdate,
         { new: true }
       );
-      
-      // Update Feed stats
-      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.likes": -1 } });
-      // Update Analytics
-      await UserFeedAnalytics.findOneAndUpdate({ userId, feedId }, { liked: false });
+
+      await Feeds.findByIdAndUpdate(feedId, feedStatsUpdate);
+      await UserFeedAnalytics.findOneAndUpdate(
+        { userId, feedId },
+        { liked: false, saved: false },
+        { upsert: true }
+      );
 
       message = "Unliked successfully";
       isLike = false;
     } else {
+      const pushUpdate = {
+        $push: {
+          likedFeeds: { feedId, likedAt: new Date() }
+        }
+      };
+
+      const feedStatsUpdate = {
+        $inc: { "engagementStats.likes": 1 }
+      };
+
+      if (!isSaved) {
+        pushUpdate.$push.savedFeeds = { feedId, savedAt: new Date() };
+        feedStatsUpdate.$inc["engagementStats.saves"] = 1;
+      }
+
       updatedDoc = await UserFeedActions.findOneAndUpdate(
         { userId },
-        { $push: { likedFeeds: { feedId, likedAt: new Date() } } },
+        pushUpdate,
         { upsert: true, new: true }
       );
 
-      // Update Feed stats
-      await Feeds.findByIdAndUpdate(feedId, { $inc: { "engagementStats.likes": 1 } });
-      // Update Analytics
+      await Feeds.findByIdAndUpdate(feedId, feedStatsUpdate);
       await UserFeedAnalytics.findOneAndUpdate(
-        { userId, feedId }, 
-        { liked: true },
+        { userId, feedId },
+        { liked: true, saved: true },
         { upsert: true }
       );
 
@@ -128,6 +211,7 @@ exports.likeFeed = async (req, res) => {
     res.status(200).json({
       message,
       likedFeeds: updatedDoc.likedFeeds,
+      savedFeeds: updatedDoc.savedFeeds,
     });
   } catch (err) {
     console.error("Error in likeFeed:", err);
@@ -310,30 +394,19 @@ exports.toggleSaveFeed = async (req, res) => {
 
 exports.checkDownloadLimit = async (req, res) => {
   const userId = req.Id || req.user?.id || req.query.userId || req.query.uuserId;
+  const feedId = req.query.feedId || req.body.feedId;
 
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
     return res.status(401).json({ message: "Invalid user session" });
   }
 
   try {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const actions = await UserFeedActions.findOne({ userId }).lean();
-
-    // Count downloads for the current day only
-    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
-      const dlDate = new Date(item.downloadedAt || item.addedAt);
-      return dlDate >= startOfDay;
-    });
-
-    const limit = getDownloadLimit(); // 🛡️ Dynamic limit based on environment
-    const downloadCount = dailyDownloads.length;
-
+    const status = await checkUserDownloadStatus(userId, feedId);
     return res.json({
-      downloadCount,
-      limit,
-      isLimitReached: downloadCount >= limit
+      downloadCount: status.downloadCount,
+      limit: status.limit,
+      isLimitReached: !status.allowed,
+      hasSubscription: status.hasSubscription
     });
   } catch (err) {
     console.error("[CheckLimit] Error:", err);
@@ -382,20 +455,11 @@ exports.directDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId);
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
-    // Enforce Download Limit (1 Feed per Day)
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const actions = await UserFeedActions.findOne({ userId }).lean();
-    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
-      const dlDate = new Date(item.downloadedAt || item.addedAt);
-      return dlDate >= startOfDay;
-    });
-
-    const DOWNLOAD_LIMIT = getDownloadLimit(); // 🛡️ Dynamic limit based on environment
-    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+    // Enforce Download Limit
+    const status = await checkUserDownloadStatus(userId, feedId);
+    if (!status.allowed) {
       console.warn(`[DirectDL] Daily download limit reached for user: ${userId}`);
-      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+      return res.status(403).json({ message: `Daily download limit reached (Max ${status.limit} feeds per day)` });
     }
 
     const [user, profile] = await Promise.all([
@@ -446,37 +510,56 @@ exports.directDownloadFeed = async (req, res) => {
           });
         });
       }
+
+      // Add/Override Overlay Elements (Text)
+      if (customMetadata.textOverlays && Array.isArray(customMetadata.textOverlays)) {
+        if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+        // Filter out existing texts if we are providing a full set from the editor
+        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'text' && el.type !== 'username');
+
+        customMetadata.textOverlays.forEach((ov, idx) => {
+          designMetadata.overlayElements.push({
+            id: ov.id || `manual-text-${idx}`,
+            type: ov.type || 'text',
+            xPercent: ov.x,
+            yPercent: ov.y,
+            wPercent: ov.w,
+            hPercent: ov.h,
+            visible: ov.visible !== false,
+            zIndex: 120 + idx,
+            textConfig: {
+              content: ov.content || '',
+              fontSize: ov.style?.fontSize || 24,
+              color: ov.style?.color || '#ffffff',
+              fontFamily: ov.style?.fontFamily || 'Inter',
+              fontWeight: ov.style?.fontWeight || 'bold',
+              align: ov.style?.align || 'center',
+            }
+          });
+        });
+      }
     }
 
     const visibility = profile?.visibility || {};
 
-
-
-
-
-
     const viewer = {
       id: user._id,
-      userName: (visibility.userName === 'public' || visibility.displayName === 'public')
-        ? (profile?.userName || user.userName || profile?.name || "User")
-        : null,
-      email: visibility.email === 'public' ? (user.email || profile?.email) : null,
-      phoneNumber: visibility.phoneNumber === 'public' ? (profile?.phoneNumber || user.phoneNumber || user.phone) : null,
-      profileAvatar: (visibility.profileAvatar === 'public')
-        ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
-        : null,
+      userName: profile?.userName || user.userName || profile?.name || "User",
+      email: user.email || profile?.email || null,
+      phoneNumber: profile?.phoneNumber || user.phoneNumber || user.phone || null,
+      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
     };
 
-    // Auto-enable footer elements if they are public and present
+    // Auto-enable footer elements if they are present
     if (designMetadata.footerConfig?.showElements) {
       if (viewer.email) designMetadata.footerConfig.showElements.email = true;
       if (viewer.phoneNumber) designMetadata.footerConfig.showElements.phone = true;
     }
 
-    // Filter social icons based on availability and privacy
+    // Filter social icons based on availability (ignore privacy settings for self-download)
     if (designMetadata.footerConfig && profile?.socialLinks) {
       const socialLinks = profile.socialLinks;
-      const isSocialPublic = visibility.socialLinks === 'public';
+      const isSocialPublic = true;
 
       // If template has socialIcons defined, filter them
       if (designMetadata.footerConfig.socialIcons && designMetadata.footerConfig.socialIcons.length > 0) {
@@ -646,20 +729,11 @@ exports.birthdayDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
-    // 🛡️ Enforce Download Limit (1 Feed per Day in Production)
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const actions = await UserFeedActions.findOne({ userId }).lean();
-    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
-      const dlDate = new Date(item.downloadedAt || item.addedAt);
-      return dlDate >= startOfDay;
-    });
-
-    const DOWNLOAD_LIMIT = getDownloadLimit();
-    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+    // Enforce Download Limit
+    const status = await checkUserDownloadStatus(userId, feedId);
+    if (!status.allowed) {
       console.warn(`[BirthdayDL] Daily download limit reached for user: ${userId}`);
-      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+      return res.status(403).json({ message: `Daily download limit reached (Max ${status.limit} feeds per day)` });
     }
 
     const [user, profile] = await Promise.all([
@@ -673,19 +747,10 @@ exports.birthdayDownloadFeed = async (req, res) => {
 
     const viewer = {
       id: user._id,
-      userName:
-        visibility.userName === 'public' || visibility.displayName === 'public'
-          ? profile?.userName || profile?.name || user.userName || 'User'
-          : 'User',
-      email: visibility.email === 'public' ? user.email || profile?.email || null : null,
-      phoneNumber:
-        visibility.phoneNumber === 'public'
-          ? profile?.phoneNumber || user.phoneNumber || null
-          : null,
-      profileAvatar:
-        visibility.profileAvatar === 'public'
-          ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
-          : null,
+      userName: profile?.userName || profile?.name || user.userName || 'User',
+      email: user.email || profile?.email || null,
+      phoneNumber: profile?.phoneNumber || user.phoneNumber || null,
+      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
     };
 
     // ── Build designMetadata from feed + merge client customMetadata ──
@@ -858,20 +923,11 @@ exports.anniversaryDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
-    // 🛡️ Enforce Download Limit (1 Feed per Day in Production)
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const actions = await UserFeedActions.findOne({ userId }).lean();
-    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
-      const dlDate = new Date(item.downloadedAt || item.addedAt);
-      return dlDate >= startOfDay;
-    });
-
-    const DOWNLOAD_LIMIT = getDownloadLimit();
-    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+    // Enforce Download Limit
+    const status = await checkUserDownloadStatus(userId, feedId);
+    if (!status.allowed) {
       console.warn(`[AnniversaryDL] Daily download limit reached for user: ${userId}`);
-      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+      return res.status(403).json({ message: `Daily download limit reached (Max ${status.limit} feeds per day)` });
     }
 
     const [user, profile] = await Promise.all([
@@ -885,19 +941,10 @@ exports.anniversaryDownloadFeed = async (req, res) => {
 
     const viewer = {
       id: user._id,
-      userName:
-        visibility.userName === 'public' || visibility.displayName === 'public'
-          ? profile?.userName || profile?.name || user.userName || 'User'
-          : 'User',
-      email: visibility.email === 'public' ? user.email || profile?.email || null : null,
-      phoneNumber:
-        visibility.phoneNumber === 'public'
-          ? profile?.phoneNumber || user.phoneNumber || null
-          : null,
-      profileAvatar:
-        visibility.profileAvatar === 'public'
-          ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
-          : null,
+      userName: profile?.userName || profile?.name || user.userName || 'User',
+      email: user.email || profile?.email || null,
+      phoneNumber: profile?.phoneNumber || user.phoneNumber || null,
+      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
     };
 
     // ── Build designMetadata from feed + merge client customMetadata ──
@@ -1069,20 +1116,11 @@ exports.politicsDownloadFeed = async (req, res) => {
     const feed = await Feed.findById(feedId).lean();
     if (!feed) return res.status(404).json({ message: "Feed not found" });
 
-    // 🛡️ Enforce Download Limit (1 Feed per Day in Production)
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const actions = await UserFeedActions.findOne({ userId }).lean();
-    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
-      const dlDate = new Date(item.downloadedAt || item.addedAt);
-      return dlDate >= startOfDay;
-    });
-
-    const DOWNLOAD_LIMIT = getDownloadLimit();
-    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
+    // Enforce Download Limit
+    const status = await checkUserDownloadStatus(userId, feedId);
+    if (!status.allowed) {
       console.warn(`[PoliticsDL] Daily download limit reached for user: ${userId}`);
-      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+      return res.status(403).json({ message: `Daily download limit reached (Max ${status.limit} feeds per day)` });
     }
 
     const [user, profile] = await Promise.all([
@@ -1096,19 +1134,10 @@ exports.politicsDownloadFeed = async (req, res) => {
 
     const viewer = {
       id: user._id,
-      userName:
-        visibility.userName === 'public' || visibility.displayName === 'public'
-          ? profile?.userName || profile?.name || user.userName || 'User'
-          : 'User',
-      email: visibility.email === 'public' ? user.email || profile?.email || null : null,
-      phoneNumber:
-        visibility.phoneNumber === 'public'
-          ? profile?.phoneNumber || user.phoneNumber || null
-          : null,
-      profileAvatar:
-        visibility.profileAvatar === 'public'
-          ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
-          : null,
+      userName: profile?.userName || profile?.name || user.userName || 'User',
+      email: user.email || profile?.email || null,
+      phoneNumber: profile?.phoneNumber || user.phoneNumber || null,
+      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
     };
 
     // ── Build designMetadata from feed + merge client customMetadata ──
@@ -1244,18 +1273,9 @@ exports.requestDownloadFeed = async (req, res) => {
 
   try {
     // 2. CHECK DAILY DOWNLOAD LIMIT
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const actions = await UserFeedActions.findOne({ userId }).lean();
-    const dailyDownloads = (actions?.downloadedFeeds || []).filter(item => {
-      const dlDate = new Date(item.downloadedAt || item.addedAt);
-      return dlDate >= startOfDay;
-    });
-
-    const DOWNLOAD_LIMIT = getDownloadLimit(); // 🛡️ Dynamic limit based on environment
-    if (dailyDownloads.length >= DOWNLOAD_LIMIT) {
-      return res.status(403).json({ message: `Daily download limit reached (Max ${DOWNLOAD_LIMIT} feeds per day)` });
+    const status = await checkUserDownloadStatus(userId, feedId);
+    if (!status.allowed) {
+      return res.status(403).json({ message: `Daily download limit reached (Max ${status.limit} feeds per day)` });
     }
 
     // 3. FETCH FEED
@@ -2492,6 +2512,8 @@ exports.getUserLikedFeeds = async (req, res) => {
 
       return {
         ...feed,
+        isLiked: true,
+        isSaved: item.isSaved,
         feedId: feed._id,
         mediaUrl: getMediaUrl(feed.mediaUrl),
         files: (feed.files || []).map(f => ({

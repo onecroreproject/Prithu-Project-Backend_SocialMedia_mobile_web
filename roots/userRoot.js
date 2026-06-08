@@ -475,6 +475,16 @@ router.get('/subscription/trial-eligible', auth, checkTrialEligibility);
 router.get('/subscription/invoice/download/:invoiceId', auth, downloadInvoice);
 router.get('/subscription/invoices', auth, getUserInvoices);
 
+// Frontend alignment aliases
+router.get('/user/getall/subscriptions', getAllSubscriptionPlans);
+router.get('/user/subscriptions', auth, getUserSubscriptionPlanWithId);
+router.get('/user/check/active/subscription', auth, checkUserActiveSubscription);
+router.get('/user/check/active/subcription', auth, checkUserActiveSubscription);
+router.post('/user/plan/subscription', auth, subscribePlan);
+router.put('/user/cancel/subscription', auth, cancelSubscription);
+router.post('/user/activate/trial/plan', auth, userTrialPlanActive);
+router.get('/user/subscription/trial-eligible', auth, checkTrialEligibility);
+
 
 /* --------------------- Notifications --------------------- */
 router.get("/notifications/all", auth, getNotifications);
@@ -534,8 +544,8 @@ router.get('/user/updates/unread-count', auth, getUnreadCount);
 router.post('/user/updates/mark-read/:updateId', auth, markAsRead);
 
 /* --------------------- CreativeAI Photo Prompts API --------------------- */
-router.get('/prompts', optionalAuth, getAllPrompts);
-router.get('/prompts/:id', optionalAuth, getPromptById);
-router.get('/aicategories', optionalAuth, getAllCategories);
+router.get('/prompts', auth, getAllPrompts);
+router.get('/prompts/:id', auth, getPromptById);
+router.get('/aicategories', auth, getAllCategories);
 
 module.exports = router;

@@ -172,11 +172,11 @@ const SOCIAL_SLUGS = {
     'website': 'internetexplorer'
 };
 
-const downloadSocialIcon = async (platform, dest, color = 'white', size = 48) => {
+const downloadSocialIcon = async (platform, dest, color = null, size = 48) => {
     try {
         const slug = SOCIAL_SLUGS[platform.toLowerCase()] || platform.toLowerCase();
-        // Use color suffix: 'white' or hex (e.g. '000000' for black)
-        const iconUrl = `https://cdn.simpleicons.org/${slug}/${color}`;
+        // Use color suffix if specified, otherwise fetch native brand color
+        const iconUrl = color ? `https://cdn.simpleicons.org/${slug}/${color}` : `https://cdn.simpleicons.org/${slug}`;
         const response = await axios({
             url: iconUrl,
             method: 'GET',
@@ -214,10 +214,47 @@ exports.processFeedMedia = async ({
     // Optimization: Resolve local path if URL points to our own backend
     const resolveLocalPath = (url) => {
         if (!url || typeof url !== 'string') return null;
-        if (url.startsWith('/media/')) return path.join(process.cwd(), url);
+        if (fs.existsSync(url)) return url;
+        const absPath = path.resolve(__dirname, '..', url);
+        if (fs.existsSync(absPath)) return absPath;
+        
+        // 1. Check for "/media/" folder
+        const mediaIdx = url.indexOf('/media/');
+        if (mediaIdx !== -1) {
+            const relPath = url.substring(mediaIdx);
+            // Try project root path first
+            const projRootPath = path.join(__dirname, '..', relPath);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            // Fallback to current working directory
+            const cwdPath = path.join(process.cwd(), relPath);
+            if (fs.existsSync(cwdPath)) return cwdPath;
+        }
+        
+        // 2. Check for "/uploads/" folder
+        const uploadsIdx = url.indexOf('/uploads/');
+        if (uploadsIdx !== -1) {
+            const relPath = url.substring(uploadsIdx);
+            const projRootPath = path.join(__dirname, '..', relPath);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            const cwdPath = path.join(process.cwd(), relPath);
+            if (fs.existsSync(cwdPath)) return cwdPath;
+        }
+
+        // 3. Check direct starting slash paths
+        if (url.startsWith('/media/') || url.startsWith('/uploads/') || url.startsWith('/logo/')) {
+            const projRootPath = path.join(__dirname, '..', url);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            const cwdPath = path.join(process.cwd(), url);
+            if (fs.existsSync(cwdPath)) return cwdPath;
+        }
+        
+        // 4. Fallback: replace BACKEND_URL
         if (BACKEND_URL && url.startsWith(BACKEND_URL)) {
             const relPath = url.replace(BACKEND_URL, '');
-            return path.join(process.cwd(), relPath);
+            const projRootPath = path.join(__dirname, '..', relPath);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            const cwdPath = path.join(process.cwd(), relPath);
+            if (fs.existsSync(cwdPath)) return cwdPath;
         }
         return null;
     };
@@ -266,7 +303,7 @@ exports.processFeedMedia = async ({
 
     ensureDir(tempDir);
 
-    const mediaUrl = feed.mediaUrl;
+    const mediaUrl = getMediaUrl(feed.mediaUrl);
     let localPath = feed.storage?.paths?.media || feed.files?.[0]?.path;
 
     // Enhanced local path resolution
@@ -298,7 +335,7 @@ exports.processFeedMedia = async ({
 
     const footerConfig = designMetadata?.footerConfig;
     const footerEnabled = !!footerConfig?.enabled;
-    const footerH = footerStyle.footerHeight || (footerEnabled ? Math.round((footerConfig.heightPercent / 100) * OUT_H) : 0);
+    const footerH = footerStyle.footerHeight || (footerEnabled ? Math.round(((footerConfig.heightPercent || 10) / 100) * OUT_H) : 0);
     const maxMediaH = OUT_H - footerH;
 
     if (isImagePost) {
@@ -320,7 +357,7 @@ exports.processFeedMedia = async ({
 
 
     let dominantColor = footerConfig?.backgroundColor || "#1a1a1a";
-    if (footerConfig?.useDominantColor) {
+    if (footerConfig?.useDominantColor !== false) {
         dominantColor = await getDominantColor(tempSourcePath, isVideoPost, tempDir);
 
     }
@@ -387,11 +424,16 @@ exports.processFeedMedia = async ({
         else if (el.type === "logo") overlayMediaUrl = el.mediaConfig?.url || "/logo/prithulogo.png";
 
         if (overlayMediaUrl) {
-            overlayMediaUrl = getMediaUrl(overlayMediaUrl);
             const overlayDest = path.join(tempDir, `overlay_${overlayInputIndex}.png`);
 
             try {
-                await downloadFile(overlayMediaUrl, overlayDest);
+                // Try local resolution first to prevent loopback download failures/timeouts
+                const localOverlayPath = resolveLocalPath(overlayMediaUrl);
+                if (localOverlayPath && fs.existsSync(localOverlayPath)) {
+                    fs.copyFileSync(localOverlayPath, overlayDest);
+                } else {
+                    await downloadFile(getMediaUrl(overlayMediaUrl), overlayDest);
+                }
                 const xRaw = ((el.xPercent / 100) * OUT_W);
                 const yRaw = (yOffset + ((el.yPercent / 100) * actualMediaH));
                 const scaleW = Math.max(10, Math.round((el.wPercent || 20) / 100 * OUT_W));
@@ -424,6 +466,7 @@ exports.processFeedMedia = async ({
                 const isRound = el.type === 'avatar' && (shape === 'circle' || shape === 'round');
                 const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
 
+                const rx = Math.round(scaleW * 0.15); // rounded corner radius (15% of width)
                 // Create a "soft bottom" mask using SVG gradient
                 // Fades from white (opaque) to transparent at the bottom (starting at 70%)
                 // Dynamic SVG dimensions and path mapping
@@ -444,7 +487,7 @@ exports.processFeedMedia = async ({
                             <stop offset="100%" stop-color="transparent" />
                           </linearGradient>
                         </defs>
-                        <rect x="0" y="0" width="${scaleW}" height="${scaleH}" fill="url(#fade)"/>
+                        <rect x="0" y="0" rx="${rx}" ry="${rx}" width="${scaleW}" height="${scaleH}" fill="url(#fade)"/>
                       </svg>`
                 );
 
@@ -562,7 +605,12 @@ exports.processFeedMedia = async ({
             for (let i = 0; i < visibleSocialIcons.length; i++) {
                 const iconPath = path.join(tempDir, `social_${i}.png`);
                 try {
-                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, adaptiveIconColor, footerStyle.iconSize || 48);
+                    const platform = visibleSocialIcons[i].platform.toLowerCase();
+                    let iconColorParam = null; // Default to native brand colors
+                    if (platform === 'twitter' || platform === 'x' || platform === 'github') {
+                        iconColorParam = adaptiveIconColor;
+                    }
+                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, iconColorParam, footerStyle.iconSize || 48);
                     if (!success) continue;
 
                     // Social icons must be looped to match video duration

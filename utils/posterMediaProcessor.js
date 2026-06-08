@@ -139,10 +139,10 @@ const getBrightness = (color) => {
     return 0;
 };
 
-const downloadSocialIcon = async (platform, dest, color = 'white', size = 48) => {
+const downloadSocialIcon = async (platform, dest, color = null, size = 48) => {
     try {
         const slug = platform.toLowerCase() === 'twitter' ? 'x' : platform.toLowerCase();
-        const iconUrl = `https://cdn.simpleicons.org/${slug}/${color}`;
+        const iconUrl = color ? `https://cdn.simpleicons.org/${slug}/${color}` : `https://cdn.simpleicons.org/${slug}`;
         const response = await axios({ url: iconUrl, method: 'GET', responseType: 'arraybuffer', timeout: 10000 });
         const iconBuffer = await sharp(response.data).resize(Math.round(size * 0.6), Math.round(size * 0.6)).png().toBuffer();
         const background = Buffer.from(`<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="rgba(255,255,255,0.2)" /></svg>`);
@@ -195,31 +195,72 @@ exports.processPosterMedia = async ({
 
     ensureDir(tempDir);
 
-    const mediaUrl = feed.mediaUrl;
+    const mediaUrl = getMediaUrl(feed.mediaUrl);
     const postType = feed.postType || "image";
     const isVideoPost = postType === "video";
     const isImagePost = !isVideoPost;
     const tempSourcePath = path.join(tempDir, isVideoPost ? "source.mp4" : "source.jpg");
 
+    const BACKEND_URL = process.env.BACKEND_URL || "";
+    // Optimization: Resolve local path if URL points to our own backend
+    const resolveLocalPath = (url) => {
+        if (!url || typeof url !== 'string') return null;
+        if (fs.existsSync(url)) return url;
+        const absPath = path.resolve(__dirname, '..', url);
+        if (fs.existsSync(absPath)) return absPath;
+        
+        // 1. Check for "/media/" folder
+        const mediaIdx = url.indexOf('/media/');
+        if (mediaIdx !== -1) {
+            const relPath = url.substring(mediaIdx);
+            // Try project root path first
+            const projRootPath = path.join(__dirname, '..', relPath);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            // Fallback to current working directory
+            const cwdPath = path.join(process.cwd(), relPath);
+            if (fs.existsSync(cwdPath)) return cwdPath;
+        }
+        
+        // 2. Check for "/uploads/" folder
+        const uploadsIdx = url.indexOf('/uploads/');
+        if (uploadsIdx !== -1) {
+            const relPath = url.substring(uploadsIdx);
+            const projRootPath = path.join(__dirname, '..', relPath);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            const cwdPath = path.join(process.cwd(), relPath);
+            if (fs.existsSync(cwdPath)) return cwdPath;
+        }
+
+        // 3. Check direct starting slash paths
+        if (url.startsWith('/media/') || url.startsWith('/uploads/') || url.startsWith('/logo/')) {
+            const projRootPath = path.join(__dirname, '..', url);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            const cwdPath = path.join(process.cwd(), url);
+            if (fs.existsSync(cwdPath)) return cwdPath;
+        }
+        
+        // 4. Fallback: replace BACKEND_URL
+        if (BACKEND_URL && url.startsWith(BACKEND_URL)) {
+            const relPath = url.replace(BACKEND_URL, '');
+            const projRootPath = path.join(__dirname, '..', relPath);
+            if (fs.existsSync(projRootPath)) return projRootPath;
+            const cwdPath = path.join(process.cwd(), relPath);
+            if (fs.existsSync(cwdPath)) return cwdPath;
+        }
+        return null;
+    };
+
     // Download/Copy Source
-    const localPath = feed.storage?.paths?.media || feed.files?.[0]?.path;
+    let localPath = feed.storage?.paths?.media || feed.files?.[0]?.path;
+    if (!localPath || !fs.existsSync(localPath)) {
+        localPath = resolveLocalPath(mediaUrl);
+    }
+
     if (localPath && fs.existsSync(localPath)) {
         fs.copyFileSync(localPath, tempSourcePath);
     } else {
         await downloadFile(mediaUrl, tempSourcePath);
     }
-
-    const BACKEND_URL = process.env.BACKEND_URL || "";
-    // Optimization: Resolve local path if URL points to our own backend
-    const resolveLocalPath = (url) => {
-        if (!url || typeof url !== 'string') return null;
-        if (url.startsWith('/media/')) return path.join(process.cwd(), url);
-        if (BACKEND_URL && url.startsWith(BACKEND_URL)) {
-            const relPath = url.replace(BACKEND_URL, '');
-            return path.join(process.cwd(), relPath);
-        }
-        return null;
-    };
 
     const sourceMeta = await getVideoMetadata(tempSourcePath);
     const footerConfig = designMetadata?.footerConfig;
@@ -428,7 +469,12 @@ exports.processPosterMedia = async ({
             let curX = Math.round(paddingX + actualMediaW) - Math.round(20 * 1.8) - size;
             for (let i = 0; i < visible.length; i++) {
                 const iPath = path.join(tempDir, `soc_${i}.png`);
-                if (await downloadSocialIcon(visible[i].platform, iPath, iconColor, size)) {
+                const platform = visible[i].platform.toLowerCase();
+                let iconColorParam = null; // Default to native brand colors
+                if (platform === 'twitter' || platform === 'x' || platform === 'github') {
+                    iconColorParam = iconColor;
+                }
+                if (await downloadSocialIcon(visible[i].platform, iPath, iconColorParam, size)) {
                     ffmpegCommand.input(iPath).inputOptions(["-loop", "1", "-t", duration.toString()]);
                     const idx = overlayInputIndex++;
                     combinedFilters.push(
