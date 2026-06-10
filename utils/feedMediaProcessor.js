@@ -455,13 +455,6 @@ exports.processFeedMedia = async ({
                     if (startY !== yRaw) yExpr = `if(lt(t,${delay}),(${startY}),if(lt(t,${delay + dur}),(${startY})+(${yRaw}-(${startY}))*(t-${delay})/${dur},${yRaw}))`;
                 }
 
-                const fmtLabel = `fmt${filterIndex}`, rawLabel = `raw${filterIndex}`, maskedLabel = `masked${filterIndex}`, overlayLabel = `over${filterIndex}`;
-                let currentOverlayInput = `${overlayInputIndex}:v`;
-
-                // CRITICAL: Normalize every image input to RGBA immediately
-                combinedFilters.push({ filter: 'format', options: 'rgba', inputs: currentOverlayInput, outputs: fmtLabel });
-                currentOverlayInput = fmtLabel;
-
                 const shape = el.avatarConfig?.shape || el.shape || 'circle';
                 const isRound = el.type === 'avatar' && (shape === 'circle' || shape === 'round');
                 const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
@@ -502,6 +495,13 @@ exports.processFeedMedia = async ({
                     // Non-avatar (logos) use standard download path
                     ffmpegCommand.input(overlayDest).inputOptions(["-loop", "1", "-t", duration.toString()]);
                 }
+
+                const fmtLabel = `fmt${filterIndex}`, rawLabel = `raw${filterIndex}`, maskedLabel = `masked${filterIndex}`, overlayLabel = `over${filterIndex}`;
+                let currentOverlayInput = `${overlayInputIndex}:v`;
+
+                // CRITICAL: Normalize every image input to RGBA immediately
+                combinedFilters.push({ filter: 'format', options: 'rgba', inputs: currentOverlayInput, outputs: fmtLabel });
+                currentOverlayInput = fmtLabel;
 
                 overlayInputIndex++;
 

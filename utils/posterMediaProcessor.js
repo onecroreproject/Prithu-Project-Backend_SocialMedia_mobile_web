@@ -339,19 +339,12 @@ exports.processPosterMedia = async ({
                 const scaleW = Math.max(10, Math.round(((el.wPercent ?? el.w ?? 22)) / 100 * VIRTUAL_CANVAS_W));
                 const scaleH = el.type === 'avatar' ? scaleW : Math.round(((el.hPercent ?? el.h ?? el.wPercent ?? el.w ?? 22)) / 100 * VIRTUAL_CANVAS_H);
 
-                const fmtLabel = `fmt${filterIndex}`, overlayLabel = `over${filterIndex}`;
-                let currentOverlayInput = `${overlayInputIndex}:v`;
-
-                combinedFilters.push({ filter: 'format', options: 'rgba', inputs: currentOverlayInput, outputs: fmtLabel });
-                currentOverlayInput = fmtLabel;
+                const shape = el.avatarConfig?.shape || 'circle';
+                const isRound = shape === 'circle' || shape === 'round';
+                const noFade = !!el.noFade;
+                const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
 
                 if (el.type === 'avatar') {
-                    const shape = el.avatarConfig?.shape || 'circle';
-                    const isRound = shape === 'circle' || shape === 'round';
-                    const noFade = !!el.noFade; // leaders/party-logos skip the bottom fade
-                    const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
-
-                    // Sharp clip (no fade) for leaders; gradient fade for profile avatars
                     const maskSvg = Buffer.from(
                         noFade
                             ? (isRound
@@ -369,9 +362,18 @@ exports.processPosterMedia = async ({
 
                     ffmpegCommand.input(maskedAvatarPath).inputOptions(["-loop", "1", "-t", duration.toString()]);
                 } else {
-                    combinedFilters.push({ filter: 'scale', options: `w=${scaleW}:h=${scaleH}`, inputs: currentOverlayInput, outputs: `scaled_logo_${filterIndex}` });
-                    currentOverlayInput = `scaled_logo_${filterIndex}`;
+                    combinedFilters.push({ filter: 'scale', options: `w=${scaleW}:h=${scaleH}`, inputs: `${overlayInputIndex}:v`, outputs: `scaled_logo_${filterIndex}` });
                     ffmpegCommand.input(overlayDest).inputOptions(["-loop", "1", "-t", duration.toString()]);
+                }
+
+                const fmtLabel = `fmt${filterIndex}`, overlayLabel = `over${filterIndex}`;
+                let currentOverlayInput = `${overlayInputIndex}:v`;
+
+                combinedFilters.push({ filter: 'format', options: 'rgba', inputs: currentOverlayInput, outputs: fmtLabel });
+                currentOverlayInput = fmtLabel;
+
+                if (el.type !== 'avatar') {
+                    currentOverlayInput = `scaled_logo_${filterIndex}`;
                 }
 
                 combinedFilters.push({ filter: 'overlay', options: { x: xRaw, y: yRaw, eval: 'frame' }, inputs: [currentBase, currentOverlayInput], outputs: overlayLabel });

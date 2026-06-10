@@ -143,11 +143,11 @@ const getExclusionList = async (userId) => {
     mlRecommendationService.getShownFeeds(userId)
   ]);
 
-  const hiddenPostIds = hiddenPosts.map(h => h.postId.toString());
-  const watchedFeedIds = (userFeedActionsDoc?.watchedFeeds || []).map(w => w.feedId.toString());
-  const likedFeedIds = (userFeedActionsDoc?.likedFeeds || []).map(l => l.feedId.toString());
-  const savedFeedIds = (userFeedActionsDoc?.savedFeeds || []).map(s => s.feedId.toString());
-  const dislikedFeedIds = (userFeedActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString());
+  const hiddenPostIds = (hiddenPosts || []).map(h => h.postId ? h.postId.toString() : "").filter(Boolean);
+  const watchedFeedIds = (userFeedActionsDoc?.watchedFeeds || []).map(w => w.feedId ? w.feedId.toString() : "").filter(Boolean);
+  const likedFeedIds = (userFeedActionsDoc?.likedFeeds || []).map(l => l.feedId ? l.feedId.toString() : "").filter(Boolean);
+  const savedFeedIds = (userFeedActionsDoc?.savedFeeds || []).map(s => s.feedId ? s.feedId.toString() : "").filter(Boolean);
+  const dislikedFeedIds = (userFeedActionsDoc?.disLikeFeeds || []).map(d => d.feedId ? d.feedId.toString() : "").filter(Boolean);
 
   const excludeIds = [
     ...new Set([
@@ -270,8 +270,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE (Hybrid Sort & Randomization)
     ------------------------------------------------------*/
-    const finalExcludeIds = categoryId 
-      ? hiddenPostIds.map(id => new mongoose.Types.ObjectId(id))
+    const finalExcludeIds = categoryId && mongoose.Types.ObjectId.isValid(categoryId)
+      ? hiddenPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id))
       : excludeIds;
 
     const pipeline = [
@@ -281,7 +281,7 @@ exports.getAllFeedsByUserId = async (req, res) => {
           isApproved: true,
           isDeleted: false,
           status: "published",
-          category: categoryId
+          category: categoryId && mongoose.Types.ObjectId.isValid(categoryId)
             ? new mongoose.Types.ObjectId(categoryId)
             : { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
           $and: [
@@ -598,7 +598,7 @@ exports.getBirthdayFeeds = async (req, res) => {
     const feeds = await Feed.aggregate([
       {
         $match: {
-          _id: { $nin: hiddenPostIds.map(id => new mongoose.Types.ObjectId(id)) },
+          _id: { $nin: hiddenPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) },
           category: BIRTHDAY_CATEGORY_ID,
           $or: [
             { isScheduled: { $ne: true } },
@@ -889,7 +889,7 @@ exports.getAnniversaryFeeds = async (req, res) => {
     const feeds = await Feed.aggregate([
       {
         $match: {
-          _id: { $nin: hiddenPostIds.map(id => new mongoose.Types.ObjectId(id)) },
+          _id: { $nin: hiddenPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) },
           category: ANNIVERSARY_CATEGORY_ID,
           $or: [
             { isScheduled: { $ne: true } },
@@ -1180,7 +1180,7 @@ exports.getPoliticsFeeds = async (req, res) => {
     const feeds = await Feed.aggregate([
       {
         $match: {
-          _id: { $nin: hiddenPostIds.map(id => new mongoose.Types.ObjectId(id)) },
+          _id: { $nin: hiddenPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id)) },
           category: POLITICS_CATEGORY_ID,
           $or: [
             { isScheduled: { $ne: true } },

@@ -373,6 +373,7 @@ exports.toggleSaveFeed = async (req, res) => {
 
     res.status(200).json({
       message,
+      isSaved: !existingAction,
       savedFeeds: updatedDoc.savedFeeds,
     });
   } catch (err) {
@@ -2722,14 +2723,14 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
 
     const savedFeedsData = await UserFeedActions.aggregate([
       { $match: { userId: userIdObj } },
-      { $unwind: "$likedFeeds" },
-      { $sort: { "likedFeeds.likedAt": -1 } },
+      { $unwind: "$savedFeeds" },
+      { $sort: { "savedFeeds.savedAt": -1 } },
 
       // Join feed data
       {
         $lookup: {
           from: "Feeds",
-          localField: "likedFeeds.feedId",
+          localField: "savedFeeds.feedId",
           foreignField: "_id",
           as: "feed",
         },
@@ -2740,7 +2741,7 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
       {
         $lookup: {
           from: "UserFeedActions",
-          let: { feedId: "$likedFeeds.feedId" },
+          let: { feedId: "$savedFeeds.feedId" },
           pipeline: [
             { $unwind: "$likedFeeds" },
             { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$feedId"] } } },
@@ -2779,12 +2780,26 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
       },
       { $unwind: { path: "$creatorProfile", preserveNullAndEmptyArrays: true } },
 
+      // Check if user liked it
+      {
+        $lookup: {
+          from: "UserFeedActions",
+          let: { fid: "$feed._id" },
+          pipeline: [
+            { $match: { userId: userIdObj } },
+            { $unwind: "$likedFeeds" },
+            { $match: { $expr: { $eq: ["$likedFeeds.feedId", "$$fid"] } } }
+          ],
+          as: "likedCheck"
+        }
+      },
+
       // Format output to match Saved Feeds schema
       {
         $project: {
           _id: "$feed._id",
           type: "$feed.postType",
-          savedAt: "$likedFeeds.likedAt",
+          savedAt: "$savedFeeds.savedAt",
           caption: "$feed.caption",
           uploadMode: "$feed.uploadMode",
           mediaUrl: "$feed.mediaUrl", // Postcard uses this
@@ -2804,18 +2819,14 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
           },
           stats: {
             likes: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
-            shares: { $ifNull: ["$feed.shareCount", 0] }, // If these exist on feed
+            shares: { $ifNull: ["$feed.shareCount", 0] },
             downloads: { $ifNull: ["$feed.downloadCount", 0] },
             comments: { $ifNull: ["$feed.commentCount", 0] }
           },
           // Map flat counts for fallback
           likesCount: { $ifNull: [{ $arrayElemAt: ["$likeStats.totalLikes", 0] }, 0] },
-          isSaved: { $literal: true }, // It IS saved/liked if it's in this list
-          isLiked: { $literal: true } // Assuming saved logic implies usage in this context, but strictly this endpoint is for 'likedFeeds' which are 'saved'. Wait, the endpoint is "getUserLikedFeedsForSaved". 
-          // Actually the code says: "Saved feeds (from likes)".
-          // If I am fetching "Saved", then isSaved=true.
-
-
+          isSaved: { $literal: true },
+          isLiked: { $gt: [{ $size: "$likedCheck" }, 0] }
         },
       },
     ]);

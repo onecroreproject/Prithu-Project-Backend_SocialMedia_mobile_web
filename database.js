@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-
+require("dotenv").config(); // load .env variables
 
 // 🟢 1. PRITHU Database (Main App DB)
 const prithuDB = mongoose.createConnection(process.env.PRITHU_DB_URI, {
