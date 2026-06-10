@@ -33,10 +33,15 @@ initSocket(server);
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
+  "http://192.168.1.14:8000",
+  "http://192.168.1.12:8000",
   "https://admin.prithu.app",
   "https://www.prithu.app",
   "https://prithu.app",
 ];
+
+
+
 
 // 🟢 CORS
 app.use(
