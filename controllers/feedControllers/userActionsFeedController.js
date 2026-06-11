@@ -37,15 +37,7 @@ const checkUserDownloadStatus = async (userId, feedId = null) => {
       return { allowed: true, hasSubscription: true, limit: Infinity, downloadCount: 0 };
     }
 
-    // If feedId is provided, check if it's a video. Non-video downloads (images/audio) are unlimited.
-    if (feedId) {
-      const feedObj = await Feed.findById(feedId).lean();
-      if (feedObj && feedObj.postType !== 'video') {
-        return { allowed: true, hasSubscription: false, limit: Infinity, downloadCount: 0 };
-      }
-    }
-
-    // Non-subscribed users get 1 video download per day
+    // Non-subscribed users get 1 download per day
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
@@ -55,25 +47,15 @@ const checkUserDownloadStatus = async (userId, feedId = null) => {
       return dlDate >= startOfDay;
     });
 
-    // Query Feed collection to verify which daily downloads are video feeds
-    let videoDownloadCount = 0;
-    if (dailyDownloads.length > 0) {
-      const dailyFeedIds = dailyDownloads.map(item => item.feedId);
-      const feeds = await Feed.find({ _id: { $in: dailyFeedIds } }).select('postType').lean();
-      const videoFeedIds = new Set(
-        feeds.filter(f => f.postType === 'video').map(f => f._id.toString())
-      );
-      videoDownloadCount = dailyDownloads.filter(item => item.feedId && videoFeedIds.has(item.feedId.toString())).length;
-    }
-
-    const limit = 1; // 1 video download per day limit for non-subscribed users
-    const allowed = videoDownloadCount < limit;
+    const downloadCount = dailyDownloads.length;
+    const limit = 1; // 1 download per day limit for non-subscribed users
+    const allowed = downloadCount < limit;
 
     return {
       allowed,
       hasSubscription: false,
       limit,
-      downloadCount: videoDownloadCount
+      downloadCount
     };
   } catch (err) {
     console.error("[checkUserDownloadStatus] Error:", err);
@@ -2835,30 +2817,26 @@ exports.getUserLikedFeedsForSaved = async (req, res) => {
     if (!savedFeedsData || savedFeedsData.length === 0) {
       return res.status(200).json({
         success: true,
-        data: {
-          viewer,
-          savedFeeds: []
-        }
+        viewer,
+        savedFeeds: []
       });
     }
 
     res.status(200).json({
       success: true,
-      message: "Saved feeds (from likes) retrieved successfully",
+      message: "Saved feeds retrieved successfully",
       count: savedFeedsData.length,
-      data: {
-        viewer,
-        savedFeeds: savedFeedsData.map(f => ({
-          ...f,
-          thumbnailUrl: getMediaUrl(f.contentUrl),
-          contentUrl: getMediaUrl(f.contentUrl),
-          timeAgo: feedTimeCalculator(f.savedAt || f.createdAt),
-          postedBy: {
-            ...f.postedBy,
-            avatar: getMediaUrl(f.postedBy?.avatar) || "https://cdn-icons-png.flaticon.com/512/149/149071.png"
-          }
-        })),
-      }
+      viewer,
+      savedFeeds: savedFeedsData.map(f => ({
+        ...f,
+        thumbnailUrl: getMediaUrl(f.contentUrl),
+        contentUrl: getMediaUrl(f.contentUrl),
+        timeAgo: feedTimeCalculator(f.savedAt || f.createdAt),
+        postedBy: {
+          ...f.postedBy,
+          avatar: getMediaUrl(f.postedBy?.avatar) || "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+        }
+      }))
     });
   } catch (err) {
     console.error("Error fetching liked feeds for saved:", err);
