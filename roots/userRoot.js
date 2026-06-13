@@ -544,8 +544,8 @@ router.get('/user/updates/unread-count', auth, getUnreadCount);
 router.post('/user/updates/mark-read/:updateId', auth, markAsRead);
 
 /* --------------------- CreativeAI Photo Prompts API --------------------- */
-router.get('/prompts', auth, getAllPrompts);
-router.get('/prompts/:id', auth, getPromptById);
-router.get('/aicategories', auth, getAllCategories);
+router.get('/prompts', getAllPrompts);
+router.get('/prompts/:id', getPromptById);
+router.get('/aicategories', getAllCategories);
 
 module.exports = router;
