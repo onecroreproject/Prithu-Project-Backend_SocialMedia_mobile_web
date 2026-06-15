@@ -567,6 +567,7 @@ exports.directDownloadFeed = async (req, res) => {
     }
 
 
+    console.log(`[DirectDL] 🟢 Step 1: Starting processFeedMedia for feed: ${feedId}`);
     const { ffmpegCommand, tempSourcePath } = await processFeedMedia({
       feed,
       viewer,
@@ -574,7 +575,7 @@ exports.directDownloadFeed = async (req, res) => {
       tempDir,
       isStreaming: false
     });
-
+    console.log(`[DirectDL] 🟢 Step 2: processFeedMedia completed successfully.`);
 
     const finalOutputPath = path.join(tempDir, `final_output_${feedId}.mp4`);
     const randomSuffix = Math.floor(100 + Math.random() * 900);
@@ -589,14 +590,17 @@ exports.directDownloadFeed = async (req, res) => {
       console.error(`[DirectDL] Request error: ${err.message}`);
     });
 
+    console.log(`[DirectDL] 🟢 Step 3: Executing FFmpeg command...`);
+
     // Run FFmpeg to a temporary file instead of piping directly
     // This allows the 'faststart' flag to properly relocate the moov atom for social media compatibility
     ffmpegCommand
-
+      .on('start', (commandLine) => {
+        console.log(`[DirectDL] 🟢 Step 4: FFmpeg process spawned!`);
+        console.log(`[DirectDL] 🔧 Exact Command: ${commandLine}`);
+      })
       .on('stderr', (line) => {
-        if (line.includes('Error') || line.includes('error') || line.includes('Invalid') || line.includes('failed')) {
-          console.error(`[DirectDL] FFmpeg STDERR: ${line}`);
-        }
+        console.error(`[DirectDL] 🔴 FFmpeg STDERR: ${line}`);
       })
       .on('error', (err) => {
         console.error("[DirectDL] FFmpeg Error:", err.message, err.stack);
