@@ -2,14 +2,12 @@ const { Worker } = require("bullmq");
 const path = require("path");
 const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
-const ffmpegStatic = require("ffmpeg-static");
-const ffprobeStatic = require("ffprobe-static");
+// Import the global FFmpeg configuration so we don't accidentally override the system binary path
+require("../Config/ffmpegConfig");
+
 const Feed = require("../models/feedModel");
 const { urlToPath } = require("../utils/storageEngine");
 const connection = require("../Config/redisConfig");
-
-ffmpeg.setFfmpegPath(ffmpegStatic);
-ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 const TEMP_DIR = path.join(__dirname, "../media/feed/temp");
 
