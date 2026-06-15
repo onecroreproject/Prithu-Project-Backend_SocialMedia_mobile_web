@@ -40,4 +40,15 @@ const blogSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+blogSchema.index({
+  title: 'text',
+  content: 'text'
+}, {
+  weights: {
+    title: 10,
+    content: 5
+  },
+  name: 'blog_text_search'
+});
+
 module.exports = prithuDB.model("Blog", blogSchema, "Blogs");

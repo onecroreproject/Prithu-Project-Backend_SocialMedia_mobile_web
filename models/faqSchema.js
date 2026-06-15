@@ -49,4 +49,19 @@ const helpSectionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+helpSectionSchema.index({
+  title: 'text',
+  description: 'text',
+  'faqs.question': 'text',
+  'faqs.answer': 'text'
+}, {
+  weights: {
+    title: 10,
+    'faqs.question': 8,
+    description: 5,
+    'faqs.answer': 5
+  },
+  name: 'faq_text_search'
+});
+
 module.exports = prithuDB.model("HelpFAQ", helpSectionSchema, "HelpFAQ");

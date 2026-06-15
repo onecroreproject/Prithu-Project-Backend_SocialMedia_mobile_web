@@ -103,6 +103,10 @@ app.use("/api", adminRoot);
 app.use("/web/api", userRoot);
 app.use("/web/api/payment", paymentRoutes);
 
+const chatRoutes = require("./routes/chatRoutes");
+app.use("/api/chat", chatRoutes);
+
+
 
 // 🟢 Cron
 startCrons();
