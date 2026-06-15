@@ -653,8 +653,7 @@ exports.processFeedMedia = async ({
     const outputOptions = [
         "-map", `[${currentBase}]`,
         "-c:v", "libx264",
-        "-profile:v", "baseline",
-        "-level", "3.0",
+        "-profile:v", "main",
         "-pix_fmt", "yuv420p",
         "-b:v", "2500k",
         "-maxrate", "2500k",
