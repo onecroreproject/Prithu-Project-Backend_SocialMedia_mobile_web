@@ -316,6 +316,7 @@ exports.processFeedMedia = async ({
     const postType = feed.postType || "image";
     const isVideoPost = postType === "video";
     const isImagePost = postType === "image" || postType === "image+audio";
+    const isStaticImage = postType === "image";
     const tempSourcePath = path.join(tempDir, isVideoPost ? "source.mp4" : "source.jpg");
 
     if (localPath && fs.existsSync(localPath)) {
@@ -373,7 +374,7 @@ exports.processFeedMedia = async ({
             "-fflags +genpts"
         ]);
     const duration = sourceMeta.duration && sourceMeta.duration !== 'N/A' ? sourceMeta.duration : 8;
-    if (isImagePost) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
+    if (isImagePost && !isStaticImage) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
 
     let currentBase = "base";
     const combinedFilters = [];
@@ -493,10 +494,12 @@ exports.processFeedMedia = async ({
                         .composite([{ input: maskSvg, blend: 'dest-in' }])
                         .png()
                         .toFile(maskedAvatarPath);
-                    ffmpegCommand.input(maskedAvatarPath).inputOptions(["-loop", "1", "-t", duration.toString()]);
+                    ffmpegCommand.input(maskedAvatarPath);
+                    if (!isStaticImage) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
                 } else {
                     // Non-avatar (logos) use standard download path
-                    ffmpegCommand.input(overlayDest).inputOptions(["-loop", "1", "-t", duration.toString()]);
+                    ffmpegCommand.input(overlayDest);
+                    if (!isStaticImage) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
                 }
 
                 const fmtLabel = `fmt${filterIndex}`, rawLabel = `raw${filterIndex}`, maskedLabel = `masked${filterIndex}`, overlayLabel = `over${filterIndex}`;
@@ -513,7 +516,7 @@ exports.processFeedMedia = async ({
                     currentOverlayInput = rawLabel;
                 }
 
-                if (el.animation?.enabled) {
+                if (!isStaticImage && el.animation?.enabled) {
                     combinedFilters.push({ filter: 'fade', options: { t: 'in', st: 0, d: dur, alpha: 1 }, inputs: currentOverlayInput, outputs: maskedLabel });
                     currentOverlayInput = maskedLabel;
                 }
@@ -532,7 +535,7 @@ exports.processFeedMedia = async ({
                 const textLabel = `text${filterIndex}`;
 
                 let xExpr = `${Math.round(xRaw)}`, yExpr = `${Math.round(yRaw)}`;
-                if (el.animation?.enabled && el.animation.direction !== "none") {
+                if (!isStaticImage && el.animation?.enabled && el.animation.direction !== "none") {
                     const dur = Number(el.animation?.speed || 1);
                     const delay = Number(el.animation?.delay || 0);
                     const dir = el.animation.direction;
@@ -617,7 +620,8 @@ exports.processFeedMedia = async ({
                     if (!success) continue;
 
                     // Social icons must be looped to match video duration
-                    ffmpegCommand.input(iconPath).inputOptions(["-loop", "1", "-t", duration.toString()]);
+                    ffmpegCommand.input(iconPath);
+                    if (!isStaticImage) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
                     const iconIdx = overlayInputIndex++;
                     const iconLabel = `social_over_${i}`;
                     const iconSize = footerStyle.iconSize || 48;
@@ -653,29 +657,42 @@ exports.processFeedMedia = async ({
     ffmpegCommand.complexFilter(combinedFilters);
 
 
-    const outputOptions = [
-        "-map", `[${currentBase}]`,
-        "-c:v", "libx264",
-        "-profile:v", "main",
-        "-pix_fmt", "yuv420p",
-        "-b:v", "2500k",
-        "-maxrate", "2500k",
-        "-bufsize", "5000k",
-        "-preset", isStreaming ? "ultrafast" : "veryfast",
-        "-movflags", "+faststart" + (isStreaming ? "+frag_keyframe+empty_moov" : ""),
-        "-f", "mp4"
-    ];
-    if (postType === "image+audio" && audioInputIndex !== null) {
-        outputOptions.push("-shortest", "-map", `${audioInputIndex}:a`, "-c:a", "aac", "-b:a", "128k");
-    } else if (isVideoPost) {
-        // When streaming, re-encoding audio to aac is safer for piped MP4
-        outputOptions.push("-map", "0:a?", "-c:a", "aac", "-b:a", "128k");
-    } else if (isImagePost) {
-        // Ensure image-only output also terminates at shortest input
-        outputOptions.push("-shortest");
+    let outputOptions = [];
+    let ext = "mp4";
+
+    if (isStaticImage) {
+        ext = "jpg";
+        outputOptions = [
+            "-map", `[${currentBase}]`,
+            "-vframes", "1",
+            "-q:v", "2",
+            "-f", "image2"
+        ];
+    } else {
+        outputOptions = [
+            "-map", `[${currentBase}]`,
+            "-c:v", "libx264",
+            "-profile:v", "main",
+            "-pix_fmt", "yuv420p",
+            "-b:v", "2500k",
+            "-maxrate", "2500k",
+            "-bufsize", "5000k",
+            "-preset", isStreaming ? "ultrafast" : "veryfast",
+            "-movflags", "+faststart" + (isStreaming ? "+frag_keyframe+empty_moov" : ""),
+            "-f", "mp4"
+        ];
+        if (postType === "image+audio" && audioInputIndex !== null) {
+            outputOptions.push("-shortest", "-map", `${audioInputIndex}:a`, "-c:a", "aac", "-b:a", "128k");
+        } else if (isVideoPost) {
+            // When streaming, re-encoding audio to aac is safer for piped MP4
+            outputOptions.push("-map", "0:a?", "-c:a", "aac", "-b:a", "128k");
+        } else if (isImagePost && !isStaticImage) {
+            // Ensure image-only output also terminates at shortest input
+            outputOptions.push("-shortest");
+        }
     }
 
     ffmpegCommand.outputOptions(outputOptions);
 
-    return { ffmpegCommand, tempSourcePath };
+    return { ffmpegCommand, tempSourcePath, ext };
 };

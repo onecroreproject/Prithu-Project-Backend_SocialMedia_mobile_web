@@ -568,7 +568,7 @@ exports.directDownloadFeed = async (req, res) => {
 
 
     console.log(`[DirectDL] 🟢 Step 1: Starting processFeedMedia for feed: ${feedId}`);
-    const { ffmpegCommand, tempSourcePath } = await processFeedMedia({
+    const { ffmpegCommand, tempSourcePath, ext = "mp4" } = await processFeedMedia({
       feed,
       viewer,
       designMetadata,
@@ -577,9 +577,9 @@ exports.directDownloadFeed = async (req, res) => {
     });
     console.log(`[DirectDL] 🟢 Step 2: processFeedMedia completed successfully.`);
 
-    const finalOutputPath = path.join(tempDir, `final_output_${feedId}.mp4`);
+    const finalOutputPath = path.join(tempDir, `final_output_${feedId}.${ext}`);
     const randomSuffix = Math.floor(100 + Math.random() * 900);
-    const filename = `prithu${randomSuffix}.mp4`;
+    const filename = `prithu${randomSuffix}.${ext}`;
 
     // Monitor for client disconnects
     req.on('close', () => {
