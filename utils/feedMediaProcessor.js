@@ -447,7 +447,7 @@ exports.processFeedMedia = async ({
                 const dur = Number(el.animation?.speed || 1);
                 const delay = Number(el.animation?.delay || 0);
 
-                if (el.animation?.enabled && el.animation.direction !== "none") {
+                if (!isStaticImage && el.animation?.enabled && el.animation.direction !== "none") {
                     const dir = el.animation.direction;
                     let startX = xRaw, startY = yRaw;
                     if (dir.includes('left')) startX = -scaleW;
