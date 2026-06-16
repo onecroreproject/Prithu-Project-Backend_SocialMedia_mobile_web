@@ -31,7 +31,7 @@ const checkUserDownloadStatus = async (userId, feedId = null) => {
   try {
     const checkActiveSubscription = require('../../middlewares/subscriptionMiddlewares/checkActiveSubscription.js');
     const subStatus = await checkActiveSubscription(userId);
-    
+
     if (subStatus && subStatus.hasActive) {
       // Subscribed users get unlimited downloads
       return { allowed: true, hasSubscription: true, limit: Infinity, downloadCount: 0 };

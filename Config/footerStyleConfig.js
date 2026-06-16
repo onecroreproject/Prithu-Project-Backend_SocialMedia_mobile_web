@@ -26,14 +26,14 @@ module.exports = {
     verticalRowSpacing: 50,  // Vertical gap between Row 1 and Row 2
 
     // Font sizes for different elements (in px)
-    nameSize: 40,
-    emailSize: 40,
-    phoneSize: 40,
-    iconSize: 30,
+    nameSize: 32,
+    emailSize: 26,
+    phoneSize: 26,
+    iconSize: 36,
 
     // Vertical row positions (as fraction of footer height, 0.0 to 1.0)
-    row1Offset: 0.33,
-    row2Offset: 0.66,
+    row1Offset: 0.35,
+    row2Offset: 0.70,
 
     // Shadow settings
     shadowColor: 'black@0.6',

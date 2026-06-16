@@ -343,10 +343,13 @@ exports.processFeedMedia = async ({
         sourceMeta.height = sourceMeta.height || maxMediaH;
     }
 
-    const scaleFactor = Math.min(OUT_W / sourceMeta.width, maxMediaH / sourceMeta.height);
-    const actualMediaW = Math.round(sourceMeta.width * scaleFactor);
-    const actualMediaH = Math.round(sourceMeta.height * scaleFactor);
-    const paddingX = (OUT_W - actualMediaW) / 2;
+    // Scale width to exactly OUT_W to eliminate left/right black space
+    const scaleFactor = OUT_W / sourceMeta.width;
+    const actualMediaW = OUT_W;
+    let actualMediaH = Math.round(sourceMeta.height * scaleFactor);
+    // Ensure height is even for x264 compatibility
+    actualMediaH = actualMediaH % 2 === 0 ? actualMediaH : actualMediaH + 1;
+    const paddingX = 0;
 
     // Removal of unwanted space: Make canvas height exactly fit the combined block
     const combinedBlockH = actualMediaH + footerH;
@@ -395,7 +398,7 @@ exports.processFeedMedia = async ({
     // Base Canvas: Normalize to RGBA to prevent re-init errors with overlays
 
     combinedFilters.push(
-        { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
+        { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}`, inputs: "0:v", outputs: "scaled_base" },
         { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=oh-ih:color=black`, inputs: "scaled_base", outputs: "padded_base" },
         { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: "rgba_base" },
         { filter: "format", options: "rgba", inputs: "rgba_base", outputs: currentBase }
