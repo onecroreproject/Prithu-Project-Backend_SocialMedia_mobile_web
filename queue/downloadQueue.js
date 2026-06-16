@@ -179,9 +179,12 @@ downloadQueue.process(async (job) => {
 
     if (isSharePreview && !fs.existsSync(shareDir)) fs.mkdirSync(shareDir, { recursive: true });
 
+    const isStaticImage = feed.postType === "image";
+    const ext = isStaticImage ? "jpg" : "mp4";
+
     const finalOutputName = isSharePreview
-        ? `${userId}_${feed._id}_direct.mp4`
-        : `processed_${jobId}.mp4`;
+        ? `${userId}_${feed._id}_direct.${ext}`
+        : `processed_${jobId}.${ext}`;
 
     const finalOutputPath = isSharePreview
         ? path.join(shareDir, finalOutputName)
@@ -277,7 +280,7 @@ downloadQueue.process(async (job) => {
         console.log(`[Job ${jobId}] Processing complete. URL: ${downloadUrl}`);
 
         if (io) {
-            const payload = { jobId, progress: 100, status: "ready", videoUrl: downloadUrl, thumbUrl, mediaType: 'video' };
+            const payload = { jobId, progress: 100, status: "ready", videoUrl: downloadUrl, thumbUrl, mediaType: isStaticImage ? 'image' : 'video', fileExt: ext };
             io.to(userId).emit(completeEvent, payload);
         }
 
