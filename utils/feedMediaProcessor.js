@@ -406,7 +406,11 @@ exports.processFeedMedia = async ({
     );
 
     // 4. OVERLAYS
-    const overlayElements = [...(designMetadata?.overlayElements || []).filter(el => el.visible !== false)]
+    const overlayElements = [...(designMetadata?.overlayElements || [])]
+        .filter(el => {
+            const isVisible = el.visible !== false && el.visible !== "false" && el.visible !== "0";
+            return isVisible;
+        })
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
 

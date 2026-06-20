@@ -28,6 +28,10 @@ const promptSchema = new mongoose.Schema(
       type: String,
       default: "1:1"
     },
+    unlockCredits: {
+      type: Number,
+      default: 3
+    },
     tags: {
       type: [String],
       default: []

@@ -71,6 +71,13 @@ const UserSchema = new mongoose.Schema(
       ref: "ProfileSettings",
     },
 
+    // ------------ WALLET SYSTEM --------------
+    wallet: {
+      balance: { type: Number, default: 0 },
+      totalPurchasedCredits: { type: Number, default: 0 },
+      totalSpentCredits: { type: Number, default: 0 },
+    },
+
     // ------------ REFERRAL LOGIC --------------
     referralCode: { type: String, unique: true, sparse: true, trim: true },
     referralCodeIsValid: { type: Boolean, default: false },

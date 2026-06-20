@@ -563,4 +563,18 @@ router.put('/admin/aicategories/:id', auth, checkPermission('canManageFeeds'), u
 router.delete('/admin/aicategories/:id', auth, checkPermission('canManageFeeds'), deleteAICategory);
 router.post('/admin/aicategories/seed', auth, checkPermission('canManageFeeds'), manualSeedAICategories);
 
+/* --------------------- Admin Monetization & AI Management API --------------------- */
+const monetizationController = require('../controllers/adminControllers/adminMonetizationController');
+// Re-using checkPermission logic conceptually; assuming 'canManageFeeds' or similar for AI management.
+router.get('/admin/monetization/dashboard', auth, monetizationController.getWalletDashboard);
+router.get('/admin/monetization/packages', auth, monetizationController.getCreditPackages);
+router.post('/admin/monetization/packages', auth, monetizationController.createCreditPackage);
+router.put('/admin/monetization/packages/:id', auth, monetizationController.updateCreditPackage);
+router.delete('/admin/monetization/packages/:id', auth, monetizationController.deleteCreditPackage);
+router.get('/admin/monetization/transactions', auth, monetizationController.getTransactions);
+router.get('/admin/monetization/revenue/prompts', auth, monetizationController.getPromptRevenue);
+router.get('/admin/monetization/revenue/ai', auth, monetizationController.getAIRevenue);
+router.get('/admin/monetization/users/credits', auth, monetizationController.getUserCreditUsage);
+router.post('/admin/monetization/users/:userId/credits', auth, monetizationController.adminModifyUserCredits);
+
 module.exports = router;

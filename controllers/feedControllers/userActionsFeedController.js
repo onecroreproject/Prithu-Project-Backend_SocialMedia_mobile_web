@@ -460,6 +460,9 @@ exports.directDownloadFeed = async (req, res) => {
 
     // MERGE CUSTOM METADATA FROM CLIENT (Avatar positions, etc.)
     if (customMetadata && Object.keys(customMetadata).length > 0) {
+      if (customMetadata.postType) {
+        feed.postType = customMetadata.postType;
+      }
 
 
       // Override Footer Config
@@ -508,7 +511,7 @@ exports.directDownloadFeed = async (req, res) => {
             yPercent: ov.y,
             wPercent: ov.w,
             hPercent: ov.h,
-            visible: ov.visible !== false,
+            visible: ov.visible !== false && ov.visible !== "false" && ov.visible !== "0",
             zIndex: 120 + idx,
             textConfig: {
               content: ov.content || '',

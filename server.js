@@ -103,6 +103,10 @@ app.use("/api", adminRoot);
 app.use("/web/api", userRoot);
 app.use("/web/api/payment", paymentRoutes);
 
+const walletRoutes = require("./routes/walletRoutes");
+app.use("/web/api/wallet", walletRoutes);
+
+
 const chatRoutes = require("./routes/chatRoutes");
 app.use("/api/chat", chatRoutes);
 
