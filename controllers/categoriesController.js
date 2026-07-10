@@ -41,10 +41,13 @@ exports.getAllCategories = async (req, res) => {
           _id: "$category", // ObjectId reference to Categories
           totalFeeds: { $sum: 1 },
           videoCount: {
-            $sum: { $cond: [{ $eq: ["$type", "video"] }, 1, 0] },
+            $sum: { $cond: [{ $eq: ["$postType", "video"] }, 1, 0] },
           },
           imageCount: {
-            $sum: { $cond: [{ $eq: ["$type", "image"] }, 1, 0] },
+            $sum: { $cond: [{ $eq: ["$postType", "image"] }, 1, 0] },
+          },
+          audioCount: {
+            $sum: { $cond: [{ $eq: ["$postType", "image+audio"] }, 1, 0] },
           },
         },
       },
@@ -59,6 +62,7 @@ exports.getAllCategories = async (req, res) => {
         totalFeeds: stat ? stat.totalFeeds : 0,
         videoCount: stat ? stat.videoCount : 0,
         imageCount: stat ? stat.imageCount : 0,
+        audioCount: stat ? stat.audioCount : 0,
       };
     });
 
