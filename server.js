@@ -32,7 +32,11 @@ initSocket(server);
 
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://localhost:5174",
   "http://localhost:5175",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "http://127.0.0.1:5175",
   "http://192.168.1.16:5000",
   "https://admin.prithu.app",
   "https://www.prithu.app",
@@ -70,8 +74,9 @@ app.use("/logo", express.static(path.join(__dirname, "logo")));
 // 🟢 Static files (IMPORTANT for OG images)
 app.use("/media", express.static(path.join(__dirname, "media"), {
   setHeaders: (res, path) => {
-    // Set proper cache headers for media files
-    if (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png') || path.endsWith('.webp')) {
+    // Allow CORS for media files
+    if (path.match(/\.(jpg|jpeg|png|webp|mp4)$/)) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
     }
   }

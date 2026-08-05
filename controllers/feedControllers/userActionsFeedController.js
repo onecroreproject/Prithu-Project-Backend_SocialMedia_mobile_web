@@ -1274,9 +1274,9 @@ exports.requestDownloadFeed = async (req, res) => {
       return res.status(404).json({ message: "Feed not found" });
     }
 
-    // 4. FETCH VIEWER PROFILE
+    // 4. FETCH VIEWER PROFILE & VISIBILITY
     const [viewerProfile, userRecord] = await Promise.all([
-      ProfileSettings.findOne({ userId: userId }).lean(),
+      ProfileSettings.findOne({ userId: userId }).populate('visibility').lean(),
       User.findById(userId).select('email userName').lean()
     ]);
 
@@ -1285,7 +1285,21 @@ exports.requestDownloadFeed = async (req, res) => {
     }
 
     // Combine metadata: Use provided override or feed's own metadata
-    const metadataToUse = feed.designMetadata || {};
+    const metadataToUse = req.body.designMetadata || feed.designMetadata || {};
+
+    // 🔒 VISIBILITY FALLBACK: Ensure the footerConfig strictly respects profile visibility
+    if (viewerProfile && viewerProfile.visibility) {
+      const visibility = viewerProfile.visibility;
+      if (!metadataToUse.footerConfig) metadataToUse.footerConfig = {};
+      if (!metadataToUse.footerConfig.showElements) metadataToUse.footerConfig.showElements = {};
+      
+      const show = metadataToUse.footerConfig.showElements;
+      
+      // Enforce privacy: if globally set to private, hide them in the download footer
+      if (visibility.phoneNumber === 'private') show.phone = false;
+      if (visibility.email === 'private') show.email = false;
+      if (visibility.socialLinks === 'private') show.socialIcons = false;
+    }
 
     // Add Job to Queue
     const job = await downloadQueue.add({
