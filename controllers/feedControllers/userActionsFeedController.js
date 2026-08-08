@@ -26,6 +26,19 @@ const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
 const { processPosterMedia } = require("../../utils/posterMediaProcessor");
 
+// Helper to construct a viewer object that respects the ProfileVisibility privacy settings
+const getSafeViewer = (user, profile) => {
+  const visibility = profile?.visibility || {};
+  return {
+    id: user._id,
+    userName: visibility.userName === 'private' ? null : (profile?.userName || profile?.name || user.userName || 'User'),
+    email: visibility.email === 'private' ? null : (user.email || profile?.email || null),
+    phoneNumber: visibility.phoneNumber === 'private' ? null : (profile?.phoneNumber || user.phoneNumber || user.phone || null),
+    profileAvatar: visibility.profileAvatar === 'private' ? null : getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
+    website: visibility.website === 'private' ? null : (profile?.website || null),
+  };
+};
+
 // Helper to check active subscription and enforce download limit (1 video download per day for free users, unlimited for subscribers)
 const checkUserDownloadStatus = async (userId, feedId = null) => {
   try {
@@ -524,42 +537,67 @@ exports.directDownloadFeed = async (req, res) => {
           });
         });
       }
+
+      // Add/Override Overlay Elements (Calendars & general overlays)
+      if (customMetadata.overlayElements && Array.isArray(customMetadata.overlayElements)) {
+        if (!designMetadata.overlayElements) designMetadata.overlayElements = [];
+        designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'calendar');
+
+        customMetadata.overlayElements.forEach((ov, idx) => {
+          if (ov.type === 'calendar') {
+            designMetadata.overlayElements.push({
+              id: ov.id || `manual-calendar-${idx}`,
+              type: 'calendar',
+              xPercent: ov.xPercent ?? ov.x ?? 80,
+              yPercent: ov.yPercent ?? ov.y ?? 10,
+              wPercent: ov.wPercent ?? ov.w ?? 12,
+              hPercent: ov.hPercent ?? ov.h,
+              visible: ov.visible !== false && ov.visible !== "false" && ov.visible !== "0",
+              zIndex: 130 + idx,
+              mediaConfig: ov.mediaConfig || null,
+              animation: ov.animation || { enabled: true, direction: 'left', speed: 1, delay: 0 }
+            });
+          }
+        });
+      }
     }
 
     const visibility = profile?.visibility || {};
+    const viewer = getSafeViewer(user, profile);
 
-    const viewer = {
-      id: user._id,
-      userName: profile?.userName || user.userName || profile?.name || "User",
-      email: user.email || profile?.email || null,
-      phoneNumber: profile?.phoneNumber || user.phoneNumber || user.phone || null,
-      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
-    };
-
-    // Auto-enable footer elements if they are present
+    // Auto-enable or disable footer elements based on viewer privacy/availability
     if (designMetadata.footerConfig?.showElements) {
-      if (viewer.email) designMetadata.footerConfig.showElements.email = true;
-      if (viewer.phoneNumber) designMetadata.footerConfig.showElements.phone = true;
+      designMetadata.footerConfig.showElements.email = !!viewer.email;
+      designMetadata.footerConfig.showElements.phone = !!viewer.phoneNumber;
+      designMetadata.footerConfig.showElements.website = !!viewer.website;
+      designMetadata.footerConfig.showElements.name = !!viewer.userName;
     }
 
-    // Filter social icons based on availability (ignore privacy settings for self-download)
+    // Filter social icons based on availability and privacy settings
     if (designMetadata.footerConfig && profile?.socialLinks) {
       const socialLinks = profile.socialLinks;
-      const isSocialPublic = true;
+      let isSocialPublic = true;
+      
+      if (visibility && visibility.socialIcons === 'private') {
+        isSocialPublic = false;
+      }
 
       // If template has socialIcons defined, filter them
       if (designMetadata.footerConfig.socialIcons && designMetadata.footerConfig.socialIcons.length > 0) {
         designMetadata.footerConfig.socialIcons = (designMetadata.footerConfig.socialIcons || []).filter(icon => {
           if (!isSocialPublic) return false;
           const platform = icon.platform?.toLowerCase();
+          if (visibility && visibility[platform] === 'private') return false;
           return socialLinks[platform] && socialLinks[platform].length > 0;
         });
       }
       // Fallback: If template wants social icons but hasn't specified which ones, show all available from profile
       else if (designMetadata.footerConfig.showElements?.socialIcons && isSocialPublic) {
-
         designMetadata.footerConfig.socialIcons = Object.keys(socialLinks)
-          .filter(platform => socialLinks[platform] && String(socialLinks[platform]).trim().length > 0)
+          .filter(platform => {
+             if (visibility && visibility[platform] === 'private') return false;
+             return socialLinks[platform] && String(socialLinks[platform]).trim().length > 0;
+          })
           .map(platform => ({
             platform: platform.charAt(0).toUpperCase() + platform.slice(1),
             visible: true,
@@ -571,6 +609,10 @@ exports.directDownloadFeed = async (req, res) => {
 
 
     console.log(`[DirectDL] 🟢 Step 1: Starting processFeedMedia for feed: ${feedId}`);
+    
+    // Attach customMetadata to feed so processFeedMedia can access it
+    feed.customMetadata = customMetadata;
+    
     const { ffmpegCommand, tempSourcePath, ext = "mp4" } = await processFeedMedia({
       feed,
       viewer,
@@ -603,7 +645,16 @@ exports.directDownloadFeed = async (req, res) => {
         console.log(`[DirectDL] 🔧 Exact Command: ${commandLine}`);
       })
       .on('stderr', (line) => {
-        console.error(`[DirectDL] 🔴 FFmpeg STDERR: ${line}`);
+        const lowerLine = line.toLowerCase();
+        if (lowerLine.includes('frame=') || lowerLine.includes('bitrate=') || lowerLine.includes('size=')) {
+          // Normal FFmpeg progress output
+        } else if (lowerLine.includes('warning') || lowerLine.includes('invalid') || lowerLine.includes('exif')) {
+          console.warn(`[DirectDL] ⚠️ FFmpeg Warning: ${line}`);
+        } else if (lowerLine.includes('error') || lowerLine.includes('failed')) {
+          console.error(`[DirectDL] 🔴 FFmpeg Error: ${line}`);
+        } else {
+          console.log(`[DirectDL] ℹ️ FFmpeg: ${line}`);
+        }
       })
       .on('error', (err) => {
         console.error("[DirectDL] FFmpeg Error:", err.message, err.stack);
@@ -734,14 +785,7 @@ exports.birthdayDownloadFeed = async (req, res) => {
     if (!user) return res.status(401).json({ message: "User not found" });
 
     const visibility = profile?.visibility || {};
-
-    const viewer = {
-      id: user._id,
-      userName: profile?.userName || profile?.name || user.userName || 'User',
-      email: user.email || profile?.email || null,
-      phoneNumber: profile?.phoneNumber || user.phoneNumber || null,
-      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
-    };
+    const viewer = getSafeViewer(user, profile);
 
     // ── Build designMetadata from feed + merge client customMetadata ──
     let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
@@ -793,10 +837,31 @@ exports.birthdayDownloadFeed = async (req, res) => {
       });
     }
 
+    // 3️⃣  Calendar overlays - merge from client
+    if (Array.isArray(customMetadata.overlayElements)) {
+      designMetadata.overlayElements = designMetadata.overlayElements.filter(el => el.type !== 'calendar');
+      customMetadata.overlayElements.forEach((ov, idx) => {
+        if (ov.type === 'calendar') {
+          designMetadata.overlayElements.push({
+            id: ov.id || `birthday-calendar-${idx}`,
+            type: 'calendar',
+            xPercent: ov.xPercent ?? ov.x ?? 80,
+            yPercent: ov.yPercent ?? ov.y ?? 10,
+            wPercent: ov.wPercent ?? ov.w ?? 12,
+            hPercent: ov.hPercent ?? ov.h,
+            visible: ov.visible !== false,
+            zIndex: 130 + idx,
+            mediaConfig: ov.mediaConfig || null,
+          });
+        }
+      });
+    }
+
     // 3️⃣  Footer config - Explicitly disable for birthday posters
     designMetadata.hasFooter = false;
     delete designMetadata.footerConfig;
 
+    feed.customMetadata = customMetadata;
 
     // ── FFmpeg Processing via processPosterMedia ──
     const { ffmpegCommand, tempSourcePath } = await processPosterMedia({
@@ -815,7 +880,16 @@ exports.birthdayDownloadFeed = async (req, res) => {
     ffmpegCommand
 
       .on('stderr', (line) => {
-        if (/error|invalid|failed/i.test(line)) console.error(`[BirthdayDL] STDERR: ${line}`);
+        const lowerLine = line.toLowerCase();
+        if (lowerLine.includes('frame=') || lowerLine.includes('bitrate=') || lowerLine.includes('size=')) {
+          // Normal FFmpeg progress output
+        } else if (lowerLine.includes('warning') || lowerLine.includes('invalid') || lowerLine.includes('exif')) {
+          console.warn(`[BirthdayDL] ⚠️ FFmpeg Warning: ${line}`);
+        } else if (lowerLine.includes('error') || lowerLine.includes('failed')) {
+          console.error(`[BirthdayDL] 🔴 FFmpeg Error: ${line}`);
+        } else {
+          console.log(`[BirthdayDL] ℹ️ FFmpeg: ${line}`);
+        }
       })
       .on('error', (err) => {
         console.error('[BirthdayDL] FFmpeg error:', err.message);
@@ -928,14 +1002,7 @@ exports.anniversaryDownloadFeed = async (req, res) => {
     if (!user) return res.status(401).json({ message: "User not found" });
 
     const visibility = profile?.visibility || {};
-
-    const viewer = {
-      id: user._id,
-      userName: profile?.userName || profile?.name || user.userName || 'User',
-      email: user.email || profile?.email || null,
-      phoneNumber: profile?.phoneNumber || user.phoneNumber || null,
-      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
-    };
+    const viewer = getSafeViewer(user, profile);
 
     // ── Build designMetadata from feed + merge client customMetadata ──
     let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
@@ -990,6 +1057,8 @@ exports.anniversaryDownloadFeed = async (req, res) => {
     // 3️⃣  Footer config - Explicitly disable for anniversary posters
     designMetadata.hasFooter = false;
     delete designMetadata.footerConfig;
+
+    feed.customMetadata = customMetadata;
 
     // ── FFmpeg Processing via processPosterMedia ──
     const { ffmpegCommand, tempSourcePath } = await processPosterMedia({
@@ -1121,14 +1190,7 @@ exports.politicsDownloadFeed = async (req, res) => {
     if (!user) return res.status(401).json({ message: "User not found" });
 
     const visibility = profile?.visibility || {};
-
-    const viewer = {
-      id: user._id,
-      userName: profile?.userName || profile?.name || user.userName || 'User',
-      email: user.email || profile?.email || null,
-      phoneNumber: profile?.phoneNumber || user.phoneNumber || null,
-      profileAvatar: getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
-    };
+    const viewer = getSafeViewer(user, profile);
 
     // ── Build designMetadata from feed + merge client customMetadata ──
     let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
@@ -1189,6 +1251,8 @@ exports.politicsDownloadFeed = async (req, res) => {
       designMetadata.hasFooter = false;
       delete designMetadata.footerConfig;
     }
+
+    feed.customMetadata = customMetadata;
 
     // ── FFmpeg Processing ──
     const { ffmpegCommand, tempSourcePath } = await processPosterMedia({
@@ -1274,9 +1338,9 @@ exports.requestDownloadFeed = async (req, res) => {
       return res.status(404).json({ message: "Feed not found" });
     }
 
-    // 4. FETCH VIEWER PROFILE & VISIBILITY
+    // 4. FETCH VIEWER PROFILE
     const [viewerProfile, userRecord] = await Promise.all([
-      ProfileSettings.findOne({ userId: userId }).populate('visibility').lean(),
+      ProfileSettings.findOne({ userId: userId }).lean(),
       User.findById(userId).select('email userName').lean()
     ]);
 
@@ -1285,21 +1349,7 @@ exports.requestDownloadFeed = async (req, res) => {
     }
 
     // Combine metadata: Use provided override or feed's own metadata
-    const metadataToUse = req.body.designMetadata || feed.designMetadata || {};
-
-    // 🔒 VISIBILITY FALLBACK: Ensure the footerConfig strictly respects profile visibility
-    if (viewerProfile && viewerProfile.visibility) {
-      const visibility = viewerProfile.visibility;
-      if (!metadataToUse.footerConfig) metadataToUse.footerConfig = {};
-      if (!metadataToUse.footerConfig.showElements) metadataToUse.footerConfig.showElements = {};
-      
-      const show = metadataToUse.footerConfig.showElements;
-      
-      // Enforce privacy: if globally set to private, hide them in the download footer
-      if (visibility.phoneNumber === 'private') show.phone = false;
-      if (visibility.email === 'private') show.email = false;
-      if (visibility.socialLinks === 'private') show.socialIcons = false;
-    }
+    const metadataToUse = feed.designMetadata || {};
 
     // Add Job to Queue
     const job = await downloadQueue.add({
@@ -2351,8 +2401,10 @@ exports.getUserLikedFeeds = async (req, res) => {
     }
 
     const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-      const rule = viewerVisibility?.socialLinks || "private";
-      return canShow(rule) && icon.visible !== false && !!icon.url;
+      const masterRule = viewerVisibility?.socialIcons || "public";
+      if (!canShow(masterRule)) return false;
+      const platformRule = viewerVisibility?.[icon.platform] || "public";
+      return canShow(platformRule) && icon.visible !== false && !!icon.url;
     });
 
     const footerVisibilityConfig = {
@@ -2504,15 +2556,21 @@ exports.getUserLikedFeeds = async (req, res) => {
       const isTemplateMode = feed.uploadType === 'template' || feed.uploadMode === 'template';
       const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
 
-      let designState = null;
-      if (isTemplateMode && feed.designMetadata) {
-        designState = {
-          elements: feed.designMetadata.overlayElements || [],
-          mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
-          audioConfig: feed.designMetadata.audioConfig || null,
-          themeColors: themeColor
-        };
+      let elements = feed.designMetadata?.overlayElements || [];
+      if (!elements.some(el => el.type === 'calendar')) {
+        elements = [...elements, {
+          id: 'calendar', type: 'calendar', visible: true,
+          xPercent: 70, yPercent: 20, wPercent: 20, hPercent: 15, zIndex: 10,
+          calendarConfig: { headerColor: "#E54B35", bodyColor: "#F9F9F9" }
+        }];
       }
+
+      const designState = {
+        elements,
+        mediaDimensions: feed.designMetadata?.canvasSettings || { width: 1080, height: 1920 },
+        audioConfig: feed.designMetadata?.audioConfig || null,
+        themeColors: themeColor
+      };
 
       return {
         ...feed,

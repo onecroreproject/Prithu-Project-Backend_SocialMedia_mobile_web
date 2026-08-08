@@ -8,28 +8,28 @@ const path = require('path');
  */
 module.exports = {
     // Path to the font file (relative to this file or absolute)
-    fontFile: path.join(__dirname, '../assets/OutfitVariableFont.ttf'),
+    fontFile: path.join(__dirname, '../assets/arial.ttf'),
 
     // Footer Dimensions (if null, defaults to heightPercent calculated from media)
     footerHeight: null, // Set to px value if you want to override heightPercent
 
-    // Padding and Spacing (in px)
-    paddingLeft: 20,
-    paddingRight: 20,
-    paddingTop: 25,   // Spacing from media-footer boundary
+    // Padding and Spacing (in px) - Tailwind/Bootstrap scale (e.g., 16px, 24px)
+    paddingLeft: 24,
+    paddingRight: 24,
+    paddingTop: 24,   // Spacing from media-footer boundary
     paddingBottom: 0,
-    socialIconSpacing: 72,
+    socialIconSpacing: 64, // Tailwind spacing
 
     // Elemental Gaps (in px)
-    usernameSocialGap: 40,   // Minimum horizontal gap between name and icons
-    emailPhoneGap: 40,       // Minimum horizontal gap between email and phone
-    verticalRowSpacing: 50,  // Vertical gap between Row 1 and Row 2
+    usernameSocialGap: 48,   // Minimum horizontal gap between name and icons
+    emailPhoneGap: 48,       // Minimum horizontal gap between email and phone
+    verticalRowSpacing: 48,  // Vertical gap between Row 1 and Row 2
 
     // Font sizes for different elements (in px)
     nameSize: 32,
-    emailSize: 26,
-    phoneSize: 26,
-    iconSize: 36,
+    emailSize: 24,
+    phoneSize: 24,
+    iconSize: 32,
 
     // Vertical row positions (as fraction of footer height, 0.0 to 1.0)
     row1Offset: 0.35,

@@ -4,8 +4,7 @@ const Prompt = require("../models/Prompt");
 const INITIAL_CATEGORIES = [
   "Halloween",
   "Anniversary",
-  "Kids Boy",
-  "Kids Girl",
+  "Kids",
   "Couple",
   "Birthday",
   "Diwali",

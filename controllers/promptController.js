@@ -100,7 +100,7 @@ const INITIAL_PROMPTS = [
   },
   {
     title: "Cute Kids Playing in Autumn",
-    category: "Kids Boy",
+    category: "Kids",
     prompt: "A lovely 3D digital art of two little kids, a boy and a girl, playing happily in a park full of falling orange autumn leaves. The kids are wearing warm cozy sweaters and beanies, laughing and tossing leaves into the air. Soft golden sunlight filtering through the trees, happy nostalgic vibes.",
     imageUrl: "https://images.unsplash.com/photo-1503919545889-aef636e10ad4?w=600&auto=format&fit=crop",
     aspectRatio: "1:1",

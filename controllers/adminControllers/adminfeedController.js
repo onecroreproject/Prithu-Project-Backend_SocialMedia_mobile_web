@@ -440,13 +440,22 @@ exports.getFeedWithDesign = async (req, res) => {
             feed.audioUrl = getMediaUrl(feed.designMetadata.audioConfig.audioUrl);
         }
 
-        feed.designState = feed.designMetadata ? {
-            elements: feed.designMetadata.overlayElements || [],
-            footer: feed.designMetadata.footerConfig || { visible: true, colors: { primary: '#1e5a78', secondary: '#0f3a4d' } },
-            mediaDimensions: feed.designMetadata.canvasSettings || { width: 355, height: 400 },
-            audioConfig: feed.designMetadata.audioConfig || null,
+        let elements = feed.designMetadata?.overlayElements || [];
+        if (!elements.some(el => el.type === 'calendar')) {
+            elements = [...elements, {
+                id: 'calendar', type: 'calendar', visible: true,
+                xPercent: 70, yPercent: 20, wPercent: 20, hPercent: 15, zIndex: 10,
+                calendarConfig: { headerColor: "#E54B35", bodyColor: "#F9F9F9" }
+            }];
+        }
+
+        feed.designState = {
+            elements,
+            footer: feed.designMetadata?.footerConfig || { visible: true, colors: { primary: '#1e5a78', secondary: '#0f3a4d' } },
+            mediaDimensions: feed.designMetadata?.canvasSettings || { width: 355, height: 400 },
+            audioConfig: feed.designMetadata?.audioConfig || null,
             themeColors: feed.themeColor
-        } : null;
+        };
 
         feed.storageInfo = {
             type: feed.storageType || "local",

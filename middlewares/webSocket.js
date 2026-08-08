@@ -12,7 +12,7 @@ const initSocket = (server) => {
       origin: "*", // ✅ Allow all frontend origins (change in prod)
       methods: ["GET", "POST"],
     },
-    transports: ["websocket"], // 🚀 Fast and stable transport
+    transports: ["websocket", "polling"], // Allow polling fallback
   });
 
   // 🔐 Middleware to verify JWT

@@ -100,8 +100,26 @@ const UserSchema = new mongoose.Schema(
     // ------------ FCM DEVICES --------------
     fcmTokens: { type: [FcmTokenSchema], default: [] },
 
+    // ------------ SECURITY SETTINGS --------------
+    securitySettings: {
+      twoFactorEnabled: { type: Boolean, default: false },
+      biometricsEnabled: { type: Boolean, default: false },
+    },
+
+    // ------------ PREFERENCES --------------
+    notificationSettings: {
+      pushNotifications: { type: Boolean, default: true },
+      emailNotifications: { type: Boolean, default: true },
+      newFollowers: { type: Boolean, default: true },
+      likesAndComments: { type: Boolean, default: true },
+    },
+    appearanceSettings: {
+      theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
+    },
+
     // ------------ ACCOUNT STATUS --------------
     isActive: { type: Boolean, default: true },
+    deletionReason: { type: String, default: null },
     isBlocked: { type: Boolean, default: false },
 
     // ------------ TIMING METRICS --------------
@@ -165,11 +183,10 @@ UserSchema.index({ isOnline: 1 });
 UserSchema.index({ createdAt: 1 });
 
 // ------------ HOOK --------------
-UserSchema.pre("save", function (next) {
+UserSchema.pre("save", function () {
   if (this.subscription) {
     this.subscription.updatedAt = Date.now();
   }
-  next();
 });
 
 module.exports =

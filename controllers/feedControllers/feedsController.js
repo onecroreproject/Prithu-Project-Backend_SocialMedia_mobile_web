@@ -91,8 +91,10 @@ const getViewerMetadata = async (userId) => {
   }
 
   const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-    const rule = viewerVisibility?.socialLinks || "private";
-    return canShow(rule) && icon.visible !== false && !!icon.url;
+    const masterRule = viewerVisibility?.socialIcons || "public";
+    if (!canShow(masterRule)) return false;
+    const platformRule = viewerVisibility?.[icon.platform] || "public";
+    return canShow(platformRule) && icon.visible !== false && !!icon.url;
   });
 
   const footerVisibilityConfig = {
@@ -174,15 +176,21 @@ const enrichFeedData = (feed, userLikedSet, userSavedSet, userDislikedSet, foote
   const isTemplateMode = feed.uploadType === 'template';
   const themeColor = feed.themeColor || { primary: "#2563eb", secondary: "#1e40af", accent: "#ffffff", text: "#000000" };
 
-  let designState = null;
-  if (isTemplateMode && feed.designMetadata) {
-    designState = {
-      elements: feed.designMetadata.overlayElements || [],
-      mediaDimensions: feed.designMetadata.canvasSettings || { width: 1080, height: 1920 },
-      audioConfig: feed.designMetadata.audioConfig || null,
-      themeColors: themeColor
-    };
+  let elements = feed.designMetadata?.overlayElements || [];
+  if (!elements.some(el => el.type === 'calendar')) {
+    elements = [...elements, {
+      id: 'calendar', type: 'calendar', visible: true,
+      xPercent: 70, yPercent: 20, wPercent: 20, hPercent: 15, zIndex: 10,
+      calendarConfig: { headerColor: "#E54B35", bodyColor: "#F9F9F9" }
+    }];
   }
+
+  const designState = {
+    elements,
+    mediaDimensions: feed.designMetadata?.canvasSettings || { width: 1080, height: 1920 },
+    audioConfig: feed.designMetadata?.audioConfig || null,
+    themeColors: themeColor
+  };
 
   return {
     ...feed,
@@ -564,8 +572,10 @@ exports.getBirthdayFeeds = async (req, res) => {
     }
 
     const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-      const rule = viewerVisibility?.socialLinks || "private";
-      return canShow(rule) && icon.visible !== false && !!icon.url;
+      const masterRule = viewerVisibility?.socialIcons || "public";
+      if (!canShow(masterRule)) return false;
+      const platformRule = viewerVisibility?.[icon.platform] || "public";
+      return canShow(platformRule) && icon.visible !== false && !!icon.url;
     });
 
     const footerVisibilityConfig = {
@@ -855,8 +865,10 @@ exports.getAnniversaryFeeds = async (req, res) => {
     }
 
     const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-      const rule = viewerVisibility?.socialLinks || "private";
-      return canShow(rule) && icon.visible !== false && !!icon.url;
+      const masterRule = viewerVisibility?.socialIcons || "public";
+      if (!canShow(masterRule)) return false;
+      const platformRule = viewerVisibility?.[icon.platform] || "public";
+      return canShow(platformRule) && icon.visible !== false && !!icon.url;
     });
 
     const footerVisibilityConfig = {
@@ -1146,8 +1158,10 @@ exports.getPoliticsFeeds = async (req, res) => {
     }
 
     const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-      const rule = viewerVisibility?.socialLinks || "private";
-      return canShow(rule) && icon.visible !== false && !!icon.url;
+      const masterRule = viewerVisibility?.socialIcons || "public";
+      if (!canShow(masterRule)) return false;
+      const platformRule = viewerVisibility?.[icon.platform] || "public";
+      return canShow(platformRule) && icon.visible !== false && !!icon.url;
     });
 
     const footerVisibilityConfig = {

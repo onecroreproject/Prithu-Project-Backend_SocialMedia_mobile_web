@@ -133,7 +133,7 @@ const feedSchema = new mongoose.Schema(
         },
         type: {
           type: String,
-          enum: ["avatar", "logo", "text", "username", "shape", "watermark", "dynamicText"],
+          enum: ["avatar", "logo", "text", "username", "shape", "watermark", "dynamicText", "calendar"],
           required: true
         },
         xPercent: { type: Number, required: true },
@@ -214,6 +214,10 @@ const feedSchema = new mongoose.Schema(
           strokeColor: { type: String, default: "#000000" },
           strokeWidth: { type: Number, default: 1 },
           borderRadius: { type: Number, default: 0 }
+        },
+        calendarConfig: {
+          headerColor: { type: String, default: "#E54B35" },
+          bodyColor: { type: String, default: "#F9F9F9" }
         },
         metadata: {
           type: mongoose.Schema.Types.Mixed,
@@ -560,7 +564,7 @@ feedSchema.virtual('isPublished').get(function () {
 });
 
 // Middleware for Auto-Logic
-feedSchema.pre("save", function (next) {
+feedSchema.pre("save", function () {
   // Auto-set uploadType if missing but design metadata suggests template
   if (this.designMetadata?.isTemplate && !this.uploadType) {
     this.uploadType = 'template';
@@ -587,7 +591,6 @@ feedSchema.pre("save", function (next) {
     // Deduplicate
     this.hashtags = [...new Set(cleaned)];
   }
-  next();
 });
 // Methods for history tracking
 feedSchema.methods.saveEditHistory = async function (userId, description) {
