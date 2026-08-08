@@ -97,8 +97,42 @@ const ProfileVisibilitySchema = new mongoose.Schema(
       default: "public",
     },
 
-    // ✅ Social links VISIBILITY (single control)
-    socialLinks: {
+    facebook: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    instagram: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    twitter: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    linkedin: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    github: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    youtube: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    website: {
+      type: String,
+      enum: ["public", "followers", "private"],
+      default: "public",
+    },
+    socialIcons: {
       type: String,
       enum: ["public", "followers", "private"],
       default: "public",

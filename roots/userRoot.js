@@ -87,10 +87,10 @@ const {
 const {
     userProfileDetailUpdate,
     getUserProfileDetail,
-    toggleFieldVisibility,
-    getVisibilitySettings,
     updateCoverPhoto,
     deleteCoverPhoto,
+    updateAddImage,
+    deleteAddImage,
     getProfileOverview,
     getVisibilitySettingsWeb,
     updateFieldVisibilityWeb,
@@ -100,6 +100,21 @@ const {
     getUserVisibilitySettings,
     updateUserVisibilitySettings,
 } = require('../controllers/profileControllers/profileController');
+
+const {
+    changePassword,
+    toggleTwoFactor,
+    toggleBiometrics,
+    getActiveSessions,
+    getSecuritySettings,
+    requestDataDownload,
+    deleteAccountRequest,
+} = require('../controllers/userControllers/userSecurityController');
+
+const {
+    getUserPreferences,
+    updateUserPreferences,
+} = require('../controllers/userControllers/userPreferencesController');
 
 const {
     likeFeed,
@@ -357,13 +372,29 @@ router.get('/get/single/profile/detail', getUserProfileDetail); // Alias
 router.post('/user/profile/detail/update', auth, userUpload.single("file"), (req, res, next) => { req.baseUrl = "/profile"; next(); }, attachUserFile, userProfileDetailUpdate);
 router.post('/user/profile/cover/update', auth, userUpload.single("coverPhoto"), (req, res, next) => { req.baseUrl = "/cover"; next(); }, attachUserFile, updateCoverPhoto);
 router.delete('/user/profile/cover/delete', auth, deleteCoverPhoto);
+router.post('/user/profile/detail/addimage', auth, userUpload.single("addImage"), (req, res, next) => { req.baseUrl = "/addimage"; next(); }, attachUserFile, updateAddImage);
+router.post('/add/profile/detail/addimage', auth, userUpload.single("addImage"), (req, res, next) => { req.baseUrl = "/addimage"; next(); }, attachUserFile, updateAddImage); // Alias requested
+router.delete('/user/profile/detail/addimage/delete', auth, deleteAddImage);
 router.get("/get/profile/overview", auth, getProfileOverview);
 router.post("/single/get/profile/overview", getProfileOverview);
 router.get("/get/profile/completion", auth, getProfileCompletion);
-router.put("/put/profile/visibility", auth, toggleFieldVisibility);
-router.get("/get/profile/visibility-settings", auth, getVisibilitySettings);
-router.get("/profile/visibility", auth, getVisibilitySettings);
-router.put("/profile/toggle-visibility", auth, toggleFieldVisibility);
+
+// ======================== SECURITY SETTINGS ==========================
+router.put('/security/change-password', auth, changePassword);
+router.put('/security/toggle-2fa', auth, toggleTwoFactor);
+router.put('/security/toggle-biometrics', auth, toggleBiometrics);
+router.get('/security/sessions', auth, getActiveSessions);
+router.get('/security/settings', auth, getSecuritySettings);
+router.post('/security/download-data', auth, requestDataDownload);
+router.delete('/security/delete-account', auth, deleteAccountRequest);
+
+// ======================== PREFERENCES ==========================
+router.get('/preferences', auth, getUserPreferences);
+router.put('/preferences', auth, updateUserPreferences);
+
+router.get("/get/profile/visibility-settings", auth, getUserVisibilitySettings);
+router.get("/profile/visibility", auth, getUserVisibilitySettings);
+router.put("/profile/toggle-visibility", auth, updateUserVisibilitySettings);
 
 router.get("/user/get/visibility/settings", auth, getUserVisibilitySettings);
 router.post("/user/update/visibility/settings", auth, updateUserVisibilitySettings);

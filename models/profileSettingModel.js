@@ -40,12 +40,20 @@ const ProfileSettingsSchema = new mongoose.Schema(
     coverPhotoFilename: { type: String },
     coverUpdatedAt: { type: Date },
 
+    // Additional Image
+    addImage: { type: String },
+    addImageFilename: { type: String },
+    addImageUpdatedAt: { type: Date },
+
     // Social Links
     socialLinks: {
       facebook: { type: String, default: "" },
       instagram: { type: String, default: "" },
       twitter: { type: String, default: "" },
       youtube: { type: String, default: "" },
+      linkedin: { type: String, default: "" },
+      github: { type: String, default: "" },
+      website: { type: String, default: "" },
     },
 
     // Theme, Notifications, Privacy

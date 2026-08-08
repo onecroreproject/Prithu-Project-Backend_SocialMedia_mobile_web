@@ -736,9 +736,11 @@ exports.getUserProfileDetail = async (req, res) => {
         dateOfBirth maritalDate gender theme language timezone
         privacy notifications socialLinks country city address
         coverPhoto profileAvatar modifyAvatar details profileSummary
+        visibility addImage
       `
     )
       .populate("userId", "userName email _id")
+      .populate("visibility")
       .lean();
 
     if (!profile) {
@@ -770,7 +772,9 @@ exports.getUserProfileDetail = async (req, res) => {
       details = "",
       profileAvatar = "",
       modifyAvatar = "",
+      addImage = "",
       userId: user = {},
+      visibility = null,
     } = profile;
 
     // ✅ Compute age safely
@@ -800,13 +804,18 @@ exports.getUserProfileDetail = async (req, res) => {
       details,
       profileAvatar: getMediaUrl(profileAvatar),
       modifyAvatar: getMediaUrl(modifyAvatar),
+      addImage: getMediaUrl(addImage),
       userName: user.userName || null,
       userEmail: user.email || null,
       age,
+      visibility,
       socialLinks: {
         facebook: socialLinks.facebook || "",
         instagram: socialLinks.instagram || "",
         twitter: socialLinks.twitter || "",
+        linkedin: socialLinks.linkedin || "",
+        github: socialLinks.github || "",
+        website: socialLinks.website || "",
         youtube: socialLinks.youtube || "",
       },
     };
@@ -864,7 +873,7 @@ exports.getAdminProfileDetail = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized role" });
     }
 
-    const profile = await Profile.findOne(
+    let profile = await Profile.findOne(
       profileQuery,
       "bio displayName maritalStatus phoneNumber dateOfBirth profileAvatar modifyAvatar timezone maritalDate socialLinks"
     )
@@ -872,10 +881,13 @@ exports.getAdminProfileDetail = async (req, res) => {
       .lean();
 
     if (!profile) {
-      return res.status(404).json({
-        message: `${profileType} profile not found`,
-        profile: null,
-      });
+      // Auto-create missing profile
+      const newProfile = new Profile(profileQuery);
+      await newProfile.save();
+      profile = await Profile.findById(newProfile._id)
+        .select("bio displayName maritalStatus phoneNumber dateOfBirth profileAvatar modifyAvatar timezone maritalDate socialLinks")
+        .populate(populateOptions)
+        .lean();
     }
 
     // ✅ Fetch parent admin if Child_Admin
@@ -1049,13 +1061,99 @@ exports.deleteCoverPhoto = async (req, res) => {
 
     return res.status(200).json({
       message: "Cover photo deleted successfully, default applied",
-      coverPhoto: DEFAULT_COVER_PHOTO,
+      profile,
     });
   } catch (error) {
-    console.error("Error deleting cover photo:", error);
+    console.error("❌ Error deleting cover photo:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+// Upload or Update Add Image
+exports.updateAddImage = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    if (!userId) return res.status(400).json({ message: "userId is required" });
+
+    if (!req.localFile)
+      return res.status(400).json({ message: "Image file is missing" });
+
+    const profile = await Profile.findOne({ userId });
+
+    // 1️⃣ DELETE OLD IMAGE IF EXISTS
+    if (profile?.addImageFilename) {
+      const oldPath = path.join(
+        __dirname,
+        "../../media/user",
+        userId.toString(),
+        "addimage",
+        profile.addImageFilename
+      );
+      deleteLocalFile(oldPath);
+    }
+
+    // 2️⃣ PREPARE NEW DATA
+    const updateData = {
+      addImage: req.localFile.url,
+      addImageFilename: req.localFile.filename,
+      addImageUpdatedAt: req.localFile.uploadedAt,
+    };
+
+    // 3️⃣ UPDATE OR CREATE PROFILE
+    const updatedProfile = await Profile.findOneAndUpdate(
+      { userId },
+      { $set: updateData },
+      { new: true, upsert: true }
+    ).populate("userId", "userName email role");
+
+    return res.status(200).json({
+      message: "Additional image updated successfully",
+      addImage: updatedProfile.addImage,
+      profile: updatedProfile,
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating additional image:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+exports.deleteAddImage = async (req, res) => {
+  try {
+    const userId = req.Id || req.body.userId;
+    if (!userId) return res.status(400).json({ message: "userId is required" });
+
+    const profile = await Profile.findOne({ userId });
+    if (!profile)
+      return res.status(404).json({ message: "Profile not found" });
+
+    if (profile.addImageFilename) {
+      const oldPath = path.join(
+        __dirname,
+        "../../media/user",
+        userId.toString(),
+        "addimage",
+        profile.addImageFilename
+      );
+      deleteLocalFile(oldPath);
+    }
+
+    const updatedProfile = await Profile.findOneAndUpdate(
+      { userId },
+      { $unset: { addImage: 1, addImageFilename: 1, addImageUpdatedAt: 1 } },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      message: "Additional image deleted successfully",
+      profile: updatedProfile,
+    });
+  } catch (error) {
+    console.error("❌ Error deleting additional image:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 
 
 

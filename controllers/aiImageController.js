@@ -105,3 +105,65 @@ exports.generateImage = async (req, res) => {
         });
     }
 };
+
+exports.removeBg = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'Image file is required' });
+        }
+
+        const apiKey = process.env.REMOVE_BG_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ success: false, message: 'REMOVE_BG_API_KEY is not configured in .env' });
+        }
+
+        const formData = new FormData();
+        const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+        formData.append('image_file', blob, req.file.originalname);
+        formData.append('size', 'auto');
+
+        const response = await fetch('https://api.remove.bg/v1.0/removebg', {
+            method: 'POST',
+            headers: {
+                'X-Api-Key': apiKey,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Remove.bg API error: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const resultBuffer = Buffer.from(arrayBuffer);
+
+        // Save the generated image
+        const mediaDir = path.join(__dirname, '../media/ai_images');
+        if (!fs.existsSync(mediaDir)) {
+            fs.mkdirSync(mediaDir, { recursive: true });
+        }
+
+        const now = new Date();
+        const timeStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+        const filename = `nobg_${timeStr}.png`;
+        const filePath = path.join(mediaDir, filename);
+
+        fs.writeFileSync(filePath, resultBuffer);
+
+        const liveUrl = `/media/ai_images/${filename}`;
+
+        return res.status(200).json({
+            success: true,
+            message: 'Background removed successfully',
+            imageUrl: liveUrl
+        });
+
+    } catch (error) {
+        console.error('Error removing background:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error removing background. Please try again later.'
+        });
+    }
+};

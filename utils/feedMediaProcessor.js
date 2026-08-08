@@ -1,4 +1,6 @@
 const ffmpeg = require("fluent-ffmpeg");
+const ffmpegPath = require("ffmpeg-static");
+ffmpeg.setFfmpegPath(ffmpegPath);
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
@@ -169,14 +171,37 @@ const SOCIAL_SLUGS = {
     'instagram': 'instagram',
     'youtube': 'youtube',
     'github': 'github',
-    'website': 'internetexplorer'
+    'website': 'internetexplorer',
+    'x': 'x',
+    'whatsapp': 'whatsapp'
+};
+
+const SOCIAL_BRAND = {
+    facebook: { bg: '#1877F2', icon: '#ffffff' },
+    instagram: { bg: '#E4405F', icon: '#ffffff' },
+    whatsapp: { bg: '#25D366', icon: '#ffffff' },
+    youtube: { bg: '#FF0000', icon: '#ffffff' },
+    twitter: { bg: '#000000', icon: '#ffffff' },
+    linkedin: { bg: '#0A66C2', icon: '#ffffff' },
+    github: { bg: '#333333', icon: '#ffffff' },
+    website: { bg: '#4A90E2', icon: '#ffffff' },
+    x: { bg: '#000000', icon: '#ffffff' }
+};
+
+const getSocialBrand = (platform = '') => {
+    const key = platform.toLowerCase();
+    return SOCIAL_BRAND[key] || SOCIAL_BRAND.website;
 };
 
 const downloadSocialIcon = async (platform, dest, color = null, size = 48) => {
     try {
         const slug = SOCIAL_SLUGS[platform.toLowerCase()] || platform.toLowerCase();
-        // Use color suffix if specified, otherwise fetch native brand color
-        const iconUrl = color ? `https://cdn.simpleicons.org/${slug}/${color}` : `https://cdn.simpleicons.org/${slug}`;
+        const brand = getSocialBrand(platform);
+        
+        // Force the icon inside the circle to be white if not specified
+        const iconColor = color ? color.replace('#', '') : 'ffffff';
+        const iconUrl = `https://cdn.simpleicons.org/${slug}/${iconColor}`;
+        
         const response = await axios({
             url: iconUrl,
             method: 'GET',
@@ -184,14 +209,51 @@ const downloadSocialIcon = async (platform, dest, color = null, size = 48) => {
             timeout: 10000
         });
 
-        // Convert SVG buffer to PNG and resize to specified size
-        await sharp(response.data)
+        // 60% of total size for the inner icon
+        const innerSize = Math.floor(size * 0.6);
+
+        // SVG circle background using brand color
+        const circleSvg = Buffer.from(
+            `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="${brand.bg}" />
+             </svg>`
+        );
+
+        // Convert icon SVG to PNG buffer
+        const innerIconBuffer = await sharp(response.data)
+            .resize(innerSize, innerSize)
+            .png()
+            .toBuffer();
+
+        // Composite them together: inner icon over the circular background
+        await sharp(circleSvg)
+            .composite([{ input: innerIconBuffer, gravity: 'center' }])
+            .png()
+            .toFile(dest);
+            
+        return true;
+    } catch (err) {
+        console.error(`[FS] Download failed for https://cdn.simpleicons.org/${platform}:`, err.message);
+        return false;
+    }
+};
+
+const createIconSvg = async (type, dest, color, size = 48) => {
+    try {
+        let svgStr = '';
+        const iconColor = color || 'ffffff';
+        if (type === 'email') {
+            svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><path fill="#${iconColor}" d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>`;
+        } else if (type === 'phone') {
+            svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}"><path fill="#${iconColor}" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>`;
+        }
+        await sharp(Buffer.from(svgStr))
             .resize(size, size)
             .png()
             .toFile(dest);
         return true;
     } catch (err) {
-        console.error(`[FS] Download failed for https://cdn.simpleicons.org/${platform}:`, err.message);
+        console.error(`[FS] Icon creation failed for ${type}:`, err.message);
         return false;
     }
 };
@@ -214,47 +276,52 @@ exports.processFeedMedia = async ({
     // Optimization: Resolve local path if URL points to our own backend
     const resolveLocalPath = (url) => {
         if (!url || typeof url !== 'string') return null;
-        if (fs.existsSync(url)) return url;
-        const absPath = path.resolve(__dirname, '..', url);
-        if (fs.existsSync(absPath)) return absPath;
+        if (url.startsWith('data:')) return null; // Base64 cannot be a local path
         
-        // 1. Check for "/media/" folder
-        const mediaIdx = url.indexOf('/media/');
-        if (mediaIdx !== -1) {
-            const relPath = url.substring(mediaIdx);
-            // Try project root path first
-            const projRootPath = path.join(__dirname, '..', relPath);
-            if (fs.existsSync(projRootPath)) return projRootPath;
-            // Fallback to current working directory
-            const cwdPath = path.join(process.cwd(), relPath);
-            if (fs.existsSync(cwdPath)) return cwdPath;
-        }
-        
-        // 2. Check for "/uploads/" folder
-        const uploadsIdx = url.indexOf('/uploads/');
-        if (uploadsIdx !== -1) {
-            const relPath = url.substring(uploadsIdx);
-            const projRootPath = path.join(__dirname, '..', relPath);
-            if (fs.existsSync(projRootPath)) return projRootPath;
-            const cwdPath = path.join(process.cwd(), relPath);
-            if (fs.existsSync(cwdPath)) return cwdPath;
-        }
+        try {
+            if (fs.existsSync(url)) return url;
+            const absPath = path.resolve(__dirname, '..', url);
+            if (fs.existsSync(absPath)) return absPath;
+            
+            // 1. Check for "/media/" folder
+            const mediaIdx = url.indexOf('/media/');
+            if (mediaIdx !== -1) {
+                const relPath = url.substring(mediaIdx);
+                const projRootPath = path.join(__dirname, '..', relPath);
+                if (fs.existsSync(projRootPath)) return projRootPath;
+                const cwdPath = path.join(process.cwd(), relPath);
+                if (fs.existsSync(cwdPath)) return cwdPath;
+            }
+            
+            // 2. Check for "/uploads/" folder
+            const uploadsIdx = url.indexOf('/uploads/');
+            if (uploadsIdx !== -1) {
+                const relPath = url.substring(uploadsIdx);
+                const projRootPath = path.join(__dirname, '..', relPath);
+                if (fs.existsSync(projRootPath)) return projRootPath;
+                const cwdPath = path.join(process.cwd(), relPath);
+                if (fs.existsSync(cwdPath)) return cwdPath;
+            }
 
-        // 3. Check direct starting slash paths
-        if (url.startsWith('/media/') || url.startsWith('/uploads/') || url.startsWith('/logo/')) {
-            const projRootPath = path.join(__dirname, '..', url);
-            if (fs.existsSync(projRootPath)) return projRootPath;
-            const cwdPath = path.join(process.cwd(), url);
-            if (fs.existsSync(cwdPath)) return cwdPath;
-        }
-        
-        // 4. Fallback: replace BACKEND_URL
-        if (BACKEND_URL && url.startsWith(BACKEND_URL)) {
-            const relPath = url.replace(BACKEND_URL, '');
-            const projRootPath = path.join(__dirname, '..', relPath);
-            if (fs.existsSync(projRootPath)) return projRootPath;
-            const cwdPath = path.join(process.cwd(), relPath);
-            if (fs.existsSync(cwdPath)) return cwdPath;
+            // 3. Check direct starting slash paths
+            if (url.startsWith('/media/') || url.startsWith('/uploads/') || url.startsWith('/logo/')) {
+                const projRootPath = path.join(__dirname, '..', url);
+                if (fs.existsSync(projRootPath)) return projRootPath;
+                const cwdPath = path.join(process.cwd(), url);
+                if (fs.existsSync(cwdPath)) return cwdPath;
+            }
+            
+            // 4. Fallback: replace BACKEND_URL
+            if (BACKEND_URL && url.startsWith(BACKEND_URL)) {
+                const relPath = url.replace(BACKEND_URL, '');
+                const projRootPath = path.join(__dirname, '..', relPath);
+                if (fs.existsSync(projRootPath)) return projRootPath;
+                const cwdPath = path.join(process.cwd(), relPath);
+                if (fs.existsSync(cwdPath)) return cwdPath;
+            }
+        } catch (e) {
+            // Ignore ENAMETOOLONG or other fs errors
+            return null;
         }
         return null;
     };
@@ -361,9 +428,9 @@ exports.processFeedMedia = async ({
 
 
     let dominantColor = footerConfig?.backgroundColor || "#1a1a1a";
-    if (footerConfig?.useDominantColor !== false) {
+    // Only extract dominant color if no background color is provided and it's not explicitly disabled
+    if (!footerConfig?.backgroundColor && footerConfig?.useDominantColor !== false) {
         dominantColor = await getDominantColor(tempSourcePath, isVideoPost, tempDir);
-
     }
     const footerBgColor = normalizeFfmpegColor(dominantColor);
 
@@ -406,12 +473,33 @@ exports.processFeedMedia = async ({
     );
 
     // 4. OVERLAYS
-    const overlayElements = [...(designMetadata?.overlayElements || [])]
+    const customMetadata = feed?.customMetadata || {};
+    console.log(`[DEBUG] customMetadata.overlayElements received:`, customMetadata?.overlayElements ? customMetadata.overlayElements.length : 0);
+    
+    let mergedOverlayElements = [...(designMetadata?.overlayElements || [])];
+    if (customMetadata?.overlayElements?.length > 0) {
+        customMetadata.overlayElements.forEach(customEl => {
+            console.log(`[DEBUG] Found custom element:`, customEl.type, `has URL:`, !!customEl.mediaConfig?.url);
+            const existingIdx = mergedOverlayElements.findIndex(el => 
+                (el.id && customEl.id && el.id === customEl.id) || 
+                (el.type && customEl.type && el.type === customEl.type)
+            );
+            if (existingIdx > -1) {
+                mergedOverlayElements[existingIdx] = { ...mergedOverlayElements[existingIdx], ...customEl };
+            } else {
+                mergedOverlayElements.push(customEl);
+            }
+        });
+    }
+
+    const overlayElements = mergedOverlayElements
         .filter(el => {
             const isVisible = el.visible !== false && el.visible !== "false" && el.visible !== "0";
             return isVisible;
         })
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+    console.log(`[DEBUG] Final merged overlayElements count:`, overlayElements.length);
 
 
     let filterIndex = 1;
@@ -423,13 +511,16 @@ exports.processFeedMedia = async ({
         if (f.includes('montserrat')) return path.join(__dirname, '../assets/Montserrat.ttf');
         if (f.includes('playfair display')) return path.join(__dirname, '../assets/PlayfairDisplay.ttf');
         if (f.includes('fira code') || f.includes('mono')) return path.join(__dirname, '../assets/RobotoMono.ttf');
+        if (f.includes('arial')) return path.join(__dirname, '../assets/arial.ttf');
         return path.join(__dirname, '../assets/Outfit.ttf');
     };
 
     for (const el of overlayElements) {
         let overlayMediaUrl = null;
+        const isCalendar = el.type === 'calendar';
         if (el.type === 'avatar') overlayMediaUrl = el.mediaConfig?.url || viewer?.profileAvatar;
         else if (el.type === "logo") overlayMediaUrl = el.mediaConfig?.url || "/logo/prithulogo.png";
+        else if (isCalendar) overlayMediaUrl = el.mediaConfig?.url;
 
         if (overlayMediaUrl) {
             const overlayDest = path.join(tempDir, `overlay_${overlayInputIndex}.png`);
@@ -442,10 +533,17 @@ exports.processFeedMedia = async ({
                 } else {
                     await downloadFile(getMediaUrl(overlayMediaUrl), overlayDest);
                 }
-                const xRaw = ((el.xPercent / 100) * OUT_W);
-                const yRaw = (yOffset + ((el.yPercent / 100) * actualMediaH));
-                const scaleW = Math.max(10, Math.round((el.wPercent || 20) / 100 * OUT_W));
-                const scaleH = el.hPercent ? Math.round((el.hPercent / 100) * actualMediaH) : scaleW;
+                const xPct = el.xPercent ?? el.x ?? (isCalendar ? 80 : 0);
+                const yPct = el.yPercent ?? el.y ?? (isCalendar ? 10 : 0);
+                let wPct = el.wPercent ?? el.w;
+                let hPct = el.hPercent ?? el.h;
+                if (isCalendar && !wPct) wPct = 12; // default 12% width for calendar
+
+                const xRaw = Math.round((xPct / 100) * OUT_W);
+                const yRaw = Math.round(yOffset + ((yPct / 100) * actualMediaH));
+                
+                const scaleW = Math.max(10, Math.round((wPct || 20) / 100 * OUT_W));
+                const scaleH = hPct ? Math.round((hPct / 100) * actualMediaH) : (isCalendar ? Math.round(scaleW * 1.25) : scaleW);
 
                 let xExpr = `${xRaw}`, yExpr = `${yRaw}`;
                 const dur = Number(el.animation?.speed || 1);
@@ -499,11 +597,15 @@ exports.processFeedMedia = async ({
                         .png()
                         .toFile(maskedAvatarPath);
                     ffmpegCommand.input(maskedAvatarPath);
-                    if (!isStaticImage) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
+                    ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
                 } else {
-                    // Non-avatar (logos) use standard download path
-                    ffmpegCommand.input(overlayDest);
-                    if (!isStaticImage) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
+                    const cleanOverlayPath = path.join(tempDir, `clean_overlay_${overlayInputIndex}.png`);
+                    await sharp(overlayDest)
+                        .rotate() // removes EXIF and auto-rotates
+                        .png()
+                        .toFile(cleanOverlayPath);
+                    ffmpegCommand.input(cleanOverlayPath);
+                    ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
                 }
 
                 const fmtLabel = `fmt${filterIndex}`, rawLabel = `raw${filterIndex}`, maskedLabel = `masked${filterIndex}`, overlayLabel = `over${filterIndex}`;
@@ -534,7 +636,9 @@ exports.processFeedMedia = async ({
         if (el.type === 'username' || el.type === 'text') {
             const content = el.type === 'username' ? (viewer?.userName) : (el.textConfig?.content);
             if (content) {
-                const xRaw = (el.xPercent / 100) * OUT_W, yRaw = yOffset + ((el.yPercent / 100) * actualMediaH);
+                const xPct = el.xPercent ?? el.x ?? 50;
+                const yPct = el.yPercent ?? el.y ?? 50;
+                const xRaw = (xPct / 100) * OUT_W, yRaw = yOffset + ((yPct / 100) * actualMediaH);
                 const fontSize = Math.round((el.textConfig?.fontSize || 24) * 2.5);
                 const textLabel = `text${filterIndex}`;
 
@@ -596,7 +700,7 @@ exports.processFeedMedia = async ({
         const ROW_1_Y = Math.round(footerY + (footerH * (footerStyle.row1Offset || 0.33)));
         const ROW_2_Y = Math.round(footerY + (footerH * (footerStyle.row2Offset || 0.66)));
 
-        const textColor = normalizeFfmpegColor(adaptiveTextColor); // Force automatic contrast
+        const textColor = normalizeFfmpegColor(footerConfig?.textColor || adaptiveTextColor);
         const shadowColor = normalizeFfmpegColor(footerStyle.shadowColor || adaptiveShadowColor);
 
         // Map font family
@@ -616,11 +720,9 @@ exports.processFeedMedia = async ({
                 const iconPath = path.join(tempDir, `social_${i}.png`);
                 try {
                     const platform = visibleSocialIcons[i].platform.toLowerCase();
-                    let iconColorParam = null; // Default to native brand colors
-                    if (platform === 'twitter' || platform === 'x' || platform === 'github') {
-                        iconColorParam = adaptiveIconColor;
-                    }
-                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, iconColorParam, footerStyle.iconSize || 48);
+                    // Always use white inner icon (null defaults to ffffff inside downloadSocialIcon) 
+                    // since we now render them on top of their native brand colored circles.
+                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, null, footerStyle.iconSize || 48);
                     if (!success) continue;
 
                     // Social icons must be looped to match video duration
@@ -689,7 +791,7 @@ exports.processFeedMedia = async ({
             outputOptions.push("-shortest", "-map", `${audioInputIndex}:a`, "-c:a", "aac", "-b:a", "128k");
         } else if (isVideoPost) {
             // When streaming, re-encoding audio to aac is safer for piped MP4
-            outputOptions.push("-map", "0:a?", "-c:a", "aac", "-b:a", "128k");
+            outputOptions.push("-map", "0:a?", "-c:a", "aac", "-b:a", "128k", "-shortest");
         } else if (isImagePost && !isStaticImage) {
             // Ensure image-only output also terminates at shortest input
             outputOptions.push("-shortest");
