@@ -15,11 +15,7 @@ const { generateInvoicePDF } = require("../../utils/invoiceGenerator.js");
  * 1️⃣ Subscribe to a Plan
  */
 exports.subscribePlan = async (req, res) => {
-  const session = await prithuDB.startSession();
-
   try {
-    session.startTransaction();
-
     const { planId } = req.body;
     const userId = req.Id;
 
@@ -27,10 +23,10 @@ exports.subscribePlan = async (req, res) => {
       return res.status(400).json({ message: "planId is required" });
     }
 
-    const user = await User.findById(userId).session(session);
+    const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const plan = await SubscriptionPlan.findById(planId).session(session);
+    const plan = await SubscriptionPlan.findById(planId);
     if (!plan) return res.status(404).json({ message: "Plan not found" });
 
     // ❌ Block if active subscription exists
@@ -38,7 +34,7 @@ exports.subscribePlan = async (req, res) => {
       userId,
       isActive: true,
       endDate: { $gt: new Date() }
-    }).session(session);
+    });
 
     if (activeSub) {
       return res.status(400).json({
@@ -61,7 +57,7 @@ exports.subscribePlan = async (req, res) => {
         endDate: new Date(today.getTime() + durationMs)
       });
 
-      await subscription.save({ session });
+      await subscription.save();
 
       user.subscription = {
         isActive: true,
@@ -70,10 +66,7 @@ exports.subscribePlan = async (req, res) => {
         endDate: subscription.endDate
       };
 
-      await user.save({ session });
-
-      await session.commitTransaction();
-      session.endSession();
+      await user.save();
 
       return res.status(200).json({
         success: true,
@@ -83,16 +76,11 @@ exports.subscribePlan = async (req, res) => {
     }
 
     // ❌ PAID plans must go through createOrder + verifyPayment
-    await session.abortTransaction();
-    session.endSession();
-
     return res.status(400).json({
       message: "Use payment flow to activate paid plans"
     });
 
   } catch (err) {
-    try { await session.abortTransaction(); } catch { }
-    session.endSession();
     console.error("subscribePlan error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }

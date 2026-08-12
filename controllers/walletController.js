@@ -35,22 +35,22 @@ const getTransactions = async (req, res) => {
   }
 };
 
-// Get Credit Packages
+// Get Credit Packages (auto-seeds defaults into DB if none exist)
 const getCreditPackages = async (req, res) => {
   try {
-    const packages = await CreditPackage.find({ isActive: true }).sort({ credits: 1 });
-    // If no packages exist, provide default ones (for testing)
+    let packages = await CreditPackage.find({ isActive: true }).sort({ credits: 1 });
+
+    // Auto-seed default packages into DB so they get real ObjectIds
     if (packages.length === 0) {
-      return res.json({
-        success: true,
-        packages: [
-          { _id: "pkg1", name: "Starter", credits: 100, price: 100, currency: "INR" },
-          { _id: "pkg2", name: "Basic", credits: 250, price: 250, currency: "INR" },
-          { _id: "pkg3", name: "Pro", credits: 500, price: 500, currency: "INR" },
-          { _id: "pkg4", name: "Elite", credits: 1000, price: 1000, currency: "INR" },
-        ]
-      });
+      const defaults = [
+        { name: "Starter", credits: 100, price: 49, currency: "INR" },
+        { name: "Basic",   credits: 250, price: 99, currency: "INR" },
+        { name: "Pro",     credits: 500, price: 179, currency: "INR" },
+        { name: "Elite",   credits: 1000, price: 299, currency: "INR" },
+      ];
+      packages = await CreditPackage.insertMany(defaults);
     }
+
     res.json({ success: true, packages });
   } catch (error) {
     res.status(500).json({ error: error.message });

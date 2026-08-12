@@ -16,17 +16,15 @@ async function activateTrialPlan(userId, userEmail, userName) {
 
   while (attempt < MAX_RETRIES) {
     attempt++;
-    const session = await prithuDB.startSession();
-    session.startTransaction();
 
     try {
       // 1. Fetch trial plan
-      const trialPlan = await SubscriptionPlan.findOne({ planType: "trial", isActive: true }).session(session);
+      const trialPlan = await SubscriptionPlan.findOne({ planType: "trial", isActive: true });
       if (!trialPlan) throw new Error("Trial plan is not available at the moment.");
 
       // 2. Fetch user details if email or name is missing
       if (!userEmail || !userName) {
-        const user = await User.findById(userId).select("email userName").session(session).lean();
+        const user = await User.findById(userId).select("email userName").lean();
         if (user) {
           userEmail = userEmail || user.email;
           userName = userName || user.userName;
@@ -34,7 +32,7 @@ async function activateTrialPlan(userId, userEmail, userName) {
       }
 
       // 3. Check if user has already used or is currently in a trial
-      const usedTrial = await hasUserUsedTrialStrict(userId, session);
+      const usedTrial = await hasUserUsedTrialStrict(userId);
 
       if (usedTrial) {
         if (userEmail) {
@@ -46,8 +44,6 @@ async function activateTrialPlan(userId, userEmail, userName) {
             embedLogo: false
           }).catch(err => console.error("Email failed:", err));
         }
-        await session.abortTransaction();
-        session.endSession();
         return { success: false, message: "You have already used your trial plan." };
       }
 
@@ -70,7 +66,7 @@ async function activateTrialPlan(userId, userEmail, userName) {
         limitsUsed: {},
       });
 
-      await newSubscription.save({ session });
+      await newSubscription.save();
 
       // CRITICAL: Permanently mark trial as used
       await User.findByIdAndUpdate(userId, {
@@ -81,10 +77,8 @@ async function activateTrialPlan(userId, userEmail, userName) {
           startDate,
           endDate
         }
-      }).session(session);
+      });
 
-      await session.commitTransaction();
-      session.endSession();
 
       if (userEmail) {
         await sendTemplateEmail({
@@ -108,13 +102,6 @@ async function activateTrialPlan(userId, userEmail, userName) {
       };
 
     } catch (err) {
-      try {
-        await session.abortTransaction();
-      } catch (abortErr) {
-        // Silently catch if transaction is already ended/aborted
-      }
-      session.endSession();
-
       const isTransient = 
         err.message.includes("Write conflict") || 
         err.message.includes("TransientTransactionError") || 
@@ -131,15 +118,15 @@ async function activateTrialPlan(userId, userEmail, userName) {
 }
 
 // Internal helper for strict check within transaction
-async function hasUserUsedTrialStrict(userId, session) {
-  const user = await User.findById(userId).select("trialUsed").session(session);
+async function hasUserUsedTrialStrict(userId) {
+  const user = await User.findById(userId).select("trialUsed");
   if (user && user.trialUsed) return true;
 
   // Double check subscription history just in case
-  const trialPlan = await SubscriptionPlan.findOne({ planType: "trial" }).session(session);
+  const trialPlan = await SubscriptionPlan.findOne({ planType: "trial" });
   if (!trialPlan) return false;
 
-  const existing = await UserSubscription.findOne({ userId, planId: trialPlan._id }).session(session);
+  const existing = await UserSubscription.findOne({ userId, planId: trialPlan._id });
   return !!existing;
 }
 

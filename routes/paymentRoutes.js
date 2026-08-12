@@ -17,4 +17,18 @@ router.post("/create-payment", auth, paymentController.createPayment);
  */
 router.post("/verify-payment", auth, paymentController.verifyPayment);
 
+/**
+ * @route POST /api/payment/create-credit-payment
+ * @desc Create a payment order to purchase credits via Instifi
+ * @access Private
+ */
+router.post("/create-credit-payment", auth, paymentController.createCreditPayment);
+
+/**
+ * @route POST /api/payment/verify-credit-payment
+ * @desc Verify credit purchase payment and credit the user's wallet
+ * @access Private
+ */
+router.post("/verify-credit-payment", auth, paymentController.verifyCreditPayment);
+
 module.exports = router;

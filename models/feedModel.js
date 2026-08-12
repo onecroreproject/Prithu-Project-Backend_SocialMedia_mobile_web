@@ -591,6 +591,34 @@ feedSchema.pre("save", function () {
     // Deduplicate
     this.hashtags = [...new Set(cleaned)];
   }
+
+  // ✅ PREVENT WHITE FOOTER - replace white/near-white footer background with dark fallback
+  if (this.designMetadata?.footerConfig?.backgroundColor) {
+    const isWhiteOrLight = (color) => {
+      if (!color) return false;
+      const c = color.trim().toLowerCase();
+      if (c === 'white' || c === '#fff' || c === '#ffffff') return true;
+      const rgbMatch = c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+      if (rgbMatch) {
+        const r = parseInt(rgbMatch[1]), g = parseInt(rgbMatch[2]), b = parseInt(rgbMatch[3]);
+        return r > 220 && g > 220 && b > 220;
+      }
+      const hex6 = c.match(/^#([0-9a-f]{6})$/);
+      if (hex6) {
+        const r = parseInt(hex6[1].slice(0,2), 16), g = parseInt(hex6[1].slice(2,4), 16), b = parseInt(hex6[1].slice(4,6), 16);
+        return r > 220 && g > 220 && b > 220;
+      }
+      const hex3 = c.match(/^#([0-9a-f]{3})$/);
+      if (hex3) {
+        const r = parseInt(hex3[1][0]+hex3[1][0], 16), g = parseInt(hex3[1][1]+hex3[1][1], 16), b = parseInt(hex3[1][2]+hex3[1][2], 16);
+        return r > 220 && g > 220 && b > 220;
+      }
+      return false;
+    };
+    if (isWhiteOrLight(this.designMetadata.footerConfig.backgroundColor)) {
+      this.designMetadata.footerConfig.backgroundColor = 'rgba(26,26,46,0.92)';
+    }
+  }
 });
 // Methods for history tracking
 feedSchema.methods.saveEditHistory = async function (userId, description) {

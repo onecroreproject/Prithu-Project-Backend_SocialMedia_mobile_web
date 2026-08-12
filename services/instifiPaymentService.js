@@ -132,9 +132,10 @@ process.env.FRONTEND_URL?.split(",")[0];
             merchantId:
               this.merchantId || this.clientId.replace(/\D/g, ''),
 
-            productInfo:
-              orderData.productInfo
-              || "Product Purchase",
+            productInfo: (orderData.productInfo || "Product Purchase")
+              .replace(/[^a-zA-Z0-9 ]/g, '')
+              .trim()
+              .slice(0, 30),
 
             customerName:
               orderData.customerName,
