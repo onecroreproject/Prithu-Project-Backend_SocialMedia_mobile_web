@@ -667,38 +667,60 @@ exports.directDownloadFeed = async (req, res) => {
 
 
         if (fs.existsSync(finalOutputPath)) {
-          res.download(finalOutputPath, filename, async (err) => {
-            if (err) {
-              console.error("[DirectDL] Download error:", err.message);
-            } else {
-              // RECORD DOWNLOAD ACTION ONLY AFTER SUCCESSFUL TRANSFER
-              try {
-                await UserFeedActions.findOneAndUpdate(
-                  { userId },
-                  {
-                    $push: {
-                      downloadedFeeds: {
-                        feedId,
-                        downloadedAt: new Date()
-                      }
-                    }
-                  },
-                  { upsert: true }
-                );
+          if (req.query.returnJson === 'true' || req.body.returnJson) {
+            const relativeUrl = `/uploads/temp_direct/${require('path').basename(tempDir)}/${require('path').basename(finalOutputPath)}`;
+            
+            // Record download action
+            try {
+              UserFeedActions.findOneAndUpdate(
+                { userId },
+                { $push: { downloadedFeeds: { feedId, downloadedAt: new Date() } } },
+                { upsert: true }
+              ).catch(e => console.error(e));
+              
+              logUserActivity({
+                userId, actionType: "DOWNLOAD_POST", targetId: feedId, targetModel: "Feed", metadata: { platform: "app" }
+              }).catch(e => console.error(e));
+            } catch (err) {}
 
-                await logUserActivity({
-                  userId,
-                  actionType: "DOWNLOAD_POST",
-                  targetId: feedId,
-                  targetModel: "Feed",
-                  metadata: { platform: "web" },
-                });
-              } catch (dlErr) {
-                console.error("[DirectDL] Action recording error:", dlErr);
+            res.json({ status: 'success', url: relativeUrl });
+            
+            // Cleanup after 10 minutes
+            setTimeout(() => cleanup(), 10 * 60 * 1000);
+          } else {
+            res.download(finalOutputPath, filename, async (err) => {
+              if (err) {
+                console.error("[DirectDL] Download error:", err.message);
+              } else {
+                // RECORD DOWNLOAD ACTION ONLY AFTER SUCCESSFUL TRANSFER
+                try {
+                  await UserFeedActions.findOneAndUpdate(
+                    { userId },
+                    {
+                      $push: {
+                        downloadedFeeds: {
+                          feedId,
+                          downloadedAt: new Date()
+                        }
+                      }
+                    },
+                    { upsert: true }
+                  );
+
+                  await logUserActivity({
+                    userId,
+                    actionType: "DOWNLOAD_POST",
+                    targetId: feedId,
+                    targetModel: "Feed",
+                    metadata: { platform: "web" },
+                  });
+                } catch (dlErr) {
+                  console.error("[DirectDL] Action recording error:", dlErr);
+                }
               }
-            }
-            cleanup();
-          });
+              cleanup();
+            });
+          }
         } else {
           console.error("[DirectDL] Output file missing after FFmpeg end");
           if (!res.headersSent) res.status(500).send("Output generation failed");

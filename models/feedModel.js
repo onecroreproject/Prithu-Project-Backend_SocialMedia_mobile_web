@@ -133,7 +133,7 @@ const feedSchema = new mongoose.Schema(
         },
         type: {
           type: String,
-          enum: ["avatar", "logo", "text", "username", "shape", "watermark", "dynamicText", "calendar"],
+          enum: ["avatar", "logo", "text", "username", "shape", "watermark", "dynamicText", "calendar", "image"],
           required: true
         },
         xPercent: { type: Number, required: true },

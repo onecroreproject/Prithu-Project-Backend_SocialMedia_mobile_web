@@ -23,6 +23,7 @@ const {
     creatorFeedUpload,
     creatorFeedDelete,
     creatorFeedScheduleUpload,
+    creatorFeedUpdate,
 } = require('../controllers/feedControllers/creatorFeedController');
 
 const {
@@ -405,6 +406,7 @@ router.delete('/user/delete', auth, deleteUserNow);
 
 
 /* --------------------- User Feed Actions --------------------- */
+router.put('/user/feed/update', auth, creatorFeedUpdate);
 router.post('/user/feed/like', auth, likeFeed);
 router.post("/user/feed/dislike", auth, toggleDislikeFeed);
 router.post('/user/feed/save', auth, toggleSaveFeed);
