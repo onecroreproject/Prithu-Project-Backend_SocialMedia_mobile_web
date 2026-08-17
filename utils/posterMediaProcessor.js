@@ -1,6 +1,5 @@
 const ffmpeg = require("fluent-ffmpeg");
-const ffmpegPath = require("ffmpeg-static");
-ffmpeg.setFfmpegPath(ffmpegPath);
+require("../Config/ffmpegConfig");
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
