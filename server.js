@@ -32,6 +32,7 @@ initSocket(server);
 
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://192.168.1.29:5173/",
   "http://localhost:5175",
   "http://192.168.1.36:5000",
   "https://admin.prithu.app",
