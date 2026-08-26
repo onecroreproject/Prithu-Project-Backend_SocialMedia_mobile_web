@@ -9,6 +9,10 @@ const categorySchema = new mongoose.Schema({
     trim: true,
     index:true,
   },
+  subcategories: [{
+    type: String,
+    trim: true
+  }],
   
   feedIds:[{type:mongoose.Schema.Types.ObjectId,ref:'Feed'}],
   

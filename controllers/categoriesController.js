@@ -24,8 +24,8 @@ exports.getAllCategories = async (req, res) => {
       });
     }
 
-    // Step 1: Fetch all categories (only _id + name)
-    const categories = await Categories.find({}, { _id: 1, name: 1 })
+    // Step 1: Fetch all categories (only _id, name, subcategories)
+    const categories = await Categories.find({}, { _id: 1, name: 1, subcategories: 1 })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -59,6 +59,7 @@ exports.getAllCategories = async (req, res) => {
       return {
         categoryId: cat._id,
         categoriesName: cat.name,
+        subcategories: cat.subcategories || [],
         totalFeeds: stat ? stat.totalFeeds : 0,
         videoCount: stat ? stat.videoCount : 0,
         imageCount: stat ? stat.imageCount : 0,

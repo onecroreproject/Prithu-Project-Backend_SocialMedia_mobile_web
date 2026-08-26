@@ -399,3 +399,5 @@ exports.uploadPromptImage = async (req, res) => {
     });
   }
 };
+
+// trigger restart

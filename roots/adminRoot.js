@@ -586,4 +586,9 @@ router.get('/admin/monetization/revenue/ai', auth, monetizationController.getAIR
 router.get('/admin/monetization/users/credits', auth, monetizationController.getUserCreditUsage);
 router.post('/admin/monetization/users/:userId/credits', auth, monetizationController.adminModifyUserCredits);
 
+/* --------------------- Admin Dropdown Config API --------------------- */
+const { getConfig, updateConfig } = require('../controllers/dropdownConfigController');
+router.get('/admin/dropdown-config', auth, checkPermission('canManageCategories'), getConfig);
+router.put('/admin/dropdown-config', auth, checkPermission('canManageCategories'), updateConfig);
+
 module.exports = router;

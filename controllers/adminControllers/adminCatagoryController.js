@@ -8,52 +8,97 @@ const { clearFeedsCache } = require('../feedControllers/feedsController');
 
 exports.adminAddCategory = async (req, res) => {
   try {
-    const { names } = req.body; // string: "Men, Women, Kids"
-    if (!names) {
-      return res.status(400).json({ message: "Category names are required" });
+    const { name, subcategories, names } = req.body;
+
+    if (name) {
+      // New logic: Single category with optional subcategories
+      const formattedName = name.trim().charAt(0).toUpperCase() + name.trim().slice(1);
+      
+      let newSubcats = [];
+      if (subcategories && typeof subcategories === 'string') {
+        newSubcats = subcategories
+          .split(",")
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+      } else if (Array.isArray(subcategories)) {
+        newSubcats = subcategories.map(s => s.trim()).filter(s => s.length > 0);
+      }
+
+      let category = await Categories.findOne({ name: formattedName });
+      
+      if (category) {
+        // Category exists, append new subcategories
+        if (newSubcats.length > 0) {
+          const existingSubs = category.subcategories || [];
+          const uniqueNewSubs = newSubcats.filter(s => !existingSubs.includes(s));
+          
+          if (uniqueNewSubs.length > 0) {
+            category.subcategories = [...existingSubs, ...uniqueNewSubs];
+            await category.save();
+          }
+        }
+        clearCategoryCache();
+        return res.status(200).json({
+          message: "Category updated successfully",
+          category: { id: category._id, name: category.name, subcategories: category.subcategories }
+        });
+      } else {
+        // Create new category
+        category = await Categories.create({
+          name: formattedName,
+          subcategories: newSubcats
+        });
+        clearCategoryCache();
+        return res.status(201).json({
+          message: "Category created successfully",
+          category: { id: category._id, name: category.name, subcategories: category.subcategories }
+        });
+      }
+    } else if (names) {
+      // Legacy logic (comma separated main categories)
+      const inputCategories = names
+        .split(",")
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0)
+        .map((name) => name.charAt(0).toUpperCase() + name.slice(1));
+
+      if (!inputCategories.length) {
+        return res.status(400).json({ message: "No valid category names provided" });
+      }
+
+      // Find existing categories
+      const existingCategories = await Categories.find({
+        name: { $in: inputCategories },
+      }).select("name").lean();
+
+      const existingNames = existingCategories.map((cat) => cat.name);
+
+      // Filter out duplicates
+      const newCategories = inputCategories.filter(
+        (n) => !existingNames.includes(n)
+      );
+
+      if (!newCategories.length) {
+        return res.status(409).json({ message: "All categories already exist" });
+      }
+
+      // Insert new categories
+      const createdCategories = await Categories.insertMany(
+        newCategories.map((n) => ({ name: n }))
+      );
+
+      clearCategoryCache(); // 👈 Clear cache for instant UI update
+
+      return res.status(201).json({
+        message: "Categories added successfully",
+        addedCategories: createdCategories.map((cat) => ({
+          id: cat._id,
+          name: cat.name,
+        })),
+      });
+    } else {
+      return res.status(400).json({ message: "Category name is required" });
     }
-
-    // ✅ Convert string into array
-    const inputCategories = names
-      .split(",")
-      .map((n) => n.trim())
-      .filter((n) => n.length > 0)
-      .map((name) => name.charAt(0).toUpperCase() + name.slice(1));
-
-    if (!inputCategories.length) {
-      return res.status(400).json({ message: "No valid category names provided" });
-    }
-
-    // Find existing categories
-    const existingCategories = await Categories.find({
-      name: { $in: inputCategories },
-    }).select("name").lean();
-
-    const existingNames = existingCategories.map((cat) => cat.name);
-
-    // Filter out duplicates
-    const newCategories = inputCategories.filter(
-      (name) => !existingNames.includes(name)
-    );
-
-    if (!newCategories.length) {
-      return res.status(409).json({ message: "All categories already exist" });
-    }
-
-    // Insert new categories
-    const createdCategories = await Categories.insertMany(
-      newCategories.map((name) => ({ name }))
-    );
-
-    clearCategoryCache(); // 👈 Clear cache for instant UI update
-
-    return res.status(201).json({
-      message: "Categories added successfully",
-      addedCategories: createdCategories.map((cat) => ({
-        id: cat._id,
-        name: cat.name,
-      })),
-    });
   } catch (error) {
     console.error("Error adding categories:", error);
     return res
@@ -121,7 +166,7 @@ exports.deleteCategory = async (req, res) => {
 // PUT /admin/category/update
 exports.updateCategory = async (req, res) => {
   try {
-    const { id, name } = req.body;
+    const { id, name, subcategories } = req.body;
     if (!id || !name) {
       return res.status(400).json({ message: "Category ID and new name are required" });
     }
@@ -129,9 +174,18 @@ exports.updateCategory = async (req, res) => {
     // Capitalize first letter
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
 
+    const updateData = { name: formattedName };
+    if (subcategories !== undefined) {
+      if (typeof subcategories === 'string') {
+        updateData.subcategories = subcategories.split(",").map(s => s.trim()).filter(s => s.length > 0);
+      } else if (Array.isArray(subcategories)) {
+        updateData.subcategories = subcategories.map(s => s.trim()).filter(s => s.length > 0);
+      }
+    }
+
     const category = await Categories.findByIdAndUpdate(
       id,
-      { name: formattedName },
+      updateData,
       { new: true }
     );
 
@@ -143,7 +197,7 @@ exports.updateCategory = async (req, res) => {
 
     res.status(200).json({
       message: "Category updated successfully",
-      updatedCategory: { id: category._id, name: category.name },
+      updatedCategory: { id: category._id, name: category.name, subcategories: category.subcategories },
     });
   } catch (error) {
     console.error("Error updating category:", error);
