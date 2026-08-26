@@ -383,7 +383,7 @@ exports.uploadPromptImage = async (req, res) => {
     const filePath = path.join(mediaDir, filename);
     fs.writeFileSync(filePath, req.file.buffer);
 
-    const liveUrl = `https://api.prithu.app/media/ai_images/${filename}`;
+    const liveUrl = `/media/ai_images/${filename}`;
 
     res.status(200).json({
       success: true,

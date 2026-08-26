@@ -88,13 +88,9 @@ exports.adminFeedUpload = async (req, res) => {
                 // Ensure categoryIds is always an array
                 const categoryIds = Array.isArray(categoryIdInput) ? categoryIdInput : (categoryIdInput ? [categoryIdInput] : []);
 
-                const title = specificMetadata.title || "";
-                const reqLanguage = specificMetadata.language || req.body.language || "en";
-                const caption = specificMetadata.description || specificMetadata.caption || globalCaption || "";
-                const tags = specificMetadata.tags ? specificMetadata.tags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean) : [];
+                const caption = specificMetadata.caption || globalCaption || "";
                 const scheduleTime = specificMetadata.scheduleTime || globalScheduleTime;
                 const designData = specificMetadata.designData || globalDesignData;
-                const scheduling = specificMetadata.scheduling || null;
 
                 if (!categoryIds.length) throw new Error("Category ID(s) are required");
 
@@ -152,11 +148,10 @@ exports.adminFeedUpload = async (req, res) => {
                 const currentPostType = isImage ? (uploadedAudio ? 'image+audio' : 'image') : 'video';
 
                 const feedDoc = {
-                    title,
                     uploadType: currentUploadType,
                     postType: currentPostType,
                     uploadMode: currentUploadType,
-                    language: reqLanguage,
+                    language,
                     category: categoryIds,
                     duration: file.duration, // Top-level duration
                     mediaUrl,
@@ -197,19 +192,9 @@ exports.adminFeedUpload = async (req, res) => {
                         urls: { media: mediaUrl, audio: uploadedAudio?.url },
                         paths: { media: fileSave.path, audio: uploadedAudio?.path }
                     },
-                    scheduling,
                     isScheduled: isScheduledFeed,
                     scheduleDate: resolvedScheduleTime,
-                    status: specificMetadata.statusOverride || (isScheduledFeed ? 'scheduled' : 'published'),
-                    caption,
-                    hashtags: tags,
-                    designMetadata: fileDesignMetadata,
-                    postedBy: {
-                        userId: adminId,
-                        role: roleRef
-                    },
-                    createdByAccount: adminId,
-                    roleRef: roleRef,
+                    status: isScheduledFeed ? 'scheduled' : 'published',
                     isApproved: true
                 };
 

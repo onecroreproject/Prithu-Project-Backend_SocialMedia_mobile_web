@@ -32,9 +32,9 @@ initSocket(server);
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "http://192.168.1.29:5173/",
   "http://localhost:5175",
-  "http://192.168.1.36:5000",
+  "http://192.168.1.28:5000",
+  "http://192.168.1.29:5173/",
   "https://admin.prithu.app",
   "https://www.prithu.app",
   "https://prithu.app",

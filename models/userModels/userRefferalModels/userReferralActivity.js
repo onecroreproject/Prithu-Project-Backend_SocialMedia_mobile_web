@@ -7,7 +7,7 @@ const UserReferralActivitySchema = new mongoose.Schema({
     referredUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true }, // if registered
     activityType: {
         type: String,
-        enum: ["invite", "signup", "reward", "share"],
+        enum: ["invite", "signup", "reward", "share", "milestone_claimed", "subscription_purchased"],
         required: true
     },
     shareCount: { type: Number, default: 0 },

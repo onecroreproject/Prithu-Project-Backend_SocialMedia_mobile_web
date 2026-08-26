@@ -1,5 +1,6 @@
 const ffmpeg = require("fluent-ffmpeg");
-require("../Config/ffmpegConfig");
+const ffmpegPath = require("ffmpeg-static");
+ffmpeg.setFfmpegPath(ffmpegPath);
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
@@ -62,15 +63,25 @@ const downloadFile = async (url, dest) => {
 };
 
 const getVideoMetadata = (filePath) => {
-    return new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(filePath, (err, metadata) => {
-            if (err) return reject(err);
-            const stream = metadata.streams.find(s => s.codec_type === 'video');
-            resolve({
-                width: stream?.width || 0,
-                height: stream?.height || 0,
-                duration: metadata.format.duration
-            });
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, async (err, metadata) => {
+            let width = 0;
+            let height = 0;
+            let duration = 0;
+            if (!err && metadata) {
+                const stream = metadata.streams?.find(s => s.codec_type === 'video');
+                width = stream?.width || 0;
+                height = stream?.height || 0;
+                duration = metadata.format?.duration || 0;
+            }
+            if ((!width || !height) && typeof sharp === 'function') {
+                try {
+                    const sharpMeta = await sharp(filePath).metadata();
+                    width = sharpMeta.width || width;
+                    height = sharpMeta.height || height;
+                } catch (_) {}
+            }
+            resolve({ width, height, duration });
         });
     });
 };
@@ -265,9 +276,27 @@ exports.processPosterMedia = async ({
 
     const sourceMeta = await getVideoMetadata(tempSourcePath);
     const footerConfig = designMetadata?.footerConfig;
-    const footerEnabled = !!footerConfig?.enabled;
+    const showElements = footerConfig?.showElements || {};
+    const visibleSocialIcons = (footerConfig?.socialIcons || []).filter(i => i && i.visible);
+
+    const displayName = String(viewer?.name || viewer?.userName || '').trim();
+    const email = String(viewer?.email || '').trim();
+    const phone = String(viewer?.phoneNumber || viewer?.phone || '').trim();
+
+    const isNameVisible = (showElements.name === true || showElements.name === 'true') && displayName.length > 0;
+    const isEmailVisible = (showElements.email === true || showElements.email === 'true') && email.length > 0;
+    const isPhoneVisible = (showElements.phone === true || showElements.phone === 'true') && phone.length > 0;
+    const isSocialVisible = (showElements.socialIcons === true || showElements.socialIcons === 'true') && visibleSocialIcons.length > 0;
+
+    const hasAnyFooterContent = isNameVisible || isEmailVisible || isPhoneVisible || isSocialVisible;
+    const isExplicitlyOff = designMetadata?.hasFooter === false || 
+                            footerConfig?.enabled === false || 
+                            footerConfig?.enabled === 'false' || 
+                            footerConfig?.showFooter === false || 
+                            footerConfig?.showFooter === 'false';
+    const footerEnabled = !isExplicitlyOff && (footerConfig?.enabled === true || footerConfig?.enabled === 'true') && hasAnyFooterContent;
     const baseFooterH = 54;
-    const footerH = footerEnabled ? Math.round(baseFooterH * 1.8 * (footerConfig.usernameScale || 1)) : 0;
+    const footerH = (footerEnabled && hasAnyFooterContent) ? Math.round(baseFooterH * 1.8 * (footerConfig?.usernameScale || 1)) : 0;
 
     if (isImagePost) {
         sourceMeta.width = sourceMeta.width || OUT_W;
@@ -293,12 +322,21 @@ exports.processPosterMedia = async ({
     if (isImagePost) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
 
     let currentBase = "rgba_base";
-    const combinedFilters = [
-        { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
-        { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=0:color=black`, inputs: "scaled_base", outputs: "padded_base" },
-        { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: "rgba_padded" },
-        { filter: "format", options: "rgba", inputs: "rgba_padded", outputs: currentBase }
-    ];
+    let combinedFilters = [];
+
+    if (footerEnabled && hasAnyFooterContent && footerH > 0) {
+        combinedFilters = [
+            { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
+            { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=0:color=black`, inputs: "scaled_base", outputs: "padded_base" },
+            { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: "rgba_padded" },
+            { filter: "format", options: "rgba", inputs: "rgba_padded", outputs: currentBase }
+        ];
+    } else {
+        combinedFilters = [
+            { filter: "scale", options: `w=${OUT_W}:h=${finalOUT_H}:force_original_aspect_ratio=decrease`, inputs: "0:v", outputs: "scaled_base" },
+            { filter: "format", options: "rgba", inputs: "scaled_base", outputs: currentBase }
+        ];
+    }
 
     let overlayInputIndex = 1;
     const customMetadata = feed?.customMetadata || {};
@@ -365,13 +403,9 @@ exports.processPosterMedia = async ({
 
                 if (el.type === 'avatar') {
                     const maskSvg = Buffer.from(
-                        noFade
-                            ? (isRound
-                                ? `<svg width="${scaleW}" height="${scaleW}"><ellipse cx="${scaleW / 2}" cy="${scaleW / 2}" rx="${scaleW / 2}" ry="${scaleW / 2}" fill="white"/></svg>`
-                                : `<svg width="${scaleW}" height="${scaleW}"><rect x="0" y="0" width="${scaleW}" height="${scaleW}" rx="${Math.round(scaleW * 0.1)}" ry="${Math.round(scaleW * 0.1)}" fill="white"/></svg>`)
-                            : (isRound
-                                ? `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><ellipse cx="${scaleW / 2}" cy="${scaleW / 2}" rx="${scaleW / 2}" ry="${scaleW / 2}" fill="url(#f)"/></svg>`
-                                : `<svg width="${scaleW}" height="${scaleW}"><defs><linearGradient id="f" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="85%" stop-color="white"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><rect x="0" y="0" width="${scaleW}" height="${scaleW}" fill="url(#f)"/></svg>`)
+                        isRound
+                            ? `<svg width="${scaleW}" height="${scaleW}"><ellipse cx="${scaleW / 2}" cy="${scaleW / 2}" rx="${scaleW / 2}" ry="${scaleW / 2}" fill="white"/></svg>`
+                            : `<svg width="${scaleW}" height="${scaleW}"><rect x="0" y="0" width="${scaleW}" height="${scaleW}" rx="${Math.round(scaleW * 0.1)}" ry="${Math.round(scaleW * 0.1)}" fill="white"/></svg>`
                     );
 
                     await sharp(overlayDest)
@@ -407,9 +441,9 @@ exports.processPosterMedia = async ({
             } catch (e) { console.error(`Overlay failed: ${el.type}`, e.message); }
         }
 
-        if (el.type === 'username' || el.type === 'text') {
+        if (el.type === 'text') {
             const textStyle = el.style || el.textConfig || {};
-            const content = el.content || textStyle.content || (el.type === 'username' ? viewer?.userName : "");
+            const content = el.content || textStyle.content || "";
 
             if (content) {
                 // 🚀 FIX: Map from 9:16 Editor Coords to Media-Relative FFmpeg Coords
@@ -457,7 +491,7 @@ exports.processPosterMedia = async ({
     }
 
     // Footer background — spans media content width only (not the black side padding)
-    if (footerEnabled) {
+    if (footerEnabled && hasAnyFooterContent && footerH > 0) {
         combinedFilters.push({ filter: "drawbox", options: { x: Math.round(paddingX), y: footerY, w: actualMediaW, h: footerH, c: footerBgColor, t: "fill" }, inputs: currentBase, outputs: "footer_bg" });
         currentBase = "footer_bg";
 
@@ -472,13 +506,16 @@ exports.processPosterMedia = async ({
         // 🚀 Use uniform Font Resolver for footer too
         const activeFontPath = getFontPath(footerConfig?.fontFamily);
 
-        if (showElements.name && viewer.userName) {
-            const truncated = viewer.userName.length > 25 ? viewer.userName.substring(0, 22) + "..." : viewer.userName;
+        const displayName = String(viewer?.name || viewer?.userName || '').trim();
+        const isNameVisible = (showElements.name === true || showElements.name === 'true') && displayName.length > 0;
+
+        if (isNameVisible) {
+            const truncated = displayName.length > 25 ? displayName.substring(0, 22) + "..." : displayName;
             combinedFilters.push({
                 filter: "drawtext",
                 options: {
                     text: escapeDrawText(truncated),
-                    x: (showElements.socialIcons) ? Math.round(paddingX + 20) : `(${Math.round(paddingX)} + (${actualMediaW}-text_w)/2)`,
+                    x: (showElements.socialIcons && footerConfig.socialIcons?.length > 0) ? Math.round(paddingX + 20) : `(${Math.round(paddingX)} + (${actualMediaW}-text_w)/2)`,
                     y: ROW_1_Y,
                     fontsize: Math.round(14 * 1.8 * (footerConfig.usernameScale || 1)),
                     fontcolor: textColor, fontfile: `'${activeFontPath}'`,

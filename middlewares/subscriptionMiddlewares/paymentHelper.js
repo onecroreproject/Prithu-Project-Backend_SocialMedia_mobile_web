@@ -108,6 +108,12 @@ exports.activateSubscription = async (userId, planId, paymentResult, paymentId =
         // Run referral processing outside the committed transaction to avoid lock/write conflicts
         try {
           await processReferral(userId);
+
+          // Trigger Milestone/Cycle validation
+          if (user.referredByUserId) {
+            const { validateReferralOnSubscription } = require("../../services/referralCycleService");
+            await validateReferralOnSubscription(user.referredByUserId, userId, plan.price || 0);
+          }
         } catch (referralErr) {
           console.error("Referral processing error:", referralErr.message);
         }

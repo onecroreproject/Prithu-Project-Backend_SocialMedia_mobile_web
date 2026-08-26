@@ -100,7 +100,8 @@ async function processReferral(childId) {
           );
 
           // Update Referral Cycle
-          await updateCycleOnReferral(ancestorId, childId, earningAmount, session);
+          const { addReferralToCycle } = require("../../services/referralCycleService");
+          await addReferralToCycle(ancestorId, childId, session);
         }
 
         // Promotion only when left/right full

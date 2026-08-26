@@ -259,6 +259,11 @@ const { exportFeedInteractionsCSV } = require('../controllers/adminControllers/a
 const { getAllCategories } = require('../controllers/categoriesController');
 const { deleteFeed } = require('../controllers/feedControllers/feedsController');
 
+const {
+    getAllReferralCycles,
+    getReferralCycleByIdAdmin,
+} = require('../controllers/adminControllers/adminReferralController');
+
 /* --------------------- Admin Export API --------------------- */
 router.get("/export/csv", auth, checkPermission('canManageFeeds'), exportFeedInteractionsCSV);
 
@@ -404,6 +409,10 @@ router.get("/admin/dashboard/user-subscription-counts", auth, checkPermission('c
 router.get("/top/referral/users", auth, checkPermission('canManageSalesDashboard'), getTopReferralUsers);
 router.get("/dashboard/user-subscription-counts", auth, checkPermission('canManageSalesDashboard'), getUserAndSubscriptionCountsDaily);
 router.delete("/delete/feed", auth, checkPermission('canManageFeeds'), deleteFeed);
+
+/* --------------------- Admin Referral Mission API --------------------- */
+router.get("/admin/referral-cycles", auth, checkPermission('canManageUsers'), getAllReferralCycles);
+router.get("/admin/referral-cycles/:id", auth, checkPermission('canManageUsers'), getReferralCycleByIdAdmin);
 
 /* --------------------- Admin Report API --------------------- */
 router.post("/admin/add/report/questions", auth, checkPermission('canManageAddReport'), addReportQuestion);

@@ -26,16 +26,41 @@ const downloadQueue = require("../../queue/downloadQueue");
 const { processFeedMedia } = require("../../utils/feedMediaProcessor");
 const { processPosterMedia } = require("../../utils/posterMediaProcessor");
 
+const ProfileVisibility = require("../../models/profileVisibilitySchema");
+
+// Helper to reliably resolve full ProfileVisibility document
+const resolveVisibility = async (profile) => {
+  if (!profile) return {};
+  if (profile.visibility && typeof profile.visibility === 'object' && profile.visibility.name) {
+    return profile.visibility;
+  }
+  if (profile.visibility) {
+    try {
+      const doc = await ProfileVisibility.findById(profile.visibility).lean();
+      if (doc) return doc;
+    } catch (_) {}
+  }
+  try {
+    const doc = await ProfileVisibility.findOne({ profileSettingsId: profile._id }).lean();
+    if (doc) return doc;
+  } catch (_) {}
+  return {};
+};
+
 // Helper to construct a viewer object that respects the ProfileVisibility privacy settings
-const getSafeViewer = (user, profile) => {
-  const visibility = profile?.visibility || {};
+const getSafeViewer = (user, profile, explicitVisibility = null) => {
+  const visibility = explicitVisibility || (profile?.visibility && typeof profile.visibility === 'object' && profile.visibility.name ? profile.visibility : {});
+  const effectiveName = (visibility.name === 'public' || visibility.displayName === 'public') ? (profile?.name || user?.name || profile?.userName || user?.userName || null) : null;
+  const effectiveUserName = (visibility.userName === 'public') ? (profile?.userName || user?.userName || null) : null;
   return {
-    id: user._id,
-    userName: visibility.userName === 'private' ? null : (profile?.userName || profile?.name || user.userName || 'User'),
-    email: visibility.email === 'private' ? null : (user.email || profile?.email || null),
-    phoneNumber: visibility.phoneNumber === 'private' ? null : (profile?.phoneNumber || user.phoneNumber || user.phone || null),
-    profileAvatar: visibility.profileAvatar === 'private' ? null : getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null),
-    website: visibility.website === 'private' ? null : (profile?.website || null),
+    id: user?._id || user?.id,
+    name: effectiveName,
+    userName: effectiveUserName,
+    email: visibility.email === 'public' ? (user?.email || profile?.email || null) : null,
+    phoneNumber: (visibility.phoneNumber === 'public' || visibility.phone === 'public') ? (profile?.phoneNumber || user?.phoneNumber || user?.phone || null) : null,
+    phone: (visibility.phoneNumber === 'public' || visibility.phone === 'public') ? (profile?.phoneNumber || user?.phoneNumber || user?.phone || null) : null,
+    profileAvatar: visibility.profileAvatar === 'public' ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null) : null,
+    website: visibility.website === 'public' ? (profile?.website || null) : null,
   };
 };
 
@@ -483,7 +508,7 @@ exports.directDownloadFeed = async (req, res) => {
         designMetadata.footerConfig = {
           ...designMetadata.footerConfig,
           ...customMetadata.footerConfig,
-          enabled: true
+          enabled: customMetadata.footerConfig.enabled === true
         };
       }
 
@@ -562,50 +587,54 @@ exports.directDownloadFeed = async (req, res) => {
       }
     }
 
-    const visibility = profile?.visibility || {};
-    const viewer = getSafeViewer(user, profile);
+    const visibility = await resolveVisibility(profile);
+    const viewer = getSafeViewer(user, profile, visibility);
 
-    // Auto-enable or disable footer elements based on viewer privacy/availability
-    if (designMetadata.footerConfig?.showElements) {
-      designMetadata.footerConfig.showElements.email = !!viewer.email;
-      designMetadata.footerConfig.showElements.phone = !!viewer.phoneNumber;
-      designMetadata.footerConfig.showElements.website = !!viewer.website;
-      designMetadata.footerConfig.showElements.name = !!viewer.userName;
+    const displayName = (visibility.name === 'public' || visibility.displayName === 'public') ? (viewer.name || viewer.userName) : null;
+    const email = (visibility.email === 'public') ? viewer.email : null;
+    const phone = (visibility.phoneNumber === 'public' || visibility.phone === 'public') ? (viewer.phoneNumber || viewer.phone) : null;
+
+    // Filter social icons based on availability and privacy settings (strictly 'public')
+    let visibleSocialIcons = [];
+    const allowedPlatforms = ['facebook', 'instagram', 'twitter', 'youtube'];
+    const userSocialLinks = profile?.socialLinks || user?.socialLinks || {};
+
+    visibleSocialIcons = allowedPlatforms
+      .filter(platform => {
+        const isPublic = visibility[platform] === 'public' || 
+                         visibility.socialLinks?.[platform] === 'public' || 
+                         visibility.socialIcons === 'public' ||
+                         (platform === 'twitter' && (visibility['x'] === 'public' || visibility.socialLinks?.['x'] === 'public'));
+        return isPublic;
+      })
+      .map(platform => {
+        const pKey = platform.toLowerCase();
+        const pUrl = typeof userSocialLinks === 'object' ? (userSocialLinks[pKey] || userSocialLinks[platform] || '') : '';
+        return {
+          platform: pKey,
+          visible: true,
+          url: pUrl
+        };
+      });
+
+    const clientWantsFooter = customMetadata?.footerConfig?.enabled === true && customMetadata?.footerConfig?.showFooter !== false;
+    const hasAnyFooterContent = !!displayName || !!email || !!phone || (visibleSocialIcons.length > 0);
+    const shouldEnableFooter = (clientWantsFooter || customMetadata?.footerConfig?.showFooter !== false) && hasAnyFooterContent;
+
+    if (!designMetadata.footerConfig) {
+      designMetadata.footerConfig = {};
     }
+    designMetadata.footerConfig.enabled = shouldEnableFooter;
+    designMetadata.footerConfig.showFooter = shouldEnableFooter;
+    designMetadata.hasFooter = shouldEnableFooter;
 
-    // Filter social icons based on availability and privacy settings
-    if (designMetadata.footerConfig && profile?.socialLinks) {
-      const socialLinks = profile.socialLinks;
-      let isSocialPublic = true;
-      
-      if (visibility && visibility.socialIcons === 'private') {
-        isSocialPublic = false;
-      }
-
-      // If template has socialIcons defined, filter them
-      if (designMetadata.footerConfig.socialIcons && designMetadata.footerConfig.socialIcons.length > 0) {
-        designMetadata.footerConfig.socialIcons = (designMetadata.footerConfig.socialIcons || []).filter(icon => {
-          if (!isSocialPublic) return false;
-          const platform = icon.platform?.toLowerCase();
-          if (visibility && visibility[platform] === 'private') return false;
-          return socialLinks[platform] && socialLinks[platform].length > 0;
-        });
-      }
-      // Fallback: If template wants social icons but hasn't specified which ones, show all available from profile
-      else if (designMetadata.footerConfig.showElements?.socialIcons && isSocialPublic) {
-        designMetadata.footerConfig.socialIcons = Object.keys(socialLinks)
-          .filter(platform => {
-             if (visibility && visibility[platform] === 'private') return false;
-             return socialLinks[platform] && String(socialLinks[platform]).trim().length > 0;
-          })
-          .map(platform => ({
-            platform: platform.charAt(0).toUpperCase() + platform.slice(1),
-            visible: true,
-            url: socialLinks[platform]
-          }));
-
-      }
-    }
+    designMetadata.footerConfig.showElements = {
+      name: !!displayName,
+      email: !!email,
+      phone: !!phone,
+      socialIcons: visibleSocialIcons.length > 0,
+    };
+    designMetadata.footerConfig.socialIcons = visibleSocialIcons;
 
 
     console.log(`[DirectDL] 🟢 Step 1: Starting processFeedMedia for feed: ${feedId}`);
@@ -667,60 +696,38 @@ exports.directDownloadFeed = async (req, res) => {
 
 
         if (fs.existsSync(finalOutputPath)) {
-          if (req.query.returnJson === 'true' || req.body.returnJson) {
-            const relativeUrl = `/uploads/temp_direct/${require('path').basename(tempDir)}/${require('path').basename(finalOutputPath)}`;
-            
-            // Record download action
-            try {
-              UserFeedActions.findOneAndUpdate(
-                { userId },
-                { $push: { downloadedFeeds: { feedId, downloadedAt: new Date() } } },
-                { upsert: true }
-              ).catch(e => console.error(e));
-              
-              logUserActivity({
-                userId, actionType: "DOWNLOAD_POST", targetId: feedId, targetModel: "Feed", metadata: { platform: "app" }
-              }).catch(e => console.error(e));
-            } catch (err) {}
-
-            res.json({ status: 'success', url: relativeUrl });
-            
-            // Cleanup after 10 minutes
-            setTimeout(() => cleanup(), 10 * 60 * 1000);
-          } else {
-            res.download(finalOutputPath, filename, async (err) => {
-              if (err) {
-                console.error("[DirectDL] Download error:", err.message);
-              } else {
-                // RECORD DOWNLOAD ACTION ONLY AFTER SUCCESSFUL TRANSFER
-                try {
-                  await UserFeedActions.findOneAndUpdate(
-                    { userId },
-                    {
-                      $push: {
-                        downloadedFeeds: {
-                          feedId,
-                          downloadedAt: new Date()
-                        }
+          res.download(finalOutputPath, filename, async (err) => {
+            if (err) {
+              console.error("[DirectDL] Download error:", err.message);
+            } else {
+              // RECORD DOWNLOAD ACTION ONLY AFTER SUCCESSFUL TRANSFER
+              try {
+                await UserFeedActions.findOneAndUpdate(
+                  { userId },
+                  {
+                    $push: {
+                      downloadedFeeds: {
+                        feedId,
+                        downloadedAt: new Date()
                       }
-                    },
-                    { upsert: true }
-                  );
+                    }
+                  },
+                  { upsert: true }
+                );
 
-                  await logUserActivity({
-                    userId,
-                    actionType: "DOWNLOAD_POST",
-                    targetId: feedId,
-                    targetModel: "Feed",
-                    metadata: { platform: "web" },
-                  });
-                } catch (dlErr) {
-                  console.error("[DirectDL] Action recording error:", dlErr);
-                }
+                await logUserActivity({
+                  userId,
+                  actionType: "DOWNLOAD_POST",
+                  targetId: feedId,
+                  targetModel: "Feed",
+                  metadata: { platform: "web" },
+                });
+              } catch (dlErr) {
+                console.error("[DirectDL] Action recording error:", dlErr);
               }
-              cleanup();
-            });
-          }
+            }
+            cleanup();
+          });
         } else {
           console.error("[DirectDL] Output file missing after FFmpeg end");
           if (!res.headersSent) res.status(500).send("Output generation failed");
@@ -806,8 +813,8 @@ exports.birthdayDownloadFeed = async (req, res) => {
 
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    const visibility = profile?.visibility || {};
-    const viewer = getSafeViewer(user, profile);
+    const visibility = await resolveVisibility(profile);
+    const viewer = getSafeViewer(user, profile, visibility);
 
     // ── Build designMetadata from feed + merge client customMetadata ──
     let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
@@ -1023,8 +1030,8 @@ exports.anniversaryDownloadFeed = async (req, res) => {
 
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    const visibility = profile?.visibility || {};
-    const viewer = getSafeViewer(user, profile);
+    const visibility = await resolveVisibility(profile);
+    const viewer = getSafeViewer(user, profile, visibility);
 
     // ── Build designMetadata from feed + merge client customMetadata ──
     let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
@@ -1211,8 +1218,8 @@ exports.politicsDownloadFeed = async (req, res) => {
 
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    const visibility = profile?.visibility || {};
-    const viewer = getSafeViewer(user, profile);
+    const visibility = await resolveVisibility(profile);
+    const viewer = getSafeViewer(user, profile, visibility);
 
     // ── Build designMetadata from feed + merge client customMetadata ──
     let designMetadata = JSON.parse(JSON.stringify(feed.designMetadata || {}));
@@ -1256,19 +1263,28 @@ exports.politicsDownloadFeed = async (req, res) => {
       });
     }
 
-    // 3️⃣  Footer config — only apply if user enabled it
-    if (customMetadata.footerConfig?.showFooter) {
+    // 3️⃣  Footer config — apply only if public content exists and user enabled it
+    const displayName = (visibility.name === 'public' || visibility.displayName === 'public') ? (viewer.name || viewer.userName) : null;
+    const email = (visibility.email === 'public') ? viewer.email : null;
+    const phone = (visibility.phoneNumber === 'public' || visibility.phone === 'public') ? (viewer.phoneNumber || viewer.phone) : null;
+
+    const hasAnyFooter = !!displayName || !!email || !!phone;
+    const shouldEnablePoliticsFooter = (customMetadata.footerConfig?.showFooter !== false && customMetadata.footerConfig?.enabled !== false) && hasAnyFooter;
+
+    if (shouldEnablePoliticsFooter) {
       designMetadata.hasFooter = true;
       designMetadata.footerConfig = {
-        ...designMetadata.footerConfig,
-        ...customMetadata.footerConfig,
+        ...(designMetadata.footerConfig || {}),
+        ...(customMetadata.footerConfig || {}),
         enabled: true,
+        showFooter: true,
+        showElements: {
+          name: !!displayName,
+          email: !!email,
+          phone: !!phone,
+          socialIcons: false,
+        }
       };
-      // Show email/phone only if public
-      if (designMetadata.footerConfig.showElements) {
-        if (!viewer.email) designMetadata.footerConfig.showElements.email = false;
-        if (!viewer.phoneNumber) designMetadata.footerConfig.showElements.phone = false;
-      }
     } else {
       designMetadata.hasFooter = false;
       delete designMetadata.footerConfig;
@@ -3021,10 +3037,15 @@ const getShareDesignMetadata = (feed, type, customMetadata = {}, viewer = {}) =>
       break;
 
     default:
-      designMetadata.hasFooter = true;
+      const hasAnyFooter = !!(viewer?.name || viewer?.userName) || !!viewer?.email || !!(viewer?.phoneNumber || viewer?.phone);
+      const clientFooterEnabled = customMetadata?.footerConfig?.enabled === true && customMetadata?.footerConfig?.showFooter !== false;
+      const enableFooter = clientFooterEnabled && hasAnyFooter;
+      designMetadata.hasFooter = enableFooter;
       if (!designMetadata.footerConfig) {
-        designMetadata.footerConfig = { enabled: true, showElements: { name: true, phone: true } };
+        designMetadata.footerConfig = {};
       }
+      designMetadata.footerConfig.enabled = enableFooter;
+      designMetadata.footerConfig.showFooter = enableFooter;
       break;
   }
   return designMetadata;
@@ -3072,22 +3093,12 @@ exports.processSharePreview = async (req, res) => {
 
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    // 🚀 STEP 1: RESOLVE DESIGN METADATA
-    const designMetadata = getShareDesignMetadata(feed, type, customMetadata, profile);
+    // 🚀 STEP 1: RESOLVE VIEWER (Mirroring DirectDownload Privacy)
+    const visibility = await resolveVisibility(profile);
+    const viewer = getSafeViewer(user, profile, visibility);
 
-    // 🚀 STEP 2: RESOLVE VIEWER (Mirroring DirectDownload Privacy)
-    const visibility = profile?.visibility || {};
-    const viewer = {
-      id: user._id,
-      userName: (visibility.userName === 'public' || visibility.displayName === 'public')
-        ? (profile?.userName || user.userName || profile?.name || "User")
-        : null,
-      email: visibility.email === 'public' ? (user.email || profile?.email) : null,
-      phoneNumber: visibility.phoneNumber === 'public' ? (profile?.phoneNumber || user.phoneNumber || user.phone) : null,
-      profileAvatar: (visibility.profileAvatar === 'public')
-        ? getMediaUrl(profile?.modifyAvatar || profile?.profileAvatar || null)
-        : null,
-    };
+    // 🚀 STEP 2: RESOLVE DESIGN METADATA
+    const designMetadata = getShareDesignMetadata(feed, type, customMetadata, viewer);
 
     // 🚀 STEP 3: ADD JOB TO QUEUE
 

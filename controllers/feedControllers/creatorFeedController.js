@@ -245,16 +245,14 @@ exports.creatorFeedUpdate = async (req, res) => {
       feed.designMetadata = {};
     }
     
-    // Update the elements using updateOne to bypass strict enum validation if schema is cached
-    await Feed.updateOne(
-      { _id: feedId },
-      { $set: { "designMetadata.overlayElements": elements } },
-      { runValidators: false }
-    );
+    // Update the elements
+    feed.designMetadata.overlayElements = elements;
     
-    return res.status(200).json({ message: "Feed updated successfully" });
-  } catch (err) {
-    console.error("Error updating feed:", err);
-    return res.status(500).json({ message: "Server error", error: err.message });
+    await feed.save();
+
+    return res.status(200).json({ message: "Feed updated successfully", feed });
+  } catch (error) {
+    console.error("creatorFeedUpdate Error:", error);
+    return res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };

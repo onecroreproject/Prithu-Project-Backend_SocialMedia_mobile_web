@@ -747,6 +747,18 @@ exports.getUserProfileDetail = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
+    let visibility = profile.visibility;
+    if (!visibility) {
+      let userVis = await ProfileVisibility.findOne({ userId }).lean();
+      if (!userVis) {
+        const newVis = new ProfileVisibility({});
+        await newVis.save();
+        userVis = newVis.toObject();
+      }
+      visibility = userVis;
+      await Profile.updateOne({ _id: profile._id }, { $set: { visibility: userVis._id } });
+    }
+
     // ✅ Extract safe fields with defaults
     const {
       bio = "",
@@ -774,7 +786,6 @@ exports.getUserProfileDetail = async (req, res) => {
       modifyAvatar = "",
       addImage = "",
       userId: user = {},
-      visibility = null,
     } = profile;
 
     // ✅ Compute age safely
@@ -1415,9 +1426,13 @@ exports.updateUserVisibilitySettings = async (req, res) => {
     const userId = req.Id;
     let updates = req.body;
 
-    // ✅ FIX: specific handling for { field, value } structure sent by ProfileSettings.jsx
+    // ✅ FIX: specific handling for { field, value } structure sent by ProfileSettings.jsx / mobile app
     if (updates.field && updates.value) {
       updates = { [updates.field]: updates.value };
+    }
+
+    if (updates.name) {
+      updates.displayName = updates.name;
     }
 
     if (!userId) {

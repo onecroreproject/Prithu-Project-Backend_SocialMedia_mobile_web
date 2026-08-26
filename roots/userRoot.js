@@ -259,7 +259,9 @@ const {
 
 const {
     getReferralCycles,
-    getCycleDetails
+    getCycleDetails,
+    claimMilestone,
+    applyReferralCode,
 } = require("../controllers/userControllers/userReferralCycleController");
 
 const {
@@ -363,6 +365,8 @@ router.post('/user/withdrawal/request', auth, requestWithdrawal);
 router.patch('/user/withdrawal/update/:requestId', auth, updateWithdrawalRequest);
 router.get('/user/referral/cycles', auth, getReferralCycles);
 router.get('/user/referral/cycle/:cycleId/details', auth, getCycleDetails);
+router.post('/user/referral/claim-milestone', auth, claimMilestone);
+router.post('/user/referral/apply', auth, applyReferralCode);
 
 /* --------------------- User Profile --------------------- */
 router.get('/user/profile/detail', auth, getUserProfileDetail);

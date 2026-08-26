@@ -29,6 +29,17 @@ exports.createPayment = async (req, res) => {
             return res.status(400).json({ success: false, message: "Plan ID is required" });
         }
 
+        // Fetch user from DB if fields are not fully populated
+        let userDoc = null;
+        try {
+            userDoc = await User.findById(userId).select('name userName fullName email phone phoneNumber');
+        } catch (e) {}
+
+        const rawName = customerName || userDoc?.name || userDoc?.fullName || userDoc?.userName || "VIP Member";
+        const cleanName = String(rawName).replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim() || "VIP Member";
+        const rawEmail = customerEmail || userDoc?.email || "customer@prithu.app";
+        const rawPhone = customerPhone || userDoc?.phone || userDoc?.phoneNumber || "9999999999";
+
         // Generate unique IDs in a standard format
         const timestamp = Date.now().toString().slice(-8);
         const orderId = `ORD${timestamp}`;
@@ -42,9 +53,9 @@ exports.createPayment = async (req, res) => {
             amount,
             orderId,
             merchantTxnId,
-            customerName: customerName || "Customer",
-            customerEmail: customerEmail || "customer@example.com",
-            customerMobile: customerPhone || "9999999999",
+            customerName: cleanName,
+            customerEmail: rawEmail,
+            customerMobile: rawPhone,
             productInfo: "Subscription Purchase",
             payMode: "all"
         };
@@ -80,7 +91,7 @@ exports.createPayment = async (req, res) => {
         console.error("createPayment error:", error.response?.data || error.message);
         res.status(500).json({ 
             success: false, 
-            message: error.message || "Failed to initialize payment" 
+            message: error.response?.data?.responseMessage || error.message || "Failed to initialize payment" 
         });
     }
 };
@@ -429,6 +440,17 @@ exports.createCreditPayment = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid package price" });
         }
 
+        // Fetch user from DB if fields are not fully populated
+        let userDoc = null;
+        try {
+            userDoc = await User.findById(userId).select('name userName fullName email phone phoneNumber');
+        } catch (e) {}
+
+        const rawName = customerName || userDoc?.name || userDoc?.fullName || userDoc?.userName || "VIP Member";
+        const cleanName = String(rawName).replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim() || "VIP Member";
+        const rawEmail = customerEmail || userDoc?.email || "customer@prithu.app";
+        const rawPhone = customerPhone || userDoc?.phone || userDoc?.phoneNumber || "9999999999";
+
         const timestamp = Date.now().toString().slice(-8);
         const orderId = `CRD${timestamp}`;
         const merchantTxnId = `CRDT${timestamp}${Math.floor(Math.random() * 100)}`;
@@ -439,9 +461,9 @@ exports.createCreditPayment = async (req, res) => {
             amount,
             orderId,
             merchantTxnId,
-            customerName: customerName || "Customer",
-            customerEmail: customerEmail || "customer@example.com",
-            customerMobile: customerPhone || "9999999999",
+            customerName: cleanName,
+            customerEmail: rawEmail,
+            customerMobile: rawPhone,
             productInfo: `Credits ${creditPackage.credits}`,
             payMode: "all"
         };
@@ -484,7 +506,7 @@ exports.createCreditPayment = async (req, res) => {
         console.error("createCreditPayment error:", error.response?.data || error.message);
         res.status(500).json({
             success: false,
-            message: error.message || "Failed to initialize credit payment"
+            message: error.response?.data?.responseMessage || error.message || "Failed to initialize credit payment"
         });
     }
 };

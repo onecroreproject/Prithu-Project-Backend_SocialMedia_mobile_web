@@ -1,5 +1,6 @@
 const ffmpeg = require("fluent-ffmpeg");
-require("../Config/ffmpegConfig");
+const ffmpegPath = require("ffmpeg-static");
+ffmpeg.setFfmpegPath(ffmpegPath);
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
@@ -64,15 +65,25 @@ const downloadFile = async (url, dest) => {
 };
 
 const getVideoMetadata = (filePath) => {
-    return new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(filePath, (err, metadata) => {
-            if (err) return reject(err);
-            const stream = metadata.streams.find(s => s.codec_type === 'video');
-            resolve({
-                width: stream?.width || 0,
-                height: stream?.height || 0,
-                duration: metadata.format.duration
-            });
+    return new Promise((resolve) => {
+        ffmpeg.ffprobe(filePath, async (err, metadata) => {
+            let width = 0;
+            let height = 0;
+            let duration = 0;
+            if (!err && metadata) {
+                const stream = metadata.streams?.find(s => s.codec_type === 'video');
+                width = stream?.width || 0;
+                height = stream?.height || 0;
+                duration = metadata.format?.duration || 0;
+            }
+            if ((!width || !height) && typeof sharp === 'function') {
+                try {
+                    const sharpMeta = await sharp(filePath).metadata();
+                    width = sharpMeta.width || width;
+                    height = sharpMeta.height || height;
+                } catch (_) {}
+            }
+            resolve({ width, height, duration });
         });
     });
 };
@@ -192,48 +203,81 @@ const getSocialBrand = (platform = '') => {
     return SOCIAL_BRAND[key] || SOCIAL_BRAND.website;
 };
 
-const downloadSocialIcon = async (platform, dest, color = null, size = 48) => {
-    try {
-        const slug = SOCIAL_SLUGS[platform.toLowerCase()] || platform.toLowerCase();
-        const brand = getSocialBrand(platform);
-        
-        // Force the icon inside the circle to be white if not specified
-        const iconColor = color ? color.replace('#', '') : 'ffffff';
-        const iconUrl = `https://cdn.simpleicons.org/${slug}/${iconColor}`;
-        
-        const response = await axios({
-            url: iconUrl,
-            method: 'GET',
-            responseType: 'arraybuffer',
-            timeout: 10000
-        });
+const SOCIAL_ICONS_SVG = {
+    facebook: `<path fill="#ffffff" d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14c-.326-.043-1.52-.14-2.8-.14-2.73 0-4.7 1.67-4.7 4.86V9.5H7.5v4H10V22h4v-8.5z"/>`,
+    instagram: `<path fill="#ffffff" d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>`,
+    twitter: `<path fill="#ffffff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>`,
+    x: `<path fill="#ffffff" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>`,
+    youtube: `<path fill="#ffffff" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>`,
+    whatsapp: `<path fill="#ffffff" d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z"/>`,
+};
 
-        // 60% of total size for the inner icon
+const downloadSocialIcon = async (platform, dest, color = null, size = 48, shadowOptions = {}) => {
+    try {
+        const pKey = platform.toLowerCase();
+        const brand = getSocialBrand(pKey);
         const innerSize = Math.floor(size * 0.6);
 
-        // SVG circle background using brand color
+        let innerIconBuffer = null;
+        if (SOCIAL_ICONS_SVG[pKey]) {
+            const svgIcon = Buffer.from(
+                `<svg width="${innerSize}" height="${innerSize}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    ${SOCIAL_ICONS_SVG[pKey]}
+                 </svg>`
+            );
+            innerIconBuffer = await sharp(svgIcon).png().toBuffer();
+        } else {
+            const slug = SOCIAL_SLUGS[pKey] || pKey;
+            const iconUrl = `https://cdn.simpleicons.org/${slug}/ffffff`;
+            try {
+                const response = await axios({ url: iconUrl, method: 'GET', responseType: 'arraybuffer', timeout: 5000 });
+                innerIconBuffer = await sharp(response.data).resize(innerSize, innerSize).png().toBuffer();
+            } catch (_) {}
+        }
+
+        const shadowEnabled = shadowOptions.enabled !== false;
+        const shadowOpacity = shadowOptions.opacity ?? 0.5;
+        const shadowBlur = shadowOptions.blur ?? 3.5;
+        const shadowOffsetX = shadowOptions.offsetX ?? 0;
+        const shadowOffsetY = shadowOptions.offsetY ?? 3;
+        const shadowColor = shadowOptions.color || '#000000';
+
+        const pad = shadowEnabled ? Math.ceil(shadowBlur * 2) : 0;
+        const totalSize = size + (pad * 2);
+        const cx = totalSize / 2;
+        const cy = totalSize / 2;
+        const r = size / 2;
+
+        const filterDef = shadowEnabled
+            ? `<defs>
+                <filter id="bgShadow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feDropShadow dx="${shadowOffsetX}" dy="${shadowOffsetY}" stdDeviation="${shadowBlur}" flood-color="${shadowColor}" flood-opacity="${shadowOpacity}" />
+                </filter>
+               </defs>`
+            : '';
+
         const circleSvg = Buffer.from(
-            `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="${brand.bg}" />
+            `<svg width="${totalSize}" height="${totalSize}" xmlns="http://www.w3.org/2000/svg">
+                ${filterDef}
+                <circle cx="${cx}" cy="${cy}" r="${r}" fill="${brand.bg}" ${shadowEnabled ? 'filter="url(#bgShadow)"' : ''} />
              </svg>`
         );
 
-        // Convert icon SVG to PNG buffer
-        const innerIconBuffer = await sharp(response.data)
-            .resize(innerSize, innerSize)
-            .png()
-            .toBuffer();
-
-        // Composite them together: inner icon over the circular background
-        await sharp(circleSvg)
-            .composite([{ input: innerIconBuffer, gravity: 'center' }])
-            .png()
-            .toFile(dest);
+        if (innerIconBuffer) {
+            await sharp(circleSvg)
+                .composite([{ input: innerIconBuffer, gravity: 'center' }])
+                .png()
+                .toFile(dest);
+        } else {
+            await sharp(circleSvg)
+                .png()
+                .toFile(dest);
+        }
             
-        return true;
+        return { success: true, pad, totalSize };
     } catch (err) {
-        console.error(`[FS] Download failed for https://cdn.simpleicons.org/${platform}:`, err.message);
-        return false;
+        console.error(`[FS] Icon generation failed for ${platform}:`, err.message);
+        return { success: false, pad: 0, totalSize: size };
     }
 };
 
@@ -401,9 +445,27 @@ exports.processFeedMedia = async ({
 
 
     const footerConfig = designMetadata?.footerConfig;
-    const footerEnabled = !!footerConfig?.enabled;
-    const footerH = footerStyle.footerHeight || (footerEnabled ? Math.round(((footerConfig.heightPercent || 10) / 100) * OUT_H) : 0);
-    const maxMediaH = OUT_H - footerH;
+    const showElements = footerConfig?.showElements || {};
+    const visibleSocialIcons = (footerConfig?.socialIcons || []).filter(i => i && i.visible);
+
+    const displayName = String(viewer?.name || viewer?.userName || '').trim();
+    const email = String(viewer?.email || '').trim();
+    const phone = String(viewer?.phoneNumber || viewer?.phone || '').trim();
+
+    const isNameVisible = (showElements.name === true || showElements.name === 'true') && displayName.length > 0;
+    const isEmailVisible = (showElements.email === true || showElements.email === 'true') && email.length > 0;
+    const isPhoneVisible = (showElements.phone === true || showElements.phone === 'true') && phone.length > 0;
+    const isSocialVisible = (showElements.socialIcons === true || showElements.socialIcons === 'true') && visibleSocialIcons.length > 0;
+
+    const hasAnyFooterContent = isNameVisible || isEmailVisible || isPhoneVisible || isSocialVisible;
+    const isExplicitlyOff = designMetadata?.hasFooter === false || 
+                            footerConfig?.enabled === false || 
+                            footerConfig?.enabled === 'false' || 
+                            footerConfig?.showFooter === false || 
+                            footerConfig?.showFooter === 'false';
+    const footerEnabled = !isExplicitlyOff && (footerConfig?.enabled === true || footerConfig?.enabled === 'true') && hasAnyFooterContent;
+    const footerH = (footerEnabled && hasAnyFooterContent) ? (footerStyle.footerHeight || Math.round(((footerConfig?.heightPercent || 10) / 100) * OUT_H)) : 0;
+    const maxMediaH = (footerEnabled && hasAnyFooterContent) ? (OUT_H - footerH) : OUT_H;
 
     if (isImagePost) {
         sourceMeta.width = sourceMeta.width || OUT_W;
@@ -462,14 +524,19 @@ exports.processFeedMedia = async ({
         }
     }
 
-    // Base Canvas: Normalize to RGBA to prevent re-init errors with overlays
-
-    combinedFilters.push(
-        { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}`, inputs: "0:v", outputs: "scaled_base" },
-        { filter: "pad", options: `w=${OUT_W}:h=${actualMediaH}:x=(ow-iw)/2:y=oh-ih:color=black`, inputs: "scaled_base", outputs: "padded_base" },
-        { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "padded_base", outputs: "rgba_base" },
-        { filter: "format", options: "rgba", inputs: "rgba_base", outputs: currentBase }
-    );
+    // Base Canvas: Normalize to RGBA without any extra bottom padding
+    if (footerEnabled && hasAnyFooterContent && footerH > 0) {
+        combinedFilters.push(
+            { filter: "scale", options: `w=${OUT_W}:h=${actualMediaH}`, inputs: "0:v", outputs: "scaled_base" },
+            { filter: "pad", options: `w=${OUT_W}:h=${finalOUT_H}:x=0:y=0:color=black`, inputs: "scaled_base", outputs: "rgba_base" },
+            { filter: "format", options: "rgba", inputs: "rgba_base", outputs: currentBase }
+        );
+    } else {
+        combinedFilters.push(
+            { filter: "scale", options: `w=${OUT_W}:h=${finalOUT_H}`, inputs: "0:v", outputs: "scaled_base" },
+            { filter: "format", options: "rgba", inputs: "scaled_base", outputs: currentBase }
+        );
+    }
 
     // 4. OVERLAYS
     const customMetadata = feed?.customMetadata || {};
@@ -565,27 +632,12 @@ exports.processFeedMedia = async ({
                 const maskedAvatarPath = path.join(tempDir, `masked_${overlayInputIndex}.png`);
 
                 const rx = Math.round(scaleW * 0.15); // rounded corner radius (15% of width)
-                // Create a "soft bottom" mask using SVG gradient
-                // Fades from white (opaque) to transparent at the bottom (starting at 70%)
-                // Dynamic SVG dimensions and path mapping
                 const maskSvg = Buffer.from(isRound
                     ? `<svg width="${scaleW}" height="${scaleH}">
-                        <defs>
-                          <linearGradient id="fade" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="70%" stop-color="white" />
-                            <stop offset="100%" stop-color="transparent" />
-                          </linearGradient>
-                        </defs>
-                        <ellipse cx="${scaleW / 2}" cy="${scaleH / 2}" rx="${scaleW / 2}" ry="${scaleH / 2}" fill="url(#fade)"/>
+                        <ellipse cx="${scaleW / 2}" cy="${scaleH / 2}" rx="${scaleW / 2}" ry="${scaleH / 2}" fill="white"/>
                       </svg>`
                     : `<svg width="${scaleW}" height="${scaleH}">
-                        <defs>
-                          <linearGradient id="fade" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="70%" stop-color="white" />
-                            <stop offset="100%" stop-color="transparent" />
-                          </linearGradient>
-                        </defs>
-                        <rect x="0" y="0" rx="${rx}" ry="${rx}" width="${scaleW}" height="${scaleH}" fill="url(#fade)"/>
+                        <rect x="0" y="0" rx="${rx}" ry="${rx}" width="${scaleW}" height="${scaleH}" fill="white"/>
                       </svg>`
                 );
 
@@ -632,8 +684,8 @@ exports.processFeedMedia = async ({
             } catch (e) { console.error(`Overlay failed: ${el.type}`, e.message); }
         }
 
-        if (el.type === 'username' || el.type === 'text') {
-            const content = el.type === 'username' ? (viewer?.userName) : (el.textConfig?.content);
+        if (el.type === 'text') {
+            const content = el.textConfig?.content || el.content || '';
             if (content) {
                 const xPct = el.xPercent ?? el.x ?? 50;
                 const yPct = el.yPercent ?? el.y ?? 50;
@@ -680,7 +732,7 @@ exports.processFeedMedia = async ({
     }
 
     // 5. FOOTER
-    if (footerEnabled) {
+    if (footerEnabled && hasAnyFooterContent && footerH > 0) {
 
         combinedFilters.push({ filter: "drawbox", options: { x: Math.round(paddingX), y: footerY, w: Math.round(actualMediaW), h: footerH, c: footerBgColor, t: "fill" }, inputs: currentBase, outputs: "footer_bg" });
         currentBase = "footer_bg";
@@ -705,37 +757,51 @@ exports.processFeedMedia = async ({
         // Map font family
         const ACTIVE_FONT = getFontFile(footerConfig.fontFamily).replace(/\\/g, "/").replace(/([:])/, "\\\\$1");
 
-        if (showElements.name && viewer.userName) {
+        const displayName = String(viewer?.name || viewer?.userName || '').trim();
+        const isNameVisible = (showElements.name === true || showElements.name === 'true') && displayName.length > 0;
+
+        if (isNameVisible) {
             const nameSize = Math.round(footerStyle.nameSize * (footerConfig.usernameScale || 1));
             const nameLabel = `footer_name`;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.userName), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_1_Y - (nameSize / 2)), fontsize: nameSize, fontcolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: nameLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(displayName), x: (!showElements.socialIcons || visibleSocialIcons.length === 0) ? '(w-text_w)/2' : Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_1_Y - (nameSize / 2)), fontsize: nameSize, fontcolor: textColor, borderw: 1, bordercolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: nameLabel });
             currentBase = nameLabel;
         }
 
         if (showElements.socialIcons && visibleSocialIcons.length > 0) {
-            const iconSize = footerStyle.iconSize || 48;
-            let currentIconX = paddingX + actualMediaW - footerStyle.paddingRight - iconSize;
+            const iconSize = footerStyle.iconSize || 36;
+            const spacing = footerStyle.socialIconSpacing || 44;
+            const totalWidth = (visibleSocialIcons.length * iconSize) + ((visibleSocialIcons.length - 1) * (spacing - iconSize));
+            const startIconX = Math.round(paddingX + actualMediaW - footerStyle.paddingRight - totalWidth);
+
+            const shadowOptions = {
+                enabled: footerStyle.iconShadow !== false,
+                opacity: footerStyle.iconShadowOpacity || 0.5,
+                blur: footerStyle.iconShadowBlur || 3.5,
+                offsetX: footerStyle.iconShadowOffsetX || 0,
+                offsetY: footerStyle.iconShadowOffsetY || 3,
+                color: footerStyle.iconShadowColor || '#000000'
+            };
+
             for (let i = 0; i < visibleSocialIcons.length; i++) {
                 const iconPath = path.join(tempDir, `social_${i}.png`);
                 try {
                     const platform = visibleSocialIcons[i].platform.toLowerCase();
-                    // Always use white inner icon (null defaults to ffffff inside downloadSocialIcon) 
-                    // since we now render them on top of their native brand colored circles.
-                    const success = await downloadSocialIcon(visibleSocialIcons[i].platform, iconPath, null, footerStyle.iconSize || 48);
-                    if (!success) continue;
+                    const iconResult = await downloadSocialIcon(platform, iconPath, null, iconSize, shadowOptions);
+                    if (!iconResult.success) continue;
 
                     // Social icons must be looped to match video duration
                     ffmpegCommand.input(iconPath);
                     if (!isStaticImage) ffmpegCommand.inputOptions(["-loop", "1", "-t", duration.toString()]);
                     const iconIdx = overlayInputIndex++;
                     const iconLabel = `social_over_${i}`;
-                    const iconSize = footerStyle.iconSize || 48;
+                    const pad = iconResult.pad || 0;
+                    const currentX = startIconX + (i * spacing) - pad;
+                    const currentY = Math.round(ROW_1_Y - (iconSize / 2)) - pad;
                     combinedFilters.push(
                         { filter: 'format', options: 'rgba', inputs: `${iconIdx}:v`, outputs: `sf${i}` },
-                        { filter: 'overlay', options: `x=${Math.round(currentIconX)}:y=${Math.round(ROW_1_Y - (iconSize / 2))}`, inputs: [currentBase, `sf${i}`], outputs: iconLabel }
+                        { filter: 'overlay', options: `x=${currentX}:y=${currentY}`, inputs: [currentBase, `sf${i}`], outputs: iconLabel }
                     );
                     currentBase = iconLabel;
-                    currentIconX -= footerStyle.socialIconSpacing;
                 } catch (e) {
                     console.error(`[Processor] Error processing social icon ${visibleSocialIcons[i].platform}:`, e.message);
                 }
@@ -745,14 +811,14 @@ exports.processFeedMedia = async ({
         if (showElements.email && viewer.email) {
             const emailSize = Math.round(footerStyle.emailSize * (footerConfig.emailScale || 1));
             const emailLabel = `footer_email`;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.email), x: Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_2_Y - (emailSize / 2)), fontsize: emailSize, fontcolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: emailLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(viewer.email), x: Math.round(paddingX + footerStyle.paddingLeft), y: Math.round(ROW_2_Y - (emailSize / 2)), fontsize: emailSize, fontcolor: textColor, borderw: 1, bordercolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: emailLabel });
             currentBase = emailLabel;
         }
         if (showElements.phone && (viewer.phone || viewer.phoneNumber)) {
             const phoneSize = Math.round(footerStyle.phoneSize * (footerConfig.phoneScale || 1));
             const phoneLabel = `footer_phone`;
             const phoneText = viewer.phone || viewer.phoneNumber;
-            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(phoneText), x: `${Math.round(paddingX + actualMediaW - footerStyle.paddingRight)}-text_w`, y: Math.round(ROW_2_Y - (phoneSize / 2)), fontsize: phoneSize, fontcolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: phoneLabel });
+            combinedFilters.push({ filter: "drawtext", options: { text: escapeDrawText(phoneText), x: `${Math.round(paddingX + actualMediaW - footerStyle.paddingRight)}-text_w`, y: Math.round(ROW_2_Y - (phoneSize / 2)), fontsize: phoneSize, fontcolor: textColor, borderw: 1, bordercolor: textColor, fontfile: `'${ACTIVE_FONT}'`, shadowcolor: shadowColor, shadowx: footerStyle.shadowX, shadowy: footerStyle.shadowY }, inputs: currentBase, outputs: phoneLabel });
             currentBase = phoneLabel;
         }
     }

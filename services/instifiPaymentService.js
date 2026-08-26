@@ -92,109 +92,87 @@ async getAccessToken(orderId) {
 
     /**
      * 2. Create Order / Initialize Payment
+    /**
+     * 2. Create Order / Initialize Payment
      */
-async createOrder(token, orderData) {
-    try {
+    async createOrder(token, orderData) {
+        try {
+            const url = `${this.baseURL}/api/v1/Instify/CreateOrder`;
 
-        const url =
-`${this.baseURL}/api/v1/Instify/CreateOrder`;
+            const frontendURL = process.env.FRONTEND_URL?.split(",")[0];
 
-        const frontendURL =
-process.env.FRONTEND_URL?.split(",")[0];
-
-        if (!frontendURL) {
-            throw new Error(
-              "FRONTEND_URL missing in .env"
-            );
-        }
-
-        const headers = {
-            "Content-Type":
-                "application/json",
-
-            "ACCESS-TOKEN":
-                token
-        };
-
-        const payload = {
-            amount:
-              String(orderData.amount),
-
-            merchantTxnId:
-              orderData.merchantTxnId,
-
-            orderId:
-              orderData.orderId,
-
-            payMode:
-              orderData.payMode || "all",
-
-            merchantId:
-              this.merchantId || this.clientId.replace(/\D/g, ''),
-
-            productInfo: (orderData.productInfo || "Product Purchase")
-              .replace(/[^a-zA-Z0-9 ]/g, '')
-              .trim()
-              .slice(0, 30),
-
-            customerName:
-              orderData.customerName,
-
-            customerMobile:
-              orderData.customerMobile,
-
-            customerEmail:
-              orderData.customerEmail,
-
-            redirectionURL:
-`${frontendURL}/subscription`,
-
-            currencyCode:
-              "INR"
-        };
-
-
-
-        const response =
-        await axios.post(
-            url,
-            payload,
-            {
-                headers,
-                timeout: 30000
+            if (!frontendURL) {
+                throw new Error("FRONTEND_URL missing in .env");
             }
-        );
 
+            const headers = {
+                "Content-Type": "application/json",
+                "ACCESS-TOKEN": token
+            };
 
+            // Sanitize customerName: Instifi strictly requires alphabets and single spaces only (min 3 chars)
+            let sanitizedName = (orderData.customerName || "Valued Customer");
+            if (typeof sanitizedName !== 'string') sanitizedName = "Valued Customer";
+            sanitizedName = sanitizedName.replace(/[^a-zA-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+            if (sanitizedName.length < 3) {
+                sanitizedName = "Valued Customer";
+            }
+            sanitizedName = sanitizedName.slice(0, 50).trim();
 
-        if (
-          response.data?.responseCode
-          === "200"
-        ) {
-            return response.data.data;
+            // Sanitize customerMobile: 10 digits
+            let sanitizedMobile = String(orderData.customerMobile || "9999999999").replace(/\D/g, '');
+            if (sanitizedMobile.length > 10) sanitizedMobile = sanitizedMobile.slice(-10);
+            if (sanitizedMobile.length < 10) sanitizedMobile = "9999999999";
+
+            // Sanitize customerEmail
+            let sanitizedEmail = (orderData.customerEmail || "customer@prithu.app").trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizedEmail)) {
+                sanitizedEmail = "customer@prithu.app";
+            }
+
+            const payload = {
+                amount: String(orderData.amount),
+                merchantTxnId: orderData.merchantTxnId,
+                orderId: orderData.orderId,
+                payMode: orderData.payMode || "all",
+                merchantId: this.merchantId || this.clientId.replace(/\D/g, ''),
+                productInfo: (orderData.productInfo || "Product Purchase")
+                    .replace(/[^a-zA-Z0-9 ]/g, '')
+                    .trim()
+                    .slice(0, 30),
+                customerName: sanitizedName,
+                customerMobile: sanitizedMobile,
+                customerEmail: sanitizedEmail,
+                redirectionURL: `${frontendURL}/subscription`,
+                currencyCode: "INR"
+            };
+
+            const response = await axios.post(
+                url,
+                payload,
+                {
+                    headers,
+                    timeout: 30000
+                }
+            );
+
+            if (response.data?.responseCode === "200") {
+                return response.data.data;
+            }
+
+            throw new Error(response.data?.responseMessage || response.data?.message || "Order creation failed at gateway");
+
+        } catch (error) {
+            console.error("Create order error:", {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status
+            });
+            const customErr = new Error(error.response?.data?.responseMessage || error.response?.data?.message || error.message);
+            customErr.response = error.response;
+            throw customErr;
         }
-
-        throw new Error(
-          response.data
-          ?.responseMessage
-        );
-
-    } catch (error) {
-        console.error(
-          "Create order error:",
-          {
-             message:
-               error.message,
-             response:
-               error.response?.data,
-             status:
-               error.response?.status
-          }
-        );
-
-        throw error;
     }
-}
 
     /**
      * 3. Check Payment Status

@@ -14,11 +14,11 @@ module.exports = {
     footerHeight: null, // Set to px value if you want to override heightPercent
 
     // Padding and Spacing (in px) - Tailwind/Bootstrap scale (e.g., 16px, 24px)
-    paddingLeft: 24,
-    paddingRight: 24,
+    paddingLeft: 32,
+    paddingRight: 32,
     paddingTop: 24,   // Spacing from media-footer boundary
     paddingBottom: 0,
-    socialIconSpacing: 64, // Tailwind spacing
+    socialIconSpacing: 58, // Tailwind spacing
 
     // Elemental Gaps (in px)
     usernameSocialGap: 48,   // Minimum horizontal gap between name and icons
@@ -26,10 +26,10 @@ module.exports = {
     verticalRowSpacing: 48,  // Vertical gap between Row 1 and Row 2
 
     // Font sizes for different elements (in px)
-    nameSize: 32,
-    emailSize: 24,
-    phoneSize: 24,
-    iconSize: 32,
+    nameSize: 42,
+    emailSize: 30,
+    phoneSize: 30,
+    iconSize: 44,
 
     // Vertical row positions (as fraction of footer height, 0.0 to 1.0)
     row1Offset: 0.35,
@@ -38,5 +38,13 @@ module.exports = {
     // Shadow settings
     shadowColor: 'black@0.6',
     shadowX: 2,
-    shadowY: 2
+    shadowY: 2,
+
+    // Social icon background shadow settings
+    iconShadow: true,
+    iconShadowColor: '#000000',
+    iconShadowOpacity: 0.5,
+    iconShadowBlur: 3.5,
+    iconShadowOffsetX: 0,
+    iconShadowOffsetY: 3
 };

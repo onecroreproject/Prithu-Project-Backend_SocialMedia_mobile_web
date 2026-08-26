@@ -7,48 +7,48 @@ const ProfileVisibilitySchema = new mongoose.Schema(
     name: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     lastName: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     displayName: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     gender: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     userName: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     bio: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
 
     dateOfBirth: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "followers",
+      default: "private",
     },
     maritalDate: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "followers",
+      default: "private",
     },
     maritalStatus: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "followers",
+      default: "private",
     },
 
     // 🔹 Contact Details
@@ -72,77 +72,77 @@ const ProfileVisibilitySchema = new mongoose.Schema(
     address: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "followers",
+      default: "private",
     },
     country: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     city: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
 
     // 🔹 Avatar & Cover
     profileAvatar: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     coverPhoto: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
 
     facebook: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     instagram: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     twitter: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     linkedin: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     github: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     youtube: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     website: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
     socialIcons: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "public",
+      default: "private",
     },
 
     // 🔹 Extra / Privacy fields
     location: {
       type: String,
       enum: ["public", "followers", "private"],
-      default: "followers",
+      default: "private",
     },
   },
   { timestamps: true }

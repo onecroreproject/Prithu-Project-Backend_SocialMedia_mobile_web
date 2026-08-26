@@ -279,10 +279,17 @@ exports.getUserReferalCode = async (req, res) => {
     // Check if user's subscription is active using central helper
     const result = await checkActiveSubscription(userId);
 
+    let referredByUserName = null;
+    if (user.referredByUserId) {
+      const parentUser = await Users.findById(user.referredByUserId).select("userName").lean();
+      if (parentUser) referredByUserName = parentUser.userName;
+    }
+
     // Send referral code in response
     return res.status(200).json({
       success: result.hasActive,
       referralCode: user.referralCode,
+      referredBy: referredByUserName,
       message: result.hasActive ? "Active" : "Subscription required to activate referral code"
     });
 

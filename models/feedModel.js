@@ -69,8 +69,6 @@ const feedSchema = new mongoose.Schema(
       size: { type: Number },
       duration: { type: Number }
     },
-    // Title of the feed
-    title: { type: String, default: "" },
     // Description/caption
     caption: { type: String, default: "" },
     // File hash for duplicate detection
@@ -398,16 +396,6 @@ const feedSchema = new mongoose.Schema(
       type: Date,
       default: null,
       index: true
-    },
-    scheduling: {
-      session: { type: String },
-      day: { type: String },
-      god: { type: String },
-      specialDay: { type: String },
-      publishDate: { type: String },
-      expiryDate: { type: String },
-      startTime: { type: String },
-      endTime: { type: String }
     },
     status: {
       type: String,

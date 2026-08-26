@@ -79,47 +79,36 @@ const getViewerMetadata = async (userId) => {
     viewerVisibility = await ProfileVisibility.findById(viewerProfile.visibility).lean();
   }
 
-  let viewerSocialIcons = [];
-  if (viewerProfile?.socialLinks && typeof viewerProfile.socialLinks === "object") {
-    viewerSocialIcons = Object.entries(viewerProfile.socialLinks)
-      .map(([platform, url]) => ({
-        platform,
-        url: typeof url === "string" ? url.trim() : "",
-        visible: true,
-      }))
-      .filter((i) => i.url);
-  }
-
-  const safeSocialLinks = viewerSocialIcons.filter((icon) => {
-    const masterRule = viewerVisibility?.socialIcons || "public";
-    if (!canShow(masterRule)) return false;
-    const platformRule = viewerVisibility?.[icon.platform] || "public";
-    return canShow(platformRule) && icon.visible !== false && !!icon.url;
-  });
+  const standardPlatforms = ['facebook', 'instagram', 'twitter', 'youtube'];
+  const safeSocialIcons = standardPlatforms
+    .filter(platform => {
+      const pVal = viewerVisibility?.[platform] || (platform === 'twitter' ? viewerVisibility?.['x'] : null);
+      return pVal === 'public' || viewerVisibility?.socialIcons === 'public';
+    })
+    .map(platform => ({
+      platform,
+      visible: true
+    }));
 
   const footerVisibilityConfig = {
     showElements: {
-      name: canShow(viewerVisibility?.name || "public"),
-      userName: canShow(viewerVisibility?.userName || "public"),
+      name: canShow(viewerVisibility?.name || "private"),
+      userName: canShow(viewerVisibility?.userName || "private"),
       email: canShow(viewerVisibility?.email || "private"),
       phone: canShow(viewerVisibility?.phoneNumber || "private"),
-      socialIcons: safeSocialLinks.length > 0
+      socialIcons: safeSocialIcons.length > 0
     },
-    socialIcons: safeSocialLinks.map((icon) => ({
-      platform: icon.platform,
-      visible: true,
-      urlTemplate: icon.url
-    }))
+    socialIcons: safeSocialIcons
   };
 
   const viewer = {
     id: userId,
-    name: canShow(viewerVisibility?.name || "public")
-      ? viewerProfile?.name || "User"
-      : "Private User",
-    userName: canShow(viewerVisibility?.userName || "public")
-      ? viewerProfile?.userName || "user"
-      : "private_user",
+    name: canShow(viewerVisibility?.name || "private")
+      ? viewerProfile?.name || null
+      : null,
+    userName: canShow(viewerVisibility?.userName || "private")
+      ? viewerProfile?.userName || null
+      : null,
     email: canShow(viewerVisibility?.email || "private")
       ? viewerUser?.email || null
       : null,
@@ -201,9 +190,12 @@ const enrichFeedData = (feed, userLikedSet, userSavedSet, userDislikedSet, foote
     uploadType: feed.uploadType || 'normal',
     mediaUrl: getMediaUrl(feed.mediaUrl),
     creatorData: feed.creatorData ? { ...feed.creatorData, avatar: getMediaUrl(feed.creatorData?.avatar) } : {},
-    footerDisplay: isTemplateMode
-      ? { ...(feed.designMetadata?.footerConfig || {}), ...footerVisibilityConfig, colors: themeColor }
-      : { enabled: false },
+    footerDisplay: {
+      enabled: true,
+      ...(feed.designMetadata?.footerConfig || {}),
+      ...footerVisibilityConfig,
+      colors: themeColor
+    },
     designState,
     stats: {
       likes: feed.likesCount || 0,
@@ -2777,7 +2769,7 @@ exports.getTrendingFeeds = async (req, res) => {
     const page = Math.max(1, Number(req.query.page || 1));
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
     const { postType } = req.query;
-    const redisKey = `feeds:trending:${userId}:${page}:${limit}:${postType || 'all'}`;
+    const redisKey = `feeds:trending:v3:${userId}:${page}:${limit}:${postType || 'all'}`;
 
     // Try cache
     const cached = await redisClient.get(redisKey);
@@ -2787,12 +2779,12 @@ exports.getTrendingFeeds = async (req, res) => {
     trendingStart.setDate(trendingStart.getDate() - 365); // Loosened from 30 to 365 days
     trendingStart.setHours(0, 0, 0, 0);
 
-    // 1️⃣ Get exclusions (Hidden & Not Interested)
+    // 1️⃣ Get exclusions (Hidden & Not Interested) & viewer metadata
     const mlRecommendationService = require("../../services/mlRecommendationService");
-    const [hiddenPostDocs, userCat, viewerProfile, shownFeedIds, userActionsDoc] = await Promise.all([
+    const [hiddenPostDocs, userCat, { viewer, footerVisibilityConfig }, shownFeedIds, userActionsDoc] = await Promise.all([
       HiddenPost.find({ userId }).select("postId -_id").lean(),
       UserCategory.findOne({ userId }).select("nonInterestedCategories").lean(),
-      ProfileSettings.findOne({ userId }).select("userName profileAvatar modifyAvatar").lean(),
+      getViewerMetadata(userId),
       mlRecommendationService.getShownFeeds(userId),
       UserFeedActions.findOne({ userId }).select("likedFeeds.feedId savedFeeds.feedId disLikeFeeds.feedId").lean()
     ]);
@@ -2801,13 +2793,6 @@ exports.getTrendingFeeds = async (req, res) => {
     const userLikedSet = new Set((userActionsDoc?.likedFeeds || []).map(l => l.feedId.toString()));
     const userSavedSet = new Set((userActionsDoc?.savedFeeds || []).map(s => s.feedId.toString()));
     const userDislikedSet = new Set((userActionsDoc?.disLikeFeeds || []).map(d => d.feedId.toString()));
-
-    // Construct viewer object
-    const viewer = {
-      id: userId,
-      userName: viewerProfile?.userName || "user",
-      profileAvatar: getMediaUrl(viewerProfile?.modifyAvatar || viewerProfile?.profileAvatar) || null,
-    };
 
 
     // 2️⃣ Optimized Aggregation Pipeline
@@ -2949,7 +2934,7 @@ exports.getTrendingFeeds = async (req, res) => {
         $project: {
           _id: 1, feedId: "$_id", type: 1, mediaUrl: 1, contentUrl: 1, category: 1, postType: 1, createdAt: 1,
           uploadType: 1, uploadMode: 1, caption: 1, hasFooter: { $ifNull: ["$hasFooter", false] },
-          designMetadata: 1,
+          designMetadata: 1, themeColor: 1,
           likesCount: 1, shareCount: 1, downloadCount: 1, viewsCount: 1,
           isLiked: 1, isSaved: 1, isDisliked: 1,
           creatorData: {
@@ -2968,30 +2953,22 @@ exports.getTrendingFeeds = async (req, res) => {
       return res.status(404).json({ message: "No trending feeds for today" });
     }
 
-    // Map media URLs
-    const finalFeeds = feeds.map((f, index) => ({
-      ...f,
-      contentUrl: getMediaUrl(f.mediaUrl || f.contentUrl),
-      type: f.postType || f.type || 'image',
-      postedBy: {
-        id: f.creatorData?._id,
-        name: f.creatorData?.userName || "user",
-        avatar: getMediaUrl(f.creatorData?.modifyAvatar || f.creatorData?.profileAvatar)
-      },
-      stats: {
-        likes: f.likesCount || 0,
-        shares: f.shareCount || 0,
-        downloads: f.downloadCount || 0,
-        views: f.viewsCount || 0
-      },
-      userInteractions: {
-        isLiked: userLikedSet.has(f.feedId.toString()),
-        isSaved: userSavedSet.has(f.feedId.toString()),
-        isDisliked: userDislikedSet.has(f.feedId.toString())
-      },
-      timeAgo: feedTimeCalculator(f.createdAt),
-      rank: ((page - 1) * limit) + index + 1
-    }));
+    // Map media URLs and enrich feeds with full footer & design metadata
+    const finalFeeds = feeds.map((f, index) => {
+      const enriched = enrichFeedData(f, userLikedSet, userSavedSet, userDislikedSet, footerVisibilityConfig);
+      return {
+        ...enriched,
+        contentUrl: getMediaUrl(f.mediaUrl || f.contentUrl),
+        type: f.postType || f.type || 'image',
+        postedBy: {
+          id: f.creatorData?._id,
+          name: f.creatorData?.userName || "user",
+          avatar: getMediaUrl(f.creatorData?.modifyAvatar || f.creatorData?.profileAvatar)
+        },
+        timeAgo: feedTimeCalculator(f.createdAt),
+        rank: ((page - 1) * limit) + index + 1
+      };
+    });
 
     const response = {
       success: true,
