@@ -19,6 +19,10 @@ const dropdownConfigSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  gods: [{
+    type: String,
+    trim: true
+  }],
   updatedAt: {
     type: Date,
     default: Date.now
