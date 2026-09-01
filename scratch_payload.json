@@ -1,0 +1,7 @@
+﻿{
+    "steps":  30,
+    "seed":  0,
+    "prompt":  "Change the background to a beautiful Kerala Onam celebration.",
+    "aspect_ratio":  "match_input_image",
+    "image":  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+}
