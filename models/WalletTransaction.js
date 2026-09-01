@@ -6,7 +6,18 @@ const WalletTransactionSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     transactionType: { 
       type: String, 
-      enum: ["PURCHASE", "PROMPT_UNLOCK", "AI_GENERATION", "REFUND", "ADMIN_ADJUSTMENT"], 
+      enum: [
+        "PURCHASE", 
+        "PROMPT_UNLOCK", 
+        "AI_GENERATION", 
+        "REFUND", 
+        "ADMIN_ADJUSTMENT",
+        "DIRECT_REFERRAL_REWARD",
+        "MILESTONE_CASHBACK",
+        "WITHDRAWAL_REQUEST",
+        "WITHDRAWAL_REFUND",
+        "WALLET_RESET"
+      ], 
       required: true 
     },
     credits: { type: Number, required: true },

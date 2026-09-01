@@ -65,6 +65,8 @@ exports.subscribePlan = async (req, res) => {
         startDate: subscription.startDate,
         endDate: subscription.endDate
       };
+      // Free / trial plan does not enable referral code
+      user.referralCodeIsValid = false;
 
       await user.save();
 

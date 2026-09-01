@@ -87,7 +87,12 @@ exports.activateSubscription = async (userId, planId, paymentResult, paymentId =
           activatedAt: subscription.startDate,
           expiryDate: subscription.endDate,
         };
-        user.referralCodeIsValid = true;
+        // Only paid subscription plans enable the referral code, free trial does not
+        if (plan.planType !== "trial" && (plan.price > 0 || plan.planType === "basic" || plan.planType === "premium")) {
+          user.referralCodeIsValid = true;
+        } else {
+          user.referralCodeIsValid = false;
+        }
         await user.save({ session });
 
         // update parent referral

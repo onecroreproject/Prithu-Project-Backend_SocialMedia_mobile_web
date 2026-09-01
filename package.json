@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "seed:reset-wallets": "node resetAllWalletsSeed.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test-payloads": "node scratch/test_payload_fields.js",
     "test-keys": "node scratch/test_keys.js",

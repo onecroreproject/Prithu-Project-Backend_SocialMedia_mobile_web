@@ -2012,6 +2012,29 @@ exports.singleFeedById = async (req, res) => {
   }
 };
 
+exports.getPublicFeedById = async (req, res) => {
+  try {
+    const { feedId } = req.params;
+    if (!feedId || !mongoose.Types.ObjectId.isValid(feedId)) {
+      return res.status(400).json({ success: false, message: "Valid Feed ID is required" });
+    }
+
+    const feed = await Feed.findById(feedId).lean();
+    if (!feed || feed.isDeleted) {
+      return res.status(404).json({ success: false, message: "Feed not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Feed retrieved successfully",
+      feed
+    });
+  } catch (err) {
+    console.error("Error in getPublicFeedById:", err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
 
 
 

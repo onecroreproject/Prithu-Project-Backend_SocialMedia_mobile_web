@@ -32,9 +32,10 @@ initSocket(server);
 
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://localhost:5174",
   "http://localhost:5175",
   "http://192.168.1.28:5000",
-  "http://192.168.1.29:5173/",
+  "http://192.168.1.29:5173",
   "https://admin.prithu.app",
   "https://www.prithu.app",
   "https://prithu.app",
@@ -48,7 +49,12 @@ app.use(
       // allow server-to-server, curl, postman
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:") ||
+        origin.startsWith("http://192.168.")
+      ) {
         return callback(null, true);
       }
 
@@ -93,9 +99,47 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
 app.use(monitorMiddleware);
 
 //
+// 🔥🔥🔥 DIGITAL ASSET LINKS & UNIVERSAL APP LINKS
+//
+app.get("/.well-known/assetlinks.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.json([
+    {
+      relation: ["delegate_permission/common.handle_all_urls"],
+      target: {
+        namespace: "android_app",
+        package_name: "com.dlktechnologies.Prithu",
+        sha256_cert_fingerprints: [
+          "14:6D:E9:7D:0F:52:AB:E7:A0:0E:7B:22:87:B6:68:6B:0C:08:BB:EB:5B:97:B0:12:3C:AB:3D:B1:A6:4D:65:94",
+          "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C"
+        ]
+      }
+    }
+  ]);
+});
+
+app.get("/.well-known/apple-app-site-association", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.json({
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: "TEAMID.com.dlktechnologies.Prithu",
+          paths: ["/share/post/*", "/profile/*", "/ai/prompt/*"]
+        }
+      ]
+    }
+  });
+});
+
+//
 // 🔥🔥🔥 OG SHARE ROUTE (MUST BE BEFORE /api)
 //
 app.get("/share/post/:feedId", sharePostOG);
+
+const { shareCardOG } = require("./controllers/visitingCardController");
+app.get("/share/card/:identifier", shareCardOG);
 
 //
 // 🟢 API ROUTES
@@ -109,9 +153,15 @@ app.use("/web/api/wallet", walletRoutes);
 
 const aiImageRoutes = require("./routes/aiImageRoutes");
 app.use("/web/api/media", aiImageRoutes);
+app.use("/api/ai", aiImageRoutes);
+app.use("/api/admin/ai", aiImageRoutes);
 
 const chatRoutes = require("./routes/chatRoutes");
 app.use("/api/chat", chatRoutes);
+
+const visitingCardRoutes = require("./routes/visitingCardRoutes");
+app.use("/web/api/visiting-card", visitingCardRoutes);
+app.use("/api/visiting-card", visitingCardRoutes);
 
 
 
@@ -119,6 +169,27 @@ app.use("/api/chat", chatRoutes);
 startCrons();
 
 // 🟢 Start server
-server.listen(process.env.PORT || 5000, () => {
-  console.log(`🚀 Server running on port ${process.env.PORT || 5000}`);
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
+
+// 🟢 Graceful shutdown for nodemon restarts and termination signals
+process.once("SIGUSR2", () => {
+  server.close(() => {
+    process.kill(process.pid, "SIGUSR2");
+  });
+});
+
+process.on("SIGINT", () => {
+  server.close(() => {
+    process.exit(0);
+  });
+});
+
+process.on("SIGTERM", () => {
+  server.close(() => {
+    process.exit(0);
+  });
+});
+

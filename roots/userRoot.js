@@ -33,6 +33,7 @@ const {
     getUserHidePost,
     getTrendingFeeds,
     getSingleFeedById,
+    getPublicFeedById,
     getFeedsByCreator,
     deleteFeed,
     getFeedsByHashtag,
@@ -344,6 +345,9 @@ router.post('/auth/user/reset-password', userPasswordReset); // Alias
 
 router.post('/auth/user/logout', auth, userLogOut);
 router.get('/auth/user/referral/validate/:code', validateReferralCode);
+router.get('/check/referral-code/:code', validateReferralCode);
+router.get('/check/referral-code', validateReferralCode);
+router.post('/check/referral-code', validateReferralCode);
 
 /* --------------------- Session & Tokens --------------------- */
 router.post("/refresh-token", refreshAccessToken);
@@ -472,6 +476,7 @@ router.get('/get/feed/with/category/:id', auth, getfeedWithCategoryWithId);
 router.get('/get/user/info/associated/feed/:feedId', auth, getUserInfoAssociatedFeed);
 router.get("/get/feed/category", getCategoriesWithFeeds);
 router.get('/get/feed/:feedId', auth, getSingleFeedById);
+router.get('/get/public/feed/:feedId', getPublicFeedById);
 router.get('/get/feeds/by/creator/:feedId', auth, getFeedsByCreator);
 router.get('/get/feeds/by/hashtag/:tag', auth, getFeedsByHashtag);
 router.get('/get/feeds/birthday', auth, getBirthdayFeeds); // 🎂 Birthday category feeds
@@ -584,5 +589,18 @@ router.post('/user/updates/mark-read/:updateId', auth, markAsRead);
 router.get('/prompts', getAllPrompts);
 router.get('/prompts/:id', getPromptById);
 router.get('/aicategories', getAllCategories);
+
+/* --------------------- User Referral Mission & Cycles API --------------------- */
+router.get("/user/referral/cycles", auth, getReferralCycles);
+router.get("/user/referral/cycle/:id/details", auth, getCycleDetails);
+router.post("/user/referral/claim-milestone", auth, claimMilestone);
+router.post("/user/referral/apply", auth, applyReferralCode);
+
+/* --------------------- User Wallet Withdrawal API --------------------- */
+router.get("/user/wallet/bank-details", auth, getBankDetails);
+router.post("/user/wallet/bank-details", auth, saveBankDetails);
+router.post("/user/wallet/withdraw", auth, requestWithdrawal);
+router.get("/user/wallet/withdrawals", auth, getWithdrawalHistory);
+router.put("/user/wallet/withdrawal/:requestId", auth, updateWithdrawalRequest);
 
 module.exports = router;

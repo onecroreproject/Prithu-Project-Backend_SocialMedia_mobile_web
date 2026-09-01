@@ -1642,9 +1642,13 @@ exports.generateShareLink = async (req, res) => {
 
 
 
+    const appLink = `prithu://share/post/${feedId}`;
+    const playStoreUrl = "https://play.google.com/store/apps/details?id=com.dlktechnologies.Prithu";
+
     res.json({
-      // 🔥 ONLY frontend URL
-      shareUrl: `${process.env.FRONTEND_URL}/share/post/${feedId}`,
+      appLink,
+      playStoreUrl,
+      shareUrl: appLink,
       caption: actualCaption,
       userName,
       mediaType,
@@ -1845,103 +1849,230 @@ async function getOptimizedOGMedia(feed) {
 
 exports.sharePostOG = async (req, res) => {
   const { feedId } = req.params;
-  const { type, u: userId } = req.query;
 
   try {
-    const feed = await Feeds.findById(feedId).lean();
+    if (!feedId || !mongoose.Types.ObjectId.isValid(feedId)) {
+      return res.status(404).send(getDefaultOGPage());
+    }
 
+    const feed = await Feeds.findById(feedId).lean();
     if (!feed || feed.isDeleted) {
       return res.status(404).send(getDefaultOGPage());
     }
 
     // Determine absolute media URLs
-    const mediaUrl = getMediaUrl(feed.mediaUrl);
-    const thumbnailUrl = getMediaUrl(feed.files?.[0]?.thumbnail || feed.storage?.urls?.thumbnail || "");
+    const mediaUrl = getMediaUrl(feed.mediaUrl || feed.contentUrl || "");
+    const thumbnailUrl = getMediaUrl(
+      feed.files?.[0]?.thumbnail ||
+      feed.storage?.urls?.thumbnail ||
+      feed.thumbnailUrl ||
+      feed.mediaUrl ||
+      ""
+    );
 
-    // Detect crawler
+    const isVideo = feed.type === 'video' || (feed.mediaUrl && feed.mediaUrl.match(/\.(mp4|mov|webm)$/i));
+    const title = feed.title || feed.caption || "Check out this post on Prithu";
+    const description = feed.caption || "Create and download branded social media posts, festival posters & business visiting cards on Prithu.";
+    const shareUrl = `https://www.prithu.app/share/post/${feedId}`;
+    const deepLinkUrl = `prithu://share/post/${feedId}`;
+    const playStoreUrl = "https://play.google.com/store/apps/details?id=com.dlktechnologies.Prithu";
+    const androidIntentUrl = `intent://share/post/${feedId}#Intent;scheme=prithu;package=com.dlktechnologies.Prithu;S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end`;
+
+    // Detect crawler/bot
     const ua = req.headers["user-agent"] || "";
-    const isCrawler = /facebookexternalhit|Twitterbot|WhatsApp|Telegram|bot|crawler|preview|linkedinbot/i.test(ua);
-
-    const title = "Watch this video on Prithu";
-    const description = feed.caption || "Shared via Prithu App";
-    const currentUrl = `${process.env.BACKEND_URL}/share/post/${feedId}`;
+    const isCrawler = /facebookexternalhit|Twitterbot|WhatsApp|Telegram|bot|crawler|preview|linkedinbot|Slackbot|SkypeUriPreview|discordapp/i.test(ua);
 
     if (isCrawler) {
-      // 🤖 Crawler -> Return Open Graph Meta Tags
-      return res.status(200).send(`
-<!DOCTYPE html>
+      // 🤖 Crawler -> Return Complete Open Graph & App Link Meta Tags
+      return res.status(200).send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${title}</title>
+  <title>${title} | Prithu</title>
+  <meta name="description" content="${description}" />
+  
+  <!-- Open Graph -->
+  <meta property="og:site_name" content="Prithu" />
   <meta property="og:title" content="${title}" />
   <meta property="og:description" content="${description}" />
   <meta property="og:image" content="${thumbnailUrl}" />
-  <meta property="og:video" content="${mediaUrl}" />
+  <meta property="og:image:secure_url" content="${thumbnailUrl}" />
+  <meta property="og:url" content="${shareUrl}" />
+  ${isVideo ? `
   <meta property="og:type" content="video.other" />
-  <meta property="og:url" content="${currentUrl}" />
+  <meta property="og:video" content="${mediaUrl}" />
+  <meta property="og:video:secure_url" content="${mediaUrl}" />
+  <meta property="og:video:type" content="video/mp4" />
+  ` : `
+  <meta property="og:type" content="article" />
+  `}
 
-  <meta name="twitter:card" content="player" />
-  <meta name="twitter:player" content="${mediaUrl}" />
-  <meta name="twitter:image" content="${thumbnailUrl}" />
+  <!-- Twitter -->
+  <meta name="twitter:card" content="${isVideo ? 'player' : 'summary_large_image'}" />
   <meta name="twitter:title" content="${title}" />
   <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${thumbnailUrl}" />
+  ${isVideo ? `<meta name="twitter:player" content="${mediaUrl}" />` : ''}
+
+  <!-- App Links / Deep Links -->
+  <meta property="al:android:url" content="${deepLinkUrl}" />
+  <meta property="al:android:package" content="com.dlktechnologies.Prithu" />
+  <meta property="al:android:app_name" content="Prithu" />
+  <meta property="al:web:url" content="${shareUrl}" />
 </head>
 <body></body>
-</html>
-      `);
-    } else {
-      // 👤 Normal User -> Return Video Player Page
-      return res.status(200).send(`
-<!DOCTYPE html>
+</html>`);
+    }
+
+    // 👤 Real Mobile / Desktop User -> Instant App Launch & Play Store Redirect
+    return res.status(200).send(`<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title}</title>
-    <style>
-        body {
-            margin: 0;
-            background: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-        .player-container {
-            max-width: 720px;
-            width: 100%;
-            position: relative;
-            padding: 10px;
-        }
-        video {
-            width: 100%;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>${title} | Prithu</title>
+  
+  <!-- Open Graph -->
+  <meta property="og:site_name" content="Prithu" />
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${thumbnailUrl}" />
+  <meta property="og:url" content="${shareUrl}" />
+  <meta property="al:android:url" content="${deepLinkUrl}" />
+  <meta property="al:android:package" content="com.dlktechnologies.Prithu" />
+  <meta property="al:android:app_name" content="Prithu" />
+
+  <script>
+    (function() {
+      var feedId = "${feedId}";
+      var appScheme = "${deepLinkUrl}";
+      var playStore = "${playStoreUrl}";
+      var intentUrl = "${androidIntentUrl}";
+      var isAndroid = /android/i.test(navigator.userAgent);
+      var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+      if (isAndroid) {
+        window.location.href = intentUrl;
+      } else if (isIOS) {
+        window.location.href = appScheme;
+        setTimeout(function() {
+          window.location.href = playStore;
+        }, 1500);
+      } else {
+        window.location.href = playStore;
+      }
+    })();
+  </script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090d16;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 20px;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 32px 24px;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .logo {
+      width: 68px;
+      height: 68px;
+      border-radius: 18px;
+      margin-bottom: 16px;
+      background: #1e293b;
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 800;
+      color: #22c55e;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 13.5px;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .btn-open {
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 15px;
+      padding: 14px 20px;
+      border-radius: 28px;
+      width: 100%;
+      display: block;
+      box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+      margin-bottom: 12px;
+    }
+    .btn-store {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #38bdf8;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13.5px;
+      padding: 12px 20px;
+      border-radius: 24px;
+      width: 100%;
+      display: block;
+    }
+  </style>
 </head>
 <body>
-    <div class="player-container">
-        <video 
-            controls 
-            poster="${thumbnailUrl}"
-            playsinline
-        >
-            <source src="${mediaUrl}" type="video/mp4">
-            Your browser does not support the video tag.
-        </video>
-    </div>
+  <div class="card">
+    <img class="logo" src="https://prithu.app/logo/logo.png" onerror="this.src='/logo/logo.png'" alt="Prithu" />
+    <h2>Opening Prithu App...</h2>
+    <p>Taking you directly to the post in the Prithu App.</p>
+    <a href="${androidIntentUrl}" class="btn-open">📲 Open in Prithu App</a>
+    <a href="${playStoreUrl}" class="btn-store">⚡ Download on Google Play</a>
+  </div>
 </body>
-</html>
-      `);
-    }
+</html>`);
   } catch (err) {
     console.error("OG Share Error:", err);
-    return res.status(500).send(getErrorOGPage());
+    return res.status(500).send(getDefaultOGPage());
   }
 };
+
+function getDefaultOGPage() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prithu - Branded Social Media & Business Poster App</title>
+  <style>
+    body { background: #090d16; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
+    h1 { color: #22c55e; margin-bottom: 10px; font-size: 28px; }
+    p { color: #94a3b8; font-size: 15px; margin-bottom: 24px; max-width: 400px; }
+    a { background: #22c55e; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 25px; font-weight: bold; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <h1>Prithu App</h1>
+  <p>Create & share customized festival, business and daily social media posters with your visiting card.</p>
+  <a href="https://play.google.com/store/apps/details?id=com.dlktechnologies.Prithu">Download on Google Play</a>
+</body>
+</html>`;
+}
 
 
 
@@ -2675,7 +2806,7 @@ exports.getUserLikedFeeds = async (req, res) => {
 exports.userHideFeed = async (req, res) => {
   try {
     const userId = req.Id || req.body.userId;
-    const postId = req.body.feedId;
+    const postId = req.body.feedId || req.body.postId;
 
     if (!userId || !postId) {
       return res.status(400).json({ message: "User ID and Post ID are required" });

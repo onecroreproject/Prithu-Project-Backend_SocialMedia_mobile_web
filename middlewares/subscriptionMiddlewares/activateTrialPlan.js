@@ -68,9 +68,10 @@ async function activateTrialPlan(userId, userEmail, userName) {
 
       await newSubscription.save();
 
-      // CRITICAL: Permanently mark trial as used
+      // CRITICAL: Permanently mark trial as used and ensure trial does not enable referral code
       await User.findByIdAndUpdate(userId, {
         trialUsed: true,
+        referralCodeIsValid: false,
         subscription: {
           isActive: true,
           planType: "trial",

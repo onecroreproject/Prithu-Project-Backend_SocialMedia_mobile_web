@@ -1,5 +1,25 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/userModels/userModel");
 require("dotenv").config();
+
+// Throttle map to avoid unnecessary db writes on every rapid sub-request (once per 60s per user)
+const userActivityThrottleMap = new Map();
+
+const touchUserActivity = (userId) => {
+  if (!userId) return;
+  const now = Date.now();
+  const lastUpdated = userActivityThrottleMap.get(userId.toString()) || 0;
+  if (now - lastUpdated > 60 * 1000) {
+    userActivityThrottleMap.set(userId.toString(), now);
+    User.findByIdAndUpdate(userId, {
+      $set: {
+        lastActiveAt: new Date(now),
+        lastSeenAt: new Date(now),
+        isOnline: true,
+      },
+    }).catch(() => {});
+  }
+};
 
 exports.auth = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -29,6 +49,11 @@ exports.auth = (req, res, next) => {
     req.accountId = decoded.accountId;
     req.userName = decoded.userName;
     req.grantedPermissions = decoded.grantedPermissions || [];
+
+    // 🕒 Update real-time Last Active & Last Seen timestamps
+    if (decoded.userId) {
+      touchUserActivity(decoded.userId);
+    }
 
     return next();
   } catch (err) {

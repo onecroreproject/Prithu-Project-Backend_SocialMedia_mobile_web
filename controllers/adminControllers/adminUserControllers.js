@@ -213,14 +213,16 @@ exports.getAllUserDetails = async (req, res) => {
       // 📌 USER ONLINE STATUS (Calculated with 20min threshold)
       isOnline: (() => {
         if (!user.isOnline) return false;
-        if (!user.lastSeenAt) return false;
+        const lastTime = user.lastActiveAt || user.lastSeenAt;
+        if (!lastTime) return false;
         const now = new Date();
-        const diffInMinutes = (now - new Date(user.lastSeenAt)) / (1000 * 60);
+        const diffInMinutes = (now - new Date(lastTime)) / (1000 * 60);
         return diffInMinutes < 20; // Active in last 20 minutes
       })(),
 
-      // 📌 LAST ACTIVE TIME (Already in User schema)
-      lastActiveAt: user.lastActiveAt || null,
+      // 📌 LAST ACTIVE & LAST SEEN TIME
+      lastActiveAt: user.lastActiveAt || user.lastSeenAt || user.lastLoginAt || user.updatedAt || user.createdAt || null,
+      lastSeenAt: user.lastSeenAt || user.lastActiveAt || null,
 
       // 📌 LAST LOGIN TIME (From User schema)
       lastLoginAt: user.lastLoginAt || null,
@@ -233,7 +235,17 @@ exports.getAllUserDetails = async (req, res) => {
 
       // 📌 Subscription info
       subscription: user.subscription || {},
-      subscriptionActive: user.subscription?.isActive || false,
+      subscriptionActive: Boolean(
+        user.subscription?.isActive && user.subscription?.planType !== 'trial'
+      ),
+      isPaidSubscribed: Boolean(
+        user.subscription?.isActive && user.subscription?.planType !== 'trial'
+      ),
+      isTrialActive: Boolean(
+        user.subscription?.isActive &&
+        user.subscription?.planType === 'trial' &&
+        (!user.subscription?.endDate || new Date(user.subscription.endDate) > new Date())
+      ),
 
       // 📌 Trial status calculation
       trialStatus: (() => {
@@ -359,15 +371,27 @@ exports.searchAllUserDetails = async (req, res) => {
       createdAt: user.createdAt,
       isOnline: (() => {
         if (!user.isOnline) return false;
-        if (!user.lastSeenAt) return false;
+        const lastTime = user.lastActiveAt || user.lastSeenAt;
+        if (!lastTime) return false;
         const now = new Date();
-        const diffInMinutes = (now - new Date(user.lastSeenAt)) / (1000 * 60);
+        const diffInMinutes = (now - new Date(lastTime)) / (1000 * 60);
         return diffInMinutes < 20;
       })(),
-      lastActiveAt: user.lastActiveAt,
-      lastLoginAt: user.lastLoginAt,
+      lastActiveAt: user.lastActiveAt || user.lastSeenAt || user.lastLoginAt || user.updatedAt || user.createdAt || null,
+      lastSeenAt: user.lastSeenAt || user.lastActiveAt || null,
+      lastLoginAt: user.lastLoginAt || null,
       subscription: user.subscription || {},
-      subscriptionActive: user.subscription?.isActive || false,
+      subscriptionActive: Boolean(
+        user.subscription?.isActive && user.subscription?.planType !== 'trial'
+      ),
+      isPaidSubscribed: Boolean(
+        user.subscription?.isActive && user.subscription?.planType !== 'trial'
+      ),
+      isTrialActive: Boolean(
+        user.subscription?.isActive &&
+        user.subscription?.planType === 'trial' &&
+        (!user.subscription?.endDate || new Date(user.subscription.endDate) > new Date())
+      ),
       // 📌 Trial status calculation
       trialStatus: (() => {
         if (!user.trialUsed) return "Not Used";
@@ -1260,33 +1284,49 @@ exports.getUserAnalyticalData = async (req, res) => {
 
 exports.getUserProfileDashboardMetricCount = async (req, res) => {
   try {
+    const now = new Date();
+
     // 1️⃣ Total registered users
     const totalUsers = await Users.countDocuments();
 
-    // 2️⃣ Active subscriptions
+    // 2️⃣ Active PAID subscriptions (strictly not trial)
     const subscriptionCount = await Users.countDocuments({
       "subscription.isActive": true,
+      "subscription.planType": { $ne: "trial" }
     });
 
-    // 3️⃣ Unique user accounts
+    // 3️⃣ Active Free Trial users
+    const activeTrialCount = await Users.countDocuments({
+      "subscription.isActive": true,
+      "subscription.planType": "trial",
+      $or: [
+        { "subscription.endDate": { $exists: false } },
+        { "subscription.endDate": { $gt: now } }
+      ]
+    });
+
+    // 4️⃣ Free users count (Total users who don't have an active paid subscription or active trial)
+    const freeUsersCount = Math.max(0, totalUsers - subscriptionCount - activeTrialCount);
+
+    // 5️⃣ Unique user accounts
     const accountCount = await Account.distinct("userId").then(
       (ids) => ids.length
     );
 
-    // 4️⃣ Blocked users
+    // 6️⃣ Blocked users
     const blockedUserCount = await Users.countDocuments({ isBlocked: true });
 
-    // 5️⃣ Online users (⚡ from User schema + 20min threshold)
+    // 7️⃣ Online users (⚡ from User schema + 20min threshold)
     const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000);
     const onlineUsersCount = await Users.countDocuments({
       isOnline: true,
       lastSeenAt: { $gte: twentyMinsAgo }
     });
 
-    // 6️⃣ Offline users = total - online
-    const offlineUsersCount = totalUsers - onlineUsersCount;
+    // 8️⃣ Offline users = total - online
+    const offlineUsersCount = Math.max(0, totalUsers - onlineUsersCount);
 
-    // 7️⃣ Trial used users
+    // 9️⃣ Trial used users (all who ever utilized trial)
     const trialUsedCount = await Users.countDocuments({ trialUsed: true });
 
     return res.status(200).json({
@@ -1295,6 +1335,8 @@ exports.getUserProfileDashboardMetricCount = async (req, res) => {
       offlineUsers: offlineUsersCount,
       blockedUserCount,
       subscriptionCount,
+      activeTrialCount,
+      freeUsersCount,
       accountCount,
       trialUsedCount,
     });

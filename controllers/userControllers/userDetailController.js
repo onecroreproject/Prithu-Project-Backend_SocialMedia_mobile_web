@@ -271,9 +271,8 @@ exports.getUserReferalCode = async (req, res) => {
       const letters = user.userName.replace(/\s+/g, "").slice(0, 3).toUpperCase() || "USR";
       const digits = Math.floor(100 + Math.random() * 900);
       user.referralCode = `${letters}${digits}`;
-      user.referralCodeIsValid = true;
+      user.referralCodeIsValid = false;
       await user.save();
-
     }
 
     // Check if user's subscription is active using central helper
@@ -285,12 +284,18 @@ exports.getUserReferalCode = async (req, res) => {
       if (parentUser) referredByUserName = parentUser.userName;
     }
 
-    // Send referral code in response
+    // Send referral code in response (only unlocked for paid VIP subscriptions)
+    const isPaidSub = (result.hasActive && result.planType !== 'trial') || user.referralCodeIsValid;
     return res.status(200).json({
-      success: result.hasActive,
-      referralCode: user.referralCode,
+      success: isPaidSub,
+      isEligible: isPaidSub,
+      isLocked: !isPaidSub,
+      isTrial: result.planType === 'trial',
+      hasActive: result.hasActive,
+      referralCode: isPaidSub ? user.referralCode : null,
+      referralCodeIsValid: isPaidSub,
       referredBy: referredByUserName,
-      message: result.hasActive ? "Active" : "Subscription required to activate referral code"
+      message: isPaidSub ? "Active VIP" : result.planType === 'trial' ? "Free Trial active (paid VIP plan required to unlock Refer & Earn)" : "Active VIP subscription required to unlock Refer & Earn"
     });
 
 

@@ -51,18 +51,25 @@ const initSocket = (server) => {
     // -----------------------------
     // 👤 HANDLE END USERS
     // -----------------------------
-    if (socket.role === "User" && socket.sessionId) {
-      // 🟢 Mark specific session as online
-      await Session.findByIdAndUpdate(socket.sessionId, {
-        isOnline: true,
-        lastSeenAt: new Date(),
-      });
+    if (socket.role === "User") {
+      const now = new Date();
+      if (socket.sessionId) {
+        // 🟢 Mark specific session as online
+        await Session.findByIdAndUpdate(socket.sessionId, {
+          isOnline: true,
+          lastSeenAt: now,
+          lastActiveAt: now,
+        });
+      }
 
-      // 🟢 Mark user as online (if not already)
-      await User.findByIdAndUpdate(socket.userId, {
-        isOnline: true,
-        lastSeenAt: new Date(),
-      });
+      // 🟢 Mark user as online and update lastActiveAt & lastSeenAt
+      if (socket.userId) {
+        await User.findByIdAndUpdate(socket.userId, {
+          isOnline: true,
+          lastSeenAt: now,
+          lastActiveAt: now,
+        });
+      }
 
       // 🔔 Notify all clients that user is online
       io.emit("userOnline", { userId: socket.userId });
@@ -83,11 +90,22 @@ const initSocket = (server) => {
 
     // 🫀 Heartbeat from client (keep alive)
     socket.on("heartbeat", async () => {
-      if (socket.role === "User" && socket.sessionId) {
-        await Session.findByIdAndUpdate(socket.sessionId, {
-          lastSeenAt: new Date(),
-          isOnline: true,
-        });
+      const now = new Date();
+      if (socket.role === "User") {
+        if (socket.sessionId) {
+          await Session.findByIdAndUpdate(socket.sessionId, {
+            lastSeenAt: now,
+            lastActiveAt: now,
+            isOnline: true,
+          });
+        }
+        if (socket.userId) {
+          await User.findByIdAndUpdate(socket.userId, {
+            lastSeenAt: now,
+            lastActiveAt: now,
+            isOnline: true,
+          });
+        }
       } else if (socket.role === "Child_Admin") {
         // Optional: Update last active time for admin if needed
         // await ChildAdmin.findByIdAndUpdate(socket.userId, { lastActive: new Date() });
@@ -107,24 +125,29 @@ const initSocket = (server) => {
       // -----------------------------
       // 👤 HANDLE END USERS
       // -----------------------------
-      if (socket.role === "User" && socket.sessionId) {
-        // 1️⃣ Mark the current session offline
-        await Session.findByIdAndUpdate(socket.sessionId, {
-          isOnline: false,
-          lastSeenAt: new Date(),
-        });
+      if (socket.role === "User") {
+        const now = new Date();
+        if (socket.sessionId) {
+          // 1️⃣ Mark the current session offline
+          await Session.findByIdAndUpdate(socket.sessionId, {
+            isOnline: false,
+            lastSeenAt: now,
+            lastActiveAt: now,
+          });
+        }
 
-        // 2️⃣ Check if the user still has any online sessions
-        const activeSessions = await Session.find({
+        // 2️⃣ Check if the user still has any other online sessions
+        const activeSessions = socket.userId ? await Session.find({
           userId: socket.userId,
           isOnline: true,
-        });
+        }) : [];
 
-        if (activeSessions.length === 0) {
-          // 🟥 Mark user offline globally
+        if (activeSessions.length === 0 && socket.userId) {
+          // 🟥 Mark user offline globally with updated lastSeenAt and lastActiveAt
           await User.findByIdAndUpdate(socket.userId, {
             isOnline: false,
-            lastSeenAt: new Date(),
+            lastSeenAt: now,
+            lastActiveAt: now,
           });
           io.emit("userOffline", { userId: socket.userId });
         }

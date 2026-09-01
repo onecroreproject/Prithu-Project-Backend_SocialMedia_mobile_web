@@ -58,15 +58,13 @@ exports.createNewUser = async (req, res) => {
       email,
       passwordHash,
       referralCode: generatedCode,
-      referralCodeIsValid: true,
+      referralCodeIsValid: false, // Remains false until user subscribes to a paid plan
     });
 
     // ✅ If referral code provided
     if (referralCode) {
-      const parent = await User.findOne({
-        referralCode: referralCode.toUpperCase(),
-        referralCodeIsValid: true,
-      });
+      const cleanRef = referralCode.trim().toUpperCase();
+      const parent = await User.findOne({ referralCode: cleanRef });
 
       if (parent) {
         user.referredByUserId = parent._id;
@@ -75,8 +73,20 @@ exports.createNewUser = async (req, res) => {
 
     await user.save();
 
-    // ✅ Process Referral Reward (if applicable)
+    // ✅ Add referral to parent's active cycle (pending subscription)
     if (user.referredByUserId) {
+      try {
+        const { addReferralToCycle } = require("../../services/referralCycleService");
+        if (typeof addReferralToCycle === 'function') {
+          addReferralToCycle(user.referredByUserId, user._id).catch((err) =>
+            console.error("❌ Add to referral cycle failed:", err)
+          );
+        }
+      } catch (cycleErr) {
+        console.error("❌ Failed to invoke addReferralToCycle:", cycleErr);
+      }
+
+      // Process reward if already applicable
       processReferralReward(user._id).catch((err) =>
         console.error("❌ Referral Reward Processing failed:", err)
       );
@@ -549,34 +559,52 @@ exports.userLogOut = async (req, res) => {
 
 exports.validateReferralCode = async (req, res) => {
   try {
-    const { code } = req.params;
+    const code = req.params.code || req.query.code || req.body.code || req.body.referralCode;
 
-    if (!code) {
-      return res.status(400).json({ success: false, message: "Referral code is required" });
+    if (!code || !code.trim()) {
+      return res.status(400).json({ success: false, valid: false, message: "Referral code is required" });
     }
 
+    const cleanCode = code.trim().toUpperCase();
     const user = await User.findOne({
-      referralCode: code.toUpperCase(),
-      referralCodeIsValid: true,
-    }).select("userName _id").lean();
+      referralCode: cleanCode,
+    }).select("userName _id referralCodeIsValid").lean();
 
     if (!user) {
-      return res.status(200).json({ success: false, message: "Invalid or inactive referral code" });
+      return res.status(200).json({
+        success: false,
+        valid: false,
+        status: "not_found",
+        message: "Invalid referral code. Please check and try again."
+      });
     }
 
     // Check if referrer's subscription is active using central helper
     const result = await checkActiveSubscription(user._id);
+    const isPaidActive = result.hasActive && result.planType !== 'trial';
+    const isVip = isPaidActive || user.referralCodeIsValid;
+
+    if (!isVip) {
+      return res.status(200).json({
+        success: false,
+        valid: false,
+        status: "pending_subscription",
+        referrerName: user.userName,
+        message: `Referrer @${user.userName}'s subscription is pending. Only active VIP members can invite friends.`
+      });
+    }
 
     return res.status(200).json({
-      success: result.hasActive,
+      success: true,
+      valid: true,
+      status: "active_vip",
       referrerName: user.userName,
-      referrerActive: result.hasActive,
-      message: result.hasActive ? "Active" : "Referrer subscription ended"
+      referrerActive: true,
+      message: `Valid Referral Code! (@${user.userName} • Active VIP)`
     });
-
 
   } catch (err) {
     console.error("❌ Error validating referral code:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({ success: false, valid: false, message: "Server error checking referral code" });
   }
 };

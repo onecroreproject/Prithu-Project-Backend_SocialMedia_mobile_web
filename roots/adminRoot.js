@@ -122,6 +122,8 @@ const {
     getUserAndSubscriptionCountsDaily,
 } = require("../controllers/adminControllers/SalesDashboard/salesDashboardMetricksController");
 
+const referralController = require('../controllers/adminControllers/adminReferralController');
+
 
 
 const { getPostVolumeWeekly,
@@ -411,8 +413,8 @@ router.get("/dashboard/user-subscription-counts", auth, checkPermission('canMana
 router.delete("/delete/feed", auth, checkPermission('canManageFeeds'), deleteFeed);
 
 /* --------------------- Admin Referral Mission API --------------------- */
-router.get("/admin/referral-cycles", auth, checkPermission('canManageUsers'), getAllReferralCycles);
-router.get("/admin/referral-cycles/:id", auth, checkPermission('canManageUsers'), getReferralCycleByIdAdmin);
+router.get("/admin/referral-cycles", auth, checkPermission('canManageUsers'), referralController.getAllReferralUsers);
+router.get("/admin/referral-cycles/:id", auth, checkPermission('canManageUsers'), referralController.getReferralUserDetail);
 
 /* --------------------- Admin Report API --------------------- */
 router.post("/admin/add/report/questions", auth, checkPermission('canManageAddReport'), addReportQuestion);
@@ -582,13 +584,34 @@ router.put('/admin/monetization/packages/:id', auth, monetizationController.upda
 router.delete('/admin/monetization/packages/:id', auth, monetizationController.deleteCreditPackage);
 router.get('/admin/monetization/transactions', auth, monetizationController.getTransactions);
 router.get('/admin/monetization/revenue/prompts', auth, monetizationController.getPromptRevenue);
-router.get('/admin/monetization/revenue/ai', auth, monetizationController.getAIRevenue);
-router.get('/admin/monetization/users/credits', auth, monetizationController.getUserCreditUsage);
-router.post('/admin/monetization/users/:userId/credits', auth, monetizationController.adminModifyUserCredits);
+/* --------------------- Admin Referral Management API --------------------- */
+router.get('/admin/referrals/stats', auth, referralController.getReferralStats);
+router.get('/admin/referrals/users', auth, referralController.getAllReferralUsers);
+router.get('/admin/referrals/user/:id', auth, referralController.getReferralUserDetail);
+router.post('/admin/referrals/link', auth, referralController.createReferralLink);
+router.put('/admin/referrals/user/:id', auth, referralController.updateReferralUser);
+router.delete('/admin/referrals/user/:id/referred/:referredId', auth, referralController.deleteReferralLink);
+router.delete('/admin/referrals/cycle/:cycleId', auth, referralController.deleteReferralCycle);
+router.get('/admin/referrals/milestones', auth, referralController.getMilestoneConfig);
+router.put('/admin/referrals/milestones', auth, referralController.updateMilestoneConfig);
+
+/* --------------------- Admin Wallet Withdrawal Management API --------------------- */
+const withdrawalController = require('../controllers/userControllers/userWithdrawalController');
+router.get('/admin/withdrawals', auth, withdrawalController.getAllWithdrawalsAdmin);
+router.put('/admin/withdrawals/:id/status', auth, withdrawalController.updateWithdrawalStatusAdmin);
 
 /* --------------------- Admin Dropdown Config API --------------------- */
-const { getConfig, updateConfig } = require('../controllers/dropdownConfigController');
-router.get('/admin/dropdown-config', auth, checkPermission('canManageCategories'), getConfig);
-router.put('/admin/dropdown-config', auth, checkPermission('canManageCategories'), updateConfig);
+const { getDropdownConfig, updateDropdownConfig } = require('../controllers/adminControllers/dropdownConfigController');
+router.get('/admin/dropdown-config', getDropdownConfig);
+router.put('/admin/dropdown-config', updateDropdownConfig);
+
+/* --------------------- Admin Visiting / Profile Card API --------------------- */
+const visitingCardController = require('../controllers/visitingCardController');
+router.get('/admin/visiting-cards/stats', auth, visitingCardController.adminGetVisitingCardStats);
+router.get('/admin/visiting-cards', auth, visitingCardController.adminGetVisitingCards);
+router.get('/admin/visiting-cards/plan', auth, visitingCardController.adminGetProfileCardPlan);
+router.put('/admin/visiting-cards/plan', auth, visitingCardController.adminUpdateProfileCardPlan);
+router.get('/admin/visiting-cards/subscribers', auth, visitingCardController.adminGetSubscribers);
+router.post('/admin/visiting-cards/grant-subscription', auth, visitingCardController.adminGrantSubscription);
 
 module.exports = router;
