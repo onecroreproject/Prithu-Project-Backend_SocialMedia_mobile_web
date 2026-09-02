@@ -703,6 +703,7 @@ exports.getAllFeedAdmin = async (req, res) => {
                     type: feed.postType || "image",
                     creator: profile ? { userName: profile.userName || "Unknown", profileAvatar: profile.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
                     categories: categories,
+                    subCategory: feed.subCategory || null,
                 };
             })
         );
@@ -775,7 +776,10 @@ exports.removeFeedCategory = async (req, res) => {
         // Remove category from feed
         const updatedFeed = await Feed.findByIdAndUpdate(
             feedId,
-            { $pull: { category: categoryId } },
+            { 
+              $pull: { category: categoryId },
+              $unset: { subCategory: "" } 
+            },
             { new: true }
         );
 
@@ -795,6 +799,49 @@ exports.removeFeedCategory = async (req, res) => {
         res.status(200).json({ success: true, message: "Category removed from feed successfully" });
     } catch (error) {
         console.error("❌ REMOVE FEED CATEGORY ERROR:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};
+
+exports.updateFeedCategory = async (req, res) => {
+    try {
+        const { feedId } = req.params;
+        const { categoryId, subCategory } = req.body;
+
+        if (!feedId) {
+            return res.status(400).json({ success: false, message: "feedId is required" });
+        }
+
+        const updateData = {};
+        if (categoryId) {
+            updateData.category = [categoryId]; // Assuming one main category is selected for simplicity, or we replace the array
+        }
+        if (subCategory !== undefined) {
+            updateData.subCategory = subCategory;
+        }
+
+        const updatedFeed = await Feed.findByIdAndUpdate(
+            feedId,
+            { $set: updateData },
+            { new: true }
+        );
+
+        if (!updatedFeed) {
+            return res.status(404).json({ success: false, message: "Feed not found" });
+        }
+
+        if (categoryId) {
+            await Category.findByIdAndUpdate(
+                categoryId,
+                { $addToSet: { feedIds: feedId } }
+            );
+        }
+
+        await clearFeedsCache();
+
+        res.status(200).json({ success: true, message: "Feed category updated successfully", feed: updatedFeed });
+    } catch (error) {
+        console.error("❌ UPDATE FEED CATEGORY ERROR:", error);
         res.status(500).json({ success: false, message: "Internal server error" });
     }
 };

@@ -121,17 +121,35 @@ exports.deleteCategory = async (req, res) => {
 // PUT /admin/category/update
 exports.updateCategory = async (req, res) => {
   try {
-    const { id, name } = req.body;
+    const { id, name, subcategories } = req.body;
     if (!id || !name) {
       return res.status(400).json({ message: "Category ID and new name are required" });
     }
 
     // Capitalize first letter
     const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+    
+    // Process subcategories
+    let subcategoriesArray = [];
+    if (subcategories && typeof subcategories === 'string') {
+      subcategoriesArray = subcategories
+        .split(',')
+        .map(sub => sub.trim())
+        .filter(sub => sub.length > 0)
+        .map(sub => sub.charAt(0).toUpperCase() + sub.slice(1));
+    } else if (Array.isArray(subcategories)) {
+      subcategoriesArray = subcategories
+        .map(sub => sub.trim())
+        .filter(sub => sub.length > 0)
+        .map(sub => sub.charAt(0).toUpperCase() + sub.slice(1));
+    }
 
     const category = await Categories.findByIdAndUpdate(
       id,
-      { name: formattedName },
+      { 
+        name: formattedName,
+        subcategories: subcategoriesArray
+      },
       { new: true }
     );
 

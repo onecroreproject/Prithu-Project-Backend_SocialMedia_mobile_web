@@ -32,6 +32,9 @@ const feedSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    subCategory: {
+      type: String
+    },
     // Duration for videos and audio
     duration: { type: Number, default: null },
     // Primary media URL

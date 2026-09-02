@@ -304,6 +304,7 @@ router.post(
 router.get("/admin/get/all/feed", auth, checkPermission('canManageFeeds'), getAllFeedAdmin);
 router.get("/admin/feed/:feedId/design", auth, checkPermission('canManageFeeds'), getFeedWithDesign);
 router.put("/admin/feed/:feedId/design", auth, checkPermission('canManageFeeds'), updateFeedDesign);
+router.put("/admin/feed/:feedId/category", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/adminfeedController').updateFeedCategory);
 router.patch("/admin/feed/:feedId/schedule", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/adminfeedController').updateFeedSchedule);
 router.get("/admin/get/trending/creator", auth, checkPermission('canTrendingCreators'), adminGetTrendingFeeds); // Match key ADMIN_GET_TRENDING_CREATOR
 router.delete("/admin/delete/feed", auth, checkPermission('canManageFeeds'), deleteFeed);

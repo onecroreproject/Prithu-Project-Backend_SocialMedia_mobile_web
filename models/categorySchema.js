@@ -12,6 +12,10 @@ const categorySchema = new mongoose.Schema({
   
   feedIds:[{type:mongoose.Schema.Types.ObjectId,ref:'Feed'}],
   
+  subcategories: [{
+    type: String,
+    trim: true
+  }],
   createdAt: {
     type: Date,
     default: Date.now
