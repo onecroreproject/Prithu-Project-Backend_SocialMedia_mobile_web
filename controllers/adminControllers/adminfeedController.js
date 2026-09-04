@@ -677,36 +677,76 @@ exports.getAllFeedAdmin = async (req, res) => {
         // Fetch feeds
         const feeds = await Feed.find(matchQuery).sort({ createdAt: -1 }).lean();
         
-        const results = await Promise.all(
-            feeds.map(async (feed) => {
-                let profile = null;
-                const creatorId = feed.createdByAccount || feed.postedBy?.userId;
-                if (feed.roleRef === "Admin") {
-                    profile = await ProfileSettings.findOne({ adminId: creatorId }).select("userName profileAvatar").lean();
-                } else if (feed.roleRef === "Child_Admin") {
-                    profile = await ProfileSettings.findOne({ childAdminId: creatorId }).select("userName profileAvatar").lean();
-                } else if (feed.roleRef === "User") {
-                    profile = await ProfileSettings.findOne({ userId: creatorId }).select("userName profileAvatar").lean();
-                }
+        // --- OPTIMIZATION: Bulk lookups to prevent N+1 queries ---
+        
+        // 1. Gather unique creator IDs
+        const adminIds = new Set();
+        const childAdminIds = new Set();
+        const userIds = new Set();
+        const categoryIds = new Set();
 
-                if (profile) {
-                    profile.profileAvatar = getMediaUrl(profile.profileAvatar);
-                }
+        for (const feed of feeds) {
+            const creatorId = feed.createdByAccount || feed.postedBy?.userId;
+            if (creatorId) {
+                if (feed.roleRef === "Admin") adminIds.add(creatorId.toString());
+                else if (feed.roleRef === "Child_Admin") childAdminIds.add(creatorId.toString());
+                else if (feed.roleRef === "User") userIds.add(creatorId.toString());
+            }
+            if (feed.category && Array.isArray(feed.category)) {
+                feed.category.forEach(c => categoryIds.add(c.toString()));
+            }
+        }
 
-                // Fetch category names
-                const categoryDetails = await Category.find({ _id: { $in: feed.category || [] } }).select("name").lean();
-                const categories = categoryDetails.map(c => ({ id: c._id, name: c.name }));
+        // 2. Perform bulk queries
+        const [admins, childAdmins, users, categories] = await Promise.all([
+            adminIds.size ? ProfileSettings.find({ adminId: { $in: Array.from(adminIds) } }).select("adminId userName profileAvatar").lean() : [],
+            childAdminIds.size ? ProfileSettings.find({ childAdminId: { $in: Array.from(childAdminIds) } }).select("childAdminId userName profileAvatar").lean() : [],
+            userIds.size ? ProfileSettings.find({ userId: { $in: Array.from(userIds) } }).select("userId userName profileAvatar").lean() : [],
+            categoryIds.size ? Category.find({ _id: { $in: Array.from(categoryIds) } }).select("name").lean() : []
+        ]);
 
-                return {
-                    ...feed,
-                    contentUrl: getMediaUrl(feed.mediaUrl || (feed.files && feed.files[0]?.url)),
-                    type: feed.postType || "image",
-                    creator: profile ? { userName: profile.userName || "Unknown", profileAvatar: profile.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
-                    categories: categories,
-                    subCategory: feed.subCategory || null,
-                };
-            })
-        );
+        // 3. Build maps for O(1) lookup
+        const profileMap = {};
+        admins.forEach(p => profileMap[`Admin_${p.adminId}`] = p);
+        childAdmins.forEach(p => profileMap[`Child_Admin_${p.childAdminId}`] = p);
+        users.forEach(p => profileMap[`User_${p.userId}`] = p);
+        
+        const categoryMap = {};
+        categories.forEach(c => categoryMap[c._id.toString()] = { id: c._id, name: c.name });
+
+        // 4. Map feeds
+        const results = feeds.map(feed => {
+            const creatorId = feed.createdByAccount || feed.postedBy?.userId;
+            let profile = null;
+            if (creatorId) {
+                profile = profileMap[`${feed.roleRef}_${creatorId.toString()}`];
+            }
+            
+            // Create a clone to safely modify profileAvatar
+            let profileData = profile ? { ...profile } : null;
+            if (profileData && profileData.profileAvatar) {
+                profileData.profileAvatar = getMediaUrl(profileData.profileAvatar);
+            }
+
+            const feedCategories = (feed.category || [])
+                .map(c => categoryMap[c.toString()])
+                .filter(Boolean);
+
+            const contentUrl = getMediaUrl(feed.mediaUrl || (feed.files && feed.files[0]?.url));
+            const thumbnailUrl = (feed.postType === 'video' && feed.files && feed.files[0]?.thumbnail)
+                ? getMediaUrl(feed.files[0].thumbnail)
+                : contentUrl;
+
+            return {
+                ...feed,
+                contentUrl,
+                thumbnailUrl, // Added to fix missing video images
+                type: feed.postType || "image",
+                creator: profileData ? { userName: profileData.userName || "Unknown", profileAvatar: profileData.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
+                categories: feedCategories,
+                subCategory: feed.subCategory || null,
+            };
+        });
 
         res.status(200).json({ 
             success: true, 

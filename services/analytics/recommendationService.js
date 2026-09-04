@@ -12,8 +12,11 @@ const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://localhost:8001";
  */
 const fetchMLRecommendations = async (userId, feedId, excludeIds, limit) => {
   try {
-    const response = await axios.get(`${ML_SERVICE_URL}/recommend`, {
-      params: { user_id: userId, feed_id: feedId, exclude_ids: excludeIds, limit }
+    const response = await axios.post(`${ML_SERVICE_URL}/recommend`, {
+      userId: userId, 
+      feedId: feedId, 
+      excludeIds: excludeIds, 
+      limit: limit
     });
     return response.data.recommended_reels || [];
   } catch (err) {

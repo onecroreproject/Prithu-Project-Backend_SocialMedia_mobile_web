@@ -36,28 +36,15 @@ const getRecommendations = async (userId, excludeIds = [], feedId = null, limit 
         // 1. Call FastAPI Recommendation Engine
         const startTime = Date.now();
         
-        const response = await axios.get(`${ML_SERVICE_URL}/recommend`, {
-            params: {
-                user_id: userId,
-                feed_id: feedId,
-                exclude_ids: excludeIds, // Pass the exclusion list to Python
-                limit: limit,
-                v2: isV2Enabled,
-                diversity_boost: diversityBoost,
-                prefer_short: preferShort
-            },
-            paramsSerializer: params => {
-                // Handle array serialization for FastAPI List[str]
-                const searchParams = new URLSearchParams();
-                for (const key in params) {
-                    if (Array.isArray(params[key])) {
-                        params[key].forEach(val => searchParams.append(key, val));
-                    } else if (params[key] !== null && params[key] !== undefined) {
-                        searchParams.append(key, params[key]);
-                    }
-                }
-                return searchParams.toString();
-            },
+        const response = await axios.post(`${ML_SERVICE_URL}/recommend`, {
+            userId: userId,
+            feedId: feedId,
+            excludeIds: excludeIds, // Pass the exclusion list to Python
+            limit: limit,
+            v2: isV2Enabled,
+            diversityBoost: diversityBoost,
+            preferShort: preferShort
+        }, {
             timeout: 5000
         });
 
