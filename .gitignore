@@ -26,7 +26,11 @@ firebase/serviceAccountKey.json
 
 encoded.txt
 
-
+node_modules/
+.env
+.env.*
+!.env.example
+npm-debug.log*
 
 
 node_modules
