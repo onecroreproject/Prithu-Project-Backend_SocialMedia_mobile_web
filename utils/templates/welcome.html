@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Prithu</title>
+  <style>
+    /* ----- base & reset ----- */
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      line-height: 1.4;
+      min-height: 100vh;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+      border-radius: 24px;
+      overflow: hidden;
+    }
+
+    /* ----- header ----- */
+    .header {
+      padding: 40px 20px 20px;
+      text-align: center;
+    }
+
+    .logo-text-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: nowrap;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 6s linear infinite;
+      display: block;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 38px;
+      color: #064d3b;
+      font-family: 'Georgia', serif;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    /* ----- content area ----- */
+    .content {
+      padding: 0 40px;
+      color: #333;
+    }
+
+    .content h2 {
+      font-size: 22px;
+      margin: 0 0 15px 0;
+      color: #064d3b;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .content p {
+      font-size: 17px;
+      margin-bottom: 20px;
+      color: #444;
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    .content ul {
+      text-align: left;
+      line-height: 1.6;
+      font-size: 17px;
+      list-style: none;
+      padding-left: 0;
+      color: #444;
+      margin-bottom: 25px;
+    }
+
+    .content li {
+      margin-bottom: 15px;
+      padding-left: 35px;
+      position: relative;
+    }
+
+    .content li::before {
+      content: attr(data-emoji);
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-size: 20px;
+    }
+
+    /* ----- BUTTON ----- */
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #4169E1 0%, #567ef4 100%);
+      color: #ffffff !important;
+      padding: 16px 40px;
+      text-decoration: none;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 25px 0;
+      box-shadow: 0 10px 20px rgba(65, 105, 225, 0.2);
+    }
+
+    /* footer */
+    .footer {
+      padding: 30px 20px;
+      text-align: center;
+      font-size: 13px;
+      color: #666;
+      background: rgba(0, 0, 0, 0.02);
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .footer a {
+      color: #000;
+      text-decoration: none;
+      font-weight: 600;
+      border-bottom: 1px dotted #ccc;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        margin: 20px 10px;
+      }
+
+      .content {
+        padding: 0 25px;
+      }
+
+      .header h1 {
+        font-size: 32px;
+      }
+
+      .header img.logo {
+        width: 45px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-container">
+    <!-- header: logo + name always adjacent (no stacking) -->
+    <div class="header">
+      <div class="logo-text-container">
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
+        <h1>Prithu</h1>
+      </div>
+    </div>
+
+    <div class="content">
+      <h2>Hi {username},</h2>
+
+      <p><strong>Welcome to Prithu!</strong> We’re absolutely thrilled to have you join our creative community — a space
+        where your moments become stories, and your stories inspire the world.</p>
+
+      <p>With Prithu, you can:</p>
+
+      <ul>
+        <li data-emoji="📸"> <strong>Post & Share</strong> — your favorite moments through images and videos.</li>
+        <li data-emoji="🚀"> <strong>Discover What’s Trending</strong> — stay updated with the latest viral posts.</li>
+        <li data-emoji="🎨"> <strong>Personalize Every Post</strong> — smart templates that feel uniquely yours.</li>
+        <li data-emoji="💰"> <strong>Earn Rewards</strong> — by inviting friends and sharing the love.</li>
+      </ul>
+
+      <p>We’ve designed Prithu to be your happy place — whether you're here to create, connect, or just unwind with
+        beautiful content.</p>
+
+      <!-- button with consistent pill design, centered -->
+      <p style="text-align:center;">
+        <a href="https://www.prithu.app/" class="cta-button">Start Exploring Now →</a>
+      </p>
+
+      <p style="text-align:center;">Get ready to be inspired, express yourself, and enjoy endless creativity — all in
+        one place.</p>
+
+      <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+    </div>
+
+    <!-- footer with black links + dotted style -->
+    <div class="footer">
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#">let us know!</a></p>
+      <p><a href="#">View this email as a web page</a></p>
+    </div>
+  </div>
+</body>
+
+</html>

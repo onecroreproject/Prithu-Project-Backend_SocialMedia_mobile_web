@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prithu – registration confirmed</title>
+  <style>
+    /* Client reset & responsiveness */
+    .ExternalClass,
+    .ReadMsgBody {
+      width: 100%;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+    }
+
+    body,
+    table,
+    td,
+    p,
+    a {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+
+    table {
+      border-collapse: collapse;
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+
+    img {
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+      -ms-interpolation-mode: bicubic;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      min-height: 100vh;
+    }
+
+    .yshortcuts a {
+      border-bottom: none !important;
+    }
+
+    /* Glass Card styling */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.85) !important;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.4) !important;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08) !important;
+      border-radius: 24px !important;
+    }
+
+    /* Details Box Glass within Glass */
+    .details-box {
+      background: rgba(255, 255, 255, 0.5) !important;
+      border: 1px solid rgba(0, 0, 0, 0.05) !important;
+      border-radius: 20px !important;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.02) !important;
+    }
+
+    /* Spin animation */
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .spin-logo {
+      animation: spin 6s linear infinite;
+    }
+
+    @media screen and (max-width: 600px) {
+      .email-table {
+        width: 100% !important;
+        margin: 0 10px !important;
+      }
+
+      .logo-cell {
+        width: auto !important;
+      }
+
+      .logo-img {
+        width: 45px !important;
+        height: auto !important;
+      }
+
+      .prithu-name {
+        font-size: 32px !important;
+      }
+
+      .content-padding {
+        padding: 0 25px 30px 25px !important;
+      }
+
+      .details-box {
+        padding: 15px !important;
+      }
+    }
+  </style>
+</head>
+
+<body
+  style="margin:0; padding:0; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%); font-family: 'Segoe UI', Arial, sans-serif;">
+
+  <!-- main container -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" align="center">
+    <tr>
+      <td align="center" style="padding:40px 10px;">
+        <!-- central card -->
+        <table class="email-table glass-card" width="600" cellpadding="0" cellspacing="0" border="0" align="center"
+          style="max-width:600px; width:100%; border-radius:24px; overflow:hidden;">
+
+          <!-- HEADER -->
+          <tr>
+            <td align="center" style="padding:40px 20px 20px 20px;">
+              <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+                <tr>
+                  <td class="logo-cell" align="center" valign="middle" style="padding-right:15px;">
+                    <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg"
+                      alt="Prithu" width="65" height="65" class="logo-img spin-logo"
+                      style="display:block; width:65px; height:auto; border-radius:50%; border: 2px solid rgba(255, 255, 255, 0.8); box-shadow: 0 6px 15px rgba(0,0,0,0.05);">
+                  </td>
+                  <td align="left" valign="middle">
+                    <span class="prithu-name"
+                      style="font-family:'Georgia', serif; font-size:38px; font-weight:700; color:#064d3b; letter-spacing:-0.5px; white-space:nowrap;">Prithu</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- MAIN CONTENT -->
+          <tr>
+            <td class="content-padding" style="padding:0 40px 30px 40px; color:#333; text-align:left;">
+
+              <h2 style="font-size:22px; margin:0 0 15px 0; color:#064d3b; font-weight:600;">Hi {username}!</h2>
+
+              <p style="font-size:17px; line-height:1.6; margin:0 0 10px 0; color:#333;">
+                <strong>Congratulations!</strong> Your registration is confirmed.</p>
+              <p style="font-size:17px; line-height:1.6; margin:0 0 25px 0; color:#444;">You've successfully completed
+                the registration process for <strong style="color:#064d3b;">Prithu</strong>. Your account is now active.
+              </p>
+
+              <!-- account details card -->
+              <table class="details-box" width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="margin:20px 0 25px 0;">
+                <tr>
+                  <td style="padding:25px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td
+                          style="padding:10px 0; font-size:16px; border-bottom:1px solid rgba(0,0,0,0.05); color: #444;">
+                          <strong style="min-width:120px; display:inline-block; color:#064d3b;">Username</strong>
+                          {username}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:10px 0; border-bottom:1px solid rgba(0,0,0,0.05); color: #444;"><strong
+                            style="min-width:120px; display:inline-block; color:#064d3b;">Email</strong> {email}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:10px 0; border-bottom:1px solid rgba(0,0,0,0.05); color: #444;"><strong
+                            style="min-width:120px; display:inline-block; color:#064d3b;">Referral code</strong>
+                          {referralCode} <em style="color:#666; font-size:13px;">(active after sub)</em></td>
+                      </tr>
+                      <tr>
+                        <td style="padding:10px 0; color: #444;"><strong
+                            style="min-width:120px; display:inline-block; color:#064d3b;">Password</strong> {password}
+                          <br><span style="color:#666; font-size:13px;">(Keep this secure)</span></td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA button -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:15px 0 25px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="https://www.prithu.app/"
+                      style="background: linear-gradient(135deg, #4169E1 0%, #567ef4 100%); color:#ffffff; padding:16px 40px; text-decoration:none; border-radius:50px; font-size:18px; font-weight:600; display:inline-block; box-shadow:0 10px 20px rgba(65,105,225,0.2);">Go
+                      to Dashboard →</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size:16px; line-height:1.6; text-align:center; color:#666; margin:30px 0 10px 0;">Thank you
+                for being part of our community.</p>
+              <p style="font-size:18px; line-height:1.5; text-align:center; color:#333; font-weight:600; margin:0;">Warm
+                regards,<br><strong style="color:#064d3b;">The Prithu Team</strong></p>
+            </td>
+          </tr>
+
+          <!-- FOOTER (clean) -->
+          <tr>
+            <td align="center"
+              style="padding:20px 25px; border-top:1px solid #d2dcd5; background-color:#f9f9f7; border-radius:0 0 18px 18px;">
+              <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td align="center" style="font-size:15px; color:#1e3d35; line-height:1.7;">
+                    <a href="mailto:info@prithu.in"
+                      style="color:#064d3b; text-decoration:none; font-weight:500; border-bottom:1px dotted #7a9c8c;">info@prithu.in</a>&nbsp;&nbsp;•&nbsp;&nbsp;
+                    <a href="#"
+                      style="color:#064d3b; text-decoration:none; font-weight:500; border-bottom:1px dotted #7a9c8c;">Unsubscribe</a>&nbsp;&nbsp;•&nbsp;&nbsp;
+                    <a href="#"
+                      style="color:#064d3b; text-decoration:none; font-weight:500; border-bottom:1px dotted #7a9c8c;">View
+                      in browser</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top:12px; font-size:14px; color:#2d5a4b;">© Prithu · all green</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+
+</html>

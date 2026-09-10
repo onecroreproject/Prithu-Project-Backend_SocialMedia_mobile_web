@@ -1,0 +1,606 @@
+const express = require('express');
+const router = express.Router();
+const { auth, optionalAuth } = require('../middlewares/jwtAuthentication');
+const {
+    upload: feedUpload,
+    processUploadedFiles: attachFeedFile
+} = require("../middlewares/uploadMiddleware");
+const { userUpload, attachUserFile } = require("../middlewares/services/userprofileUploadSpydy");
+
+// Controllers
+const {
+    createNewUser,
+    userLogin,
+    userSendOtp,
+    userPasswordReset,
+    existUserVerifyOtp,
+    newUserVerifyOtp,
+    userLogOut,
+    validateReferralCode,
+} = require('../controllers/authenticationControllers/userAuthController');
+
+const {
+    creatorFeedUpload,
+    creatorFeedDelete,
+    creatorFeedScheduleUpload,
+    creatorFeedUpdate,
+} = require('../controllers/feedControllers/creatorFeedController');
+
+const {
+    getAllFeedsByUserId,
+    getFeedsByAccountId,
+    getUserInfoAssociatedFeed,
+    getUserHidePost,
+    getTrendingFeeds,
+    getSingleFeedById,
+    getPublicFeedById,
+    getFeedsByCreator,
+    deleteFeed,
+    getFeedsByHashtag,
+    singleFeedById,
+    getBirthdayFeeds,
+    getAnniversaryFeeds,
+    getPoliticsFeeds,
+    getViewerMetadata,
+    enrichFeedData,
+    getRecommendedFeedsRoute,
+} = require('../controllers/feedControllers/feedsController');
+
+const {
+    getAllPublicFeeds
+} = require('../controllers/feedControllers/publicFeedController');
+
+const {
+    getStates,
+    getPartiesByState,
+    getLeadersByParty,
+} = require('../controllers/feedControllers/publicPartyController');
+
+const {
+    getUserDetailWithId,
+    setAppLanguage,
+    getAppLanguage,
+    getFeedLanguage,
+    setFeedLanguage,
+    checkUsernameAvailability,
+    getUserReferalCode,
+    checkEmailAvailability,
+} = require('../controllers/userControllers/userDetailController');
+
+const {
+    userSelectCategory,
+    userNotInterestedCategory,
+    userInterestedCategory,
+    getNonInterestedCategories,
+    removeNonInterestedCategory,
+} = require('../controllers/userControllers/userCategoryController');
+
+const {
+    getfeedWithCategoryWithId,
+    getUserContentCategories,
+    searchCategories,
+    getCategoriesWithFeeds,
+    getFeedLanguageCategories,
+    getUserPostCategories,
+    getFeedWithCategoryId,
+    saveInterestedCategory
+} = require('../controllers/categoriesController');
+
+const {
+    userProfileDetailUpdate,
+    getUserProfileDetail,
+    updateCoverPhoto,
+    deleteCoverPhoto,
+    updateAddImage,
+    deleteAddImage,
+    getProfileOverview,
+    getVisibilitySettingsWeb,
+    updateFieldVisibilityWeb,
+    getProfileCompletion,
+    getProfileByUsername,
+    getUserVisibilityByUserId,
+    getUserVisibilitySettings,
+    updateUserVisibilitySettings,
+} = require('../controllers/profileControllers/profileController');
+
+const {
+    changePassword,
+    toggleTwoFactor,
+    toggleBiometrics,
+    getActiveSessions,
+    getSecuritySettings,
+    requestDataDownload,
+    deleteAccountRequest,
+} = require('../controllers/userControllers/userSecurityController');
+
+const {
+    getUserPreferences,
+    updateUserPreferences,
+} = require('../controllers/userControllers/userPreferencesController');
+
+const {
+    likeFeed,
+    toggleSaveFeed,
+    requestDownloadFeed,
+    postComment,
+    postReplyComment,
+    getUserSavedFeeds,
+    getUserDownloadedFeeds,
+    shareFeed,
+    likeMainComment,
+    likeReplyComment,
+    getUserLikedFeeds,
+    userHideFeed,
+    getUserCategory,
+    toggleDislikeFeed,
+    generateShareLink,
+    getVideoThumbnail,
+    getDownloadJobStatus,
+    checkDownloadLimit,
+    directDownloadFeed,
+    getUserLikedFeedsForSaved,
+    birthdayDownloadFeed,
+    anniversaryDownloadFeed,
+    politicsDownloadFeed,
+    processSharePreview,
+    submitFeedbackPopup,
+} = require('../controllers/feedControllers/userActionsFeedController');
+
+const {
+    subscribePlan,
+    cancelSubscription,
+    getAllSubscriptionPlans,
+    getUserSubscriptionPlanWithId,
+    userTrialPlanActive,
+    checkUserActiveSubscription,
+    checkTrialEligibility,
+    // createSubscriptionOrder,
+    // verifySubscriptionPayment,
+    // recordPaymentFailure,
+    // recordPaymentCancel,
+    downloadInvoice,
+    getUserInvoices,
+} = require('../controllers/userControllers/userSubscriptionController');
+
+const { getAllPrompts, getPromptById } = require('../controllers/promptController');
+const { getAllCategories } = require('../controllers/aiCategoryController');
+
+
+
+const {
+    getCreatorDetailWithId,
+    getAllCreatorDetails,
+    getAllTrendingCreators,
+} = require('../controllers/creatorControllers/creatorDetailController');
+
+const {
+    followAccount,
+    unFollowAccount,
+    getAccountFollowers,
+    getUserFollowersData,
+    removeFollower,
+    checkFollowStatus
+} = require('../controllers/followersControllers.js/followerDetailController');
+
+const {
+    creatorSelectCategory,
+    creatorUnSelectCategory,
+} = require('../controllers/creatorControllers/creatorCategoryController');
+const { getPageBySlug } = require('../controllers/staticPageController');
+const { getAllBlogs, getBlogBySlug } = require('../controllers/blogController');
+
+const {
+    getCommentsByFeed,
+    getRepliesForComment,
+    getNestedReplies,
+    deleteComment,
+    deleteReply
+} = require('../controllers/conmmentController');
+
+const {
+    userVideoViewCount,
+    userImageViewCount,
+    fetchUserFeeds,
+    fetchUserFollowing,
+    fetchUserInterested,
+    fetchUserHidden,
+    fetchUserLiked,
+    fetchUserDisliked,
+    fetchUserCommented,
+    fetchUserShared,
+    fetchUserDownloaded,
+    getUserAnalyticsSummary,
+    fetchUserNonInterested,
+    getUserdetailWithinTheFeed,
+} = require('../controllers/userControllers/userFeedController');
+
+const {
+    trackFeedView,
+    trackWatchTime,
+    trackScroll,
+    logSearchHistory,
+} = require('../controllers/analytics/trackController');
+
+const {
+    getRecommendedFeeds,
+} = require('../services/analytics/recommendationService');
+
+const {
+    getStartQuestion,
+    getNextQuestion,
+    getReportTypes,
+    createFeedReport,
+} = require('../controllers/adminControllers/userReportController');
+
+const {
+    getNotifications,
+    markNotificationAsRead,
+    saveToken,
+    markAllRead,
+    clearAllNotifications,
+    deleteNotification,
+} = require('../controllers/adminControllers/notificationController');
+
+const {
+    refreshAccessToken,
+    heartbeat,
+    userPresence,
+} = require('../controllers/sessionController');
+
+const {
+    getUserEarnings,
+    getUserBalance
+} = require("../controllers/userControllers/userEarningsController");
+
+const {
+    logReferralActivity,
+    getReferredPeople,
+    getRecentActivities
+} = require("../controllers/userControllers/userReferralActivityController");
+
+const {
+    getReferralCycles,
+    getCycleDetails,
+    claimMilestone,
+    applyReferralCode,
+} = require("../controllers/userControllers/userReferralCycleController");
+
+const {
+    getWithdrawalHistory,
+    getBankDetails,
+    saveBankDetails,
+    requestWithdrawal,
+    updateWithdrawalRequest
+} = require("../controllers/userControllers/userWithdrawalController");
+
+const { saveUserLocation,
+    getUserLocation,
+    getUpcomingEvents,
+} = require("../controllers/userControllers/userLoactionController");
+
+const {
+} = require("../WebController/UserController/userFeedControllerWeb");
+
+const {
+    getUserFollowing,
+    getUserFollowers,
+} = require("../WebController/UserController/userFolloweController");
+
+const {
+    getMyActivities,
+} = require("../controllers/userControllers/userActivitController");
+
+const {
+    globalSearch
+} = require("../controllers/searchController");
+
+const {
+    deactivateUser,
+    deleteUserNow
+} = require("../controllers/userControllers/userDeleteController");
+
+const {
+    getTrendingHashtags,
+} = require("../controllers/hashTagController");
+
+const {
+    getHiddenPosts,
+    removeHiddenPost,
+} = require("../controllers/userControllers/hiddenPostController");
+
+router.get("/get/hidden-posts", auth, getHiddenPosts); // Frontend alias
+router.post("/remove/hidden-post", auth, removeHiddenPost); // Frontend alias
+
+
+const { getPostInterestStatus,
+    requestPostInterest
+} = require('../controllers/postIntrestedController');
+const { getHelpFAQ } = require('../controllers/adminControllers/adminHelpController');
+const { submitUserFeedback, getMyFeedbackAndReports, submitSupportQuery, getMySupportQueries } = require('../controllers/feedBackController');
+const { getFooterConfig } = require('../controllers/footerController');
+const { getUpcomingBirthdays } = require('../controllers/adminControllers/adminUserControllers');
+
+const {
+    getUpdatesForUser,
+    getPublicUpdates,
+    getUnreadCount,
+    markAsRead
+} = require('../controllers/userControllers/userUpdateController');
+
+/* --------------------- User Authentication --------------------- */
+router.post('/auth/user/register', createNewUser);
+router.post('/register', createNewUser); // Alias
+
+router.post('/auth/user/login', userLogin);
+router.post('/login', userLogin); // Alias
+
+router.post('/auth/user/otp-send', userSendOtp);
+router.post('/sent-otp', userSendOtp); // Alias
+
+router.post('/auth/exist/user/verify-otp', existUserVerifyOtp);
+router.post('/auth/new/user/verify-otp', newUserVerifyOtp);
+
+router.post('/auth/user/password-reset', userPasswordReset);
+router.post('/auth/user/reset-password', userPasswordReset); // Alias
+
+router.post('/auth/user/logout', auth, userLogOut);
+router.get('/auth/user/referral/validate/:code', validateReferralCode);
+router.get('/check/referral-code/:code', validateReferralCode);
+router.get('/check/referral-code', validateReferralCode);
+router.post('/check/referral-code', validateReferralCode);
+
+/* --------------------- Session & Tokens --------------------- */
+router.post("/refresh-token", refreshAccessToken);
+router.post("/auth/refresh-token", refreshAccessToken); // Alias
+router.get("/api/admin/verify-token", auth, refreshAccessToken); // Alias for token verification
+
+
+/* --------------------- User Referral & Earnings --------------------- */
+router.get('/user/referal/code', auth, getUserReferalCode);
+router.get('/user/earnings/total', auth, getUserEarnings);
+router.get('/user/referred/people', auth, getReferredPeople);
+router.post('/user/referral/activity/log', auth, logReferralActivity);
+router.get('/user/balance/amount', auth, getUserBalance);
+router.get('/user/withdrawal/details', auth, getWithdrawalHistory);
+router.get('/user/referral/recent-activities', auth, getRecentActivities);
+router.get('/user/bank/details', auth, getBankDetails);
+router.post('/user/bank/save', auth, saveBankDetails);
+router.post('/user/withdrawal/request', auth, requestWithdrawal);
+router.patch('/user/withdrawal/update/:requestId', auth, updateWithdrawalRequest);
+router.get('/user/referral/cycles', auth, getReferralCycles);
+router.get('/user/referral/cycle/:cycleId/details', auth, getCycleDetails);
+router.post('/user/referral/claim-milestone', auth, claimMilestone);
+router.post('/user/referral/apply', auth, applyReferralCode);
+
+/* --------------------- User Profile --------------------- */
+router.get('/user/profile/detail', auth, getUserProfileDetail);
+router.get('/get/profile/detail', auth, getUserProfileDetail); // Alias
+router.get('/user/single/profile/detail', getUserProfileDetail);
+router.get('/get/single/profile/detail', getUserProfileDetail); // Alias
+
+router.post('/user/profile/detail/update', auth, userUpload.single("file"), (req, res, next) => { req.baseUrl = "/profile"; next(); }, attachUserFile, userProfileDetailUpdate);
+router.post('/user/profile/cover/update', auth, userUpload.single("coverPhoto"), (req, res, next) => { req.baseUrl = "/cover"; next(); }, attachUserFile, updateCoverPhoto);
+router.delete('/user/profile/cover/delete', auth, deleteCoverPhoto);
+router.post('/user/profile/detail/addimage', auth, userUpload.single("addImage"), (req, res, next) => { req.baseUrl = "/addimage"; next(); }, attachUserFile, updateAddImage);
+router.post('/add/profile/detail/addimage', auth, userUpload.single("addImage"), (req, res, next) => { req.baseUrl = "/addimage"; next(); }, attachUserFile, updateAddImage); // Alias requested
+router.delete('/user/profile/detail/addimage/delete', auth, deleteAddImage);
+router.get("/get/profile/overview", auth, getProfileOverview);
+router.post("/single/get/profile/overview", getProfileOverview);
+router.get("/get/profile/completion", auth, getProfileCompletion);
+
+// ======================== SECURITY SETTINGS ==========================
+router.put('/security/change-password', auth, changePassword);
+router.put('/security/toggle-2fa', auth, toggleTwoFactor);
+router.put('/security/toggle-biometrics', auth, toggleBiometrics);
+router.get('/security/sessions', auth, getActiveSessions);
+router.get('/security/settings', auth, getSecuritySettings);
+router.post('/security/download-data', auth, requestDataDownload);
+router.delete('/security/delete-account', auth, deleteAccountRequest);
+
+// ======================== PREFERENCES ==========================
+router.get('/preferences', auth, getUserPreferences);
+router.put('/preferences', auth, updateUserPreferences);
+
+router.get("/get/profile/visibility-settings", auth, getUserVisibilitySettings);
+router.get("/profile/visibility", auth, getUserVisibilitySettings);
+router.put("/profile/toggle-visibility", auth, updateUserVisibilitySettings);
+
+router.get("/user/get/visibility/settings", auth, getUserVisibilitySettings);
+router.post("/user/update/visibility/settings", auth, updateUserVisibilitySettings);
+
+/* --------------------- Account Deactivation & Deletion --------------------- */
+router.patch('/user/deactivate', auth, deactivateUser);
+router.delete('/user/delete', auth, deleteUserNow);
+
+
+/* --------------------- User Feed Actions --------------------- */
+router.put('/user/feed/update', auth, creatorFeedUpdate);
+router.post('/user/feed/like', auth, likeFeed);
+router.post("/user/feed/dislike", auth, toggleDislikeFeed);
+router.post('/user/feed/save', auth, toggleSaveFeed);
+router.post('/user/feed/share', auth, shareFeed);
+router.post('/user/feed/hide', auth, userHideFeed);
+router.post('/user/hide/feed', auth, userHideFeed); // Alias for frontend compatibility
+router.post('/user/feedback-popup/submit', auth, submitFeedbackPopup);
+router.post('/user/feed/download', auth, requestDownloadFeed);
+router.get('/user/feed/liked', auth, getUserLikedFeeds);
+router.get('/user/feed/saved', auth, getUserSavedFeeds);
+router.get('/user/feed/downloaded', auth, getUserDownloadedFeeds);
+router.get('/user/get/saved/feeds', auth, getUserLikedFeedsForSaved); // Alias for frontend compatibility (using liked feeds as requested)
+router.post('/user/feed/share-process/:feedId', auth, processSharePreview);
+router.get('/user/feed/share-link/:feedId', generateShareLink);
+router.get('/user/feed/thumbnail/:feedId', getVideoThumbnail);
+router.get('/user/feed/download-status/:jobId', auth, getDownloadJobStatus);
+router.get('/user/feed/check-limit', auth, checkDownloadLimit);
+router.post('/user/feed/:feedId/birthday-download', birthdayDownloadFeed); // 🎂 Birthday poster download
+router.post('/user/feed/:feedId/anniversary-download', anniversaryDownloadFeed); // 💍 Anniversary poster download
+router.post('/user/feed/:feedId/politics-download', politicsDownloadFeed); // 🗳️ Politics poster download
+router.post('/user/feed/:feedId/direct-download', directDownloadFeed);
+
+/* --------------------- Categories --------------------- */
+router.get('/categories/all', auth, getUserContentCategories);
+router.post('/categories/select', auth, userSelectCategory);
+router.post('/categories/not-interested', auth, userNotInterestedCategory);
+router.post('/categories/interested', auth, userInterestedCategory);
+router.post("/categories/begin", auth, saveInterestedCategory);
+router.get("/categories/not-interested/list", auth, getUserCategory);
+router.get("/get/non-interested-categories", auth, getNonInterestedCategories); // Frontend alias
+router.post("/remove/non-interested-category", auth, removeNonInterestedCategory); // Frontend alias
+
+/* --------------------- Follow & Connections --------------------- */
+router.post('/user/follow/creator', auth, followAccount);
+router.post('/user/unfollow/creator', auth, unFollowAccount);
+router.post('/user/follow', auth, followAccount); // Alignment with some frontend calls
+router.post('/user/unfollow', auth, unFollowAccount); // Alignment with some frontend calls
+router.get('/user/following/data', auth, getUserFollowersData);
+router.post("/user/remove-follower", auth, removeFollower);
+router.post("/user/check-follow-status", auth, checkFollowStatus);
+
+/* --------------------- Comments --------------------- */
+router.post('/comment', auth, postComment);
+router.post('/reply', auth, postReplyComment);
+router.post('/comment/like', auth, likeMainComment);
+router.post('/reply/like', auth, likeReplyComment);
+router.delete("/comment/:commentId", auth, deleteComment);
+router.delete("/reply/:replyId", auth, deleteReply);
+router.post('/comments/list', auth, getCommentsByFeed);
+router.post('/replies/list', auth, getRepliesForComment);
+router.post('/replies/nested', auth, getNestedReplies);
+
+/* --------------------- Feed Fetching --------------------- */
+router.get("/get/trending-v2/feeds", auth, (req, res, next) => { console.log("REQ: Trending v2 hit"); next(); }, getTrendingFeeds);
+router.get("/get/trending/feeds", auth, (req, res, next) => { console.log("REQ: Trending hit"); next(); }, getTrendingFeeds);
+router.get('/get/all/feeds/user', auth, getAllFeedsByUserId);
+router.get('/get/all/public/feeds', getAllPublicFeeds);
+router.get('/get/feed/with/category/:id', auth, getfeedWithCategoryWithId);
+router.get('/get/user/info/associated/feed/:feedId', auth, getUserInfoAssociatedFeed);
+router.get("/get/feed/category", getCategoriesWithFeeds);
+router.get('/get/feed/:feedId', auth, getSingleFeedById);
+router.get('/get/public/feed/:feedId', getPublicFeedById);
+router.get('/get/feeds/by/creator/:feedId', auth, getFeedsByCreator);
+router.get('/get/feeds/by/hashtag/:tag', auth, getFeedsByHashtag);
+router.get('/get/feeds/birthday', auth, getBirthdayFeeds); // 🎂 Birthday category feeds
+router.get('/get/feeds/anniversary', auth, getAnniversaryFeeds); // 💍 Anniversary category feeds
+router.get('/get/feeds/politics', auth, getPoliticsFeeds); // 🗳️ Politics category feeds
+router.post('/user/watching/vidoes', auth, userVideoViewCount);
+router.post('/feed/view/video/:id', auth, userVideoViewCount); // Alias
+router.post('/user/image/view/count', auth, userImageViewCount);
+router.post('/feed/view/image/:id', auth, userImageViewCount); // Alias
+router.post('/user/not-interested', auth, userNotInterestedCategory); // Alias
+router.post('/user/block', auth, (req, res) => res.status(501).json({ message: "Block feature not implemented" })); // Placeholder for plan completeness
+
+/* --------------------- Feed Analytics & Recommendation --------------------- */
+router.post('/track-feed-view', optionalAuth, trackFeedView);
+router.post('/track-watch-time', optionalAuth, trackWatchTime);
+router.post('/track-scroll', optionalAuth, trackScroll);
+router.post('/search-history', auth, logSearchHistory);
+router.get('/recommended-feeds', optionalAuth, getRecommendedFeedsRoute);
+
+/* --------------------- Creator Specific --------------------- */
+router.post("/creator/feed/upload", auth, feedUpload.single("file"), attachFeedFile, creatorFeedUpload);
+router.post("/creator/feed/schedule", auth, feedUpload.single("file"), attachFeedFile, creatorFeedScheduleUpload);
+router.get('/creator/feeds/all', auth, getFeedsByAccountId);
+
+/* --------------------- Subscription --------------------- */
+router.get('/subscription/plans', getAllSubscriptionPlans);
+router.get('/subscription/active', auth, getUserSubscriptionPlanWithId);
+router.post('/subscription/subscribe', auth, subscribePlan);
+router.put('/subscription/cancel', auth, cancelSubscription);
+router.post('/subscription/activate-trial', auth, userTrialPlanActive);
+router.get('/subscription/check-active', auth, checkUserActiveSubscription);
+router.get('/subscription/trial-eligible', auth, checkTrialEligibility);
+    // router.post('/subscription/create-order', auth, createSubscriptionOrder);
+    // router.post('/user/subscription/create-order', auth, createSubscriptionOrder); // Alias for frontend consistency
+    // router.post('/subscription/verify-payment', auth, verifySubscriptionPayment);
+    // router.post('/subscription/payment-failure', auth, recordPaymentFailure);
+    // router.post('/subscription/payment-cancel', auth, recordPaymentCancel);
+router.get('/subscription/invoice/download/:invoiceId', auth, downloadInvoice);
+router.get('/subscription/invoices', auth, getUserInvoices);
+
+// Frontend alignment aliases
+router.get('/user/getall/subscriptions', getAllSubscriptionPlans);
+router.get('/user/subscriptions', auth, getUserSubscriptionPlanWithId);
+router.get('/user/check/active/subscription', auth, checkUserActiveSubscription);
+router.get('/user/check/active/subcription', auth, checkUserActiveSubscription);
+router.post('/user/plan/subscription', auth, subscribePlan);
+router.put('/user/cancel/subscription', auth, cancelSubscription);
+router.post('/user/activate/trial/plan', auth, userTrialPlanActive);
+router.get('/user/subscription/trial-eligible', auth, checkTrialEligibility);
+
+
+/* --------------------- Notifications --------------------- */
+router.get("/notifications/all", auth, getNotifications);
+router.put("/notifications/mark-all-read", auth, markAllRead);
+router.put("/notifications/read", auth, markNotificationAsRead);
+router.delete("/notifications/delete", auth, deleteNotification);
+router.delete("/notifications/clear-all", auth, clearAllNotifications);
+router.post("/notifications/save-token", auth, saveToken);
+
+/* --------------------- Miscellaneous --------------------- */
+router.get("/global/search", globalSearch);
+router.get("/hashtags/trending", getTrendingHashtags);
+router.post("/availability/username", checkUsernameAvailability);
+router.get("/check/username/availability", checkUsernameAvailability);
+router.post("/availability/email", checkEmailAvailability);
+router.get("/check/email/availability", checkEmailAvailability);
+router.post("/session/heartbeat", auth, heartbeat);
+router.post("/session/presence", auth, userPresence);
+router.get("/user/get/birthday", getUpcomingBirthdays);
+router.get("/get/user/birthday", getUpcomingBirthdays); // Alias
+router.get("/get/trending/feed", auth, getTrendingFeeds);
+router.get("/user/invite/friends", auth, (req, res) => res.status(200).json({ message: "Invite feature" })); // Placeholder
+router.post("/feedback/submit", optionalAuth, submitUserFeedback);
+router.get("/feedback/my", auth, getMyFeedbackAndReports);
+router.post("/support", optionalAuth, submitSupportQuery);
+router.get("/support/my", auth, getMySupportQueries);
+router.get("/help/faq", getHelpFAQ);
+router.post('/search/all/category', searchCategories)
+router.post("/save/user/location", auth, saveUserLocation);
+router.get('/user/referral/recent-activities', auth, getRecentActivities);
+/*--------------UserPostController--------------------------*/
+router.get("/post/allowed/status", auth, getPostInterestStatus);
+router.post("/post/intrested", auth, requestPostInterest);
+
+/* --------------------- Public Stats --------------------- */
+const { getMainBoardStats } = require('../controllers/mainHomeController');
+router.get("/main/board/status", getMainBoardStats);
+
+/* --------------------- Footer --------------------- */
+router.get("/footer", getFooterConfig);
+
+
+
+router.get('/static-page/:slug', getPageBySlug);
+router.get('/blogs/all', getAllBlogs);
+router.get('/blogs/:slug', getBlogBySlug);
+
+/* --------------------- Politics / Parties (Public) --------------------- */
+router.get('/parties/states', getStates);
+router.get('/parties/by-state/:state', getPartiesByState);
+router.get('/parties/:partyId/leaders', getLeadersByParty);
+
+/* --------------------- User Updates (What's New) --------------------- */
+router.get('/user/updates/public', getPublicUpdates);
+router.get('/user/updates/all', auth, getUpdatesForUser);
+router.get('/user/updates/unread-count', auth, getUnreadCount);
+router.post('/user/updates/mark-read/:updateId', auth, markAsRead);
+
+/* --------------------- CreativeAI Photo Prompts API --------------------- */
+router.get('/prompts', getAllPrompts);
+router.get('/prompts/:id', getPromptById);
+router.get('/aicategories', getAllCategories);
+
+/* --------------------- User Referral Mission & Cycles API --------------------- */
+router.get("/user/referral/cycles", auth, getReferralCycles);
+router.get("/user/referral/cycle/:id/details", auth, getCycleDetails);
+router.post("/user/referral/claim-milestone", auth, claimMilestone);
+router.post("/user/referral/apply", auth, applyReferralCode);
+
+/* --------------------- User Wallet Withdrawal API --------------------- */
+router.get("/user/wallet/bank-details", auth, getBankDetails);
+router.post("/user/wallet/bank-details", auth, saveBankDetails);
+router.post("/user/wallet/withdraw", auth, requestWithdrawal);
+router.get("/user/wallet/withdrawals", auth, getWithdrawalHistory);
+router.put("/user/wallet/withdrawal/:requestId", auth, updateWithdrawalRequest);
+
+module.exports = router;

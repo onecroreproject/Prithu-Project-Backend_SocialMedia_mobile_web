@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coming Soon Popup - Live Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/lucide-react@0.292.0/dist/umd/lucide-react.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .demo-card {
+            transition: all 0.3s ease;
+        }
+
+        .demo-card:hover {
+            transform: translateY(-4px);
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+
+    <div id="root"></div>
+
+    <script>
+        // Simulate React and required modules
+        const React = window.React;
+        const ReactDOM = window.ReactDOM;
+        const { motion, AnimatePresence } = window.FramerMotion;
+        const lucide = window.lucideReact;
+
+        // Extract icons
+        const { X, BellRing, Gift, Rocket, Sparkles } = lucide;
+
+        // ComingSoonPopup Component
+        const ComingSoonPopup = ({ isOpen, onClose, title, icon: Icon, description }) => {
+            if (!isOpen) return null;
+
+            return React.createElement(AnimatePresence, null,
+                React.createElement('div', {
+                    className: "fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm",
+                    onClick: (e) => {
+                        if (e.target === e.currentTarget) onClose();
+                    }
+                },
+                    React.createElement(motion.div, {
+                        initial: { opacity: 0, scale: 0.9, y: 20 },
+                        animate: { opacity: 1, scale: 1, y: 0 },
+                        exit: { opacity: 0, scale: 0.9, y: 20 },
+                        className: "relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden text-center p-8"
+                    },
+                        // Close Button
+                        React.createElement('button', {
+                            onClick: onClose,
+                            className: "absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 transition-colors"
+                        }, React.createElement(X, { className: "w-5 h-5 text-gray-400" })),
+
+                        // Icon Header
+                        React.createElement('div', { className: "flex justify-center mb-6" },
+                            React.createElement('div', { className: "relative" },
+                                React.createElement('div', { className: "absolute -inset-4 bg-blue-100 rounded-full blur-xl opacity-50 animate-pulse" }),
+                                React.createElement('div', { className: "relative w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3 hover:rotate-0 transition-transform duration-300" },
+                                    React.createElement(Icon, { className: "w-10 h-10 text-white" })),
+                                React.createElement('div', { className: "absolute -top-2 -right-2" },
+                                    React.createElement('div', { className: "w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center shadow-md animate-bounce" },
+                                        React.createElement(Sparkles, { className: "w-5 h-5 text-white" })))
+                            )
+                        ),
+
+                        // Content
+                        React.createElement('h2', { className: "text-2xl font-bold text-gray-900 mb-3" },
+                            title, " Coming Soon!"),
+                        React.createElement('p', { className: "text-gray-600 mb-8 leading-relaxed" },
+                            description || "We're working hard to bring this feature to you. Stay tuned for updates!"),
+
+                        // Action Button
+                        React.createElement('button', {
+                            onClick: onClose,
+                            className: "w-full py-3 px-6 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-all shadow-md active:scale-95"
+                        }, "Got it, thanks!"),
+
+                        // Footer Decoration
+                        React.createElement('div', { className: "mt-8 flex items-center justify-center gap-2 text-xs font-medium text-gray-400 uppercase tracking-widest" },
+                            React.createElement(Rocket, { className: "w-4 h-4" }),
+                            React.createElement('span', null, "Coming Early 2026"))
+                    )
+                )
+            );
+        };
+
+        // Main App Component
+        const App = () => {
+            const [isPopupOpen, setIsPopupOpen] = React.useState(false);
+            const [selectedFeature, setSelectedFeature] = React.useState(null);
+
+            const features = [
+                { id: 1, name: 'Analytics Dashboard', icon: Gift, description: 'Advanced analytics and insights to track your growth in real-time.', color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50' },
+                { id: 2, name: 'AI Assistant', icon: Sparkles, description: 'Intelligent AI-powered assistant to help you make better decisions.', color: 'from-purple-500 to-purple-600', bgColor: 'bg-purple-50' },
+                { id: 3, name: 'Team Collaboration', icon: BellRing, description: 'Work together seamlessly with your team members in real-time.', color: 'from-green-500 to-green-600', bgColor: 'bg-green-50' }
+            ];
+
+            const openPopup = (feature) => {
+                setSelectedFeature(feature);
+                setIsPopupOpen(true);
+            };
+
+            return React.createElement('div', { className: "max-w-6xl mx-auto px-4 py-12" },
+                // Header
+                React.createElement('div', { className: "text-center mb-12" },
+                    React.createElement('div', { className: "inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 text-transparent bg-clip-text mb-4" },
+                        React.createElement(Rocket, { className: "w-8 h-8 text-blue-500" }),
+                        React.createElement('h1', { className: "text-4xl font-bold" }, "Feature Preview")
+                    ),
+                    React.createElement('p', { className: "text-gray-600 text-lg max-w-2xl mx-auto" },
+                        "Click on any feature card below to see the Coming Soon popup in action")
+                ),
+
+                // Features Grid
+                React.createElement('div', { className: "grid md:grid-cols-3 gap-6 mb-12" },
+                    features.map(feature =>
+                        React.createElement('div', {
+                            key: feature.id,
+                            onClick: () => openPopup(feature),
+                            className: `demo-card ${feature.bgColor} rounded-2xl p-6 cursor-pointer shadow-lg hover:shadow-xl transition-all border-2 border-transparent hover:border-gray-200`
+                        },
+                            React.createElement('div', { className: `inline-flex p-3 rounded-xl bg-gradient-to-r ${feature.color} mb-4` },
+                                React.createElement(feature.icon, { className: "w-6 h-6 text-white" })),
+                            React.createElement('h3', { className: "text-xl font-semibold text-gray-900 mb-2" }, feature.name),
+                            React.createElement('p', { className: "text-gray-600 text-sm" }, feature.description),
+                            React.createElement('div', { className: "mt-4 text-blue-600 font-medium text-sm inline-flex items-center gap-1" },
+                                "Coming Soon",
+                                React.createElement('span', { className: "text-lg" }, "→"))
+                        )
+                    )
+                ),
+
+                // Demo Info Card
+                React.createElement('div', { className: "bg-white rounded-2xl p-6 shadow-md border border-gray-200" },
+                    React.createElement('h2', { className: "font-semibold text-gray-900 mb-3 flex items-center gap-2" },
+                        React.createElement(Sparkles, { className: "w-5 h-5 text-yellow-500" }),
+                        "Component Features"
+                    ),
+                    React.createElement('ul', { className: "space-y-2 text-gray-600" },
+                        React.createElement('li', { className: "flex items-start gap-2" },
+                            React.createElement('span', { className: "text-green-500 mt-1" }, "✓"),
+                            "Smooth animations with Framer Motion"),
+                        React.createElement('li', { className: "flex items-start gap-2" },
+                            React.createElement('span', { className: "text-green-500 mt-1" }, "✓"),
+                            "Blurred backdrop and responsive design"),
+                        React.createElement('li', { className: "flex items-start gap-2" },
+                            React.createElement('span', { className: "text-green-500 mt-1" }, "✓"),
+                            "Customizable icon, title, and description"),
+                        React.createElement('li', { className: "flex items-start gap-2" },
+                            React.createElement('span', { className: "text-green-500 mt-1" }, "✓"),
+                            "Close button, click outside, and keyboard support"),
+                        React.createElement('li', { className: "flex items-start gap-2" },
+                            React.createElement('span', { className: "text-green-500 mt-1" }, "✓"),
+                            "Beautiful gradient effects and micro-interactions")
+                    )
+                ),
+
+                // Popup Component
+                React.createElement(ComingSoonPopup, {
+                    isOpen: isPopupOpen,
+                    onClose: () => setIsPopupOpen(false),
+                    title: selectedFeature?.name || "Feature",
+                    icon: selectedFeature?.icon || Gift,
+                    description: selectedFeature?.description
+                })
+            );
+        };
+
+        // Render the app
+        ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+    </script>
+</body>
+
+</html>

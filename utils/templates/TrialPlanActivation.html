@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prithu Trial Activated</title>
+  <style>
+    /* ----- base & reset ----- */
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      line-height: 1.4;
+      min-height: 100vh;
+    }
+
+    .email-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+      border-radius: 24px;
+      overflow: hidden;
+    }
+
+    /* ----- header ----- */
+    .header {
+      padding: 40px 20px 20px;
+      text-align: center;
+    }
+
+    .logo-text-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: nowrap;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .header img.logo {
+      width: 65px;
+      height: auto;
+      animation: spin 6s linear infinite;
+      display: block;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 38px;
+      color: #064d3b;
+      font-family: 'Georgia', serif;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    /* ----- content area ----- */
+    .content {
+      padding: 0 40px;
+      color: #333;
+    }
+
+    .content h2 {
+      font-size: 22px;
+      margin: 0 0 15px 0;
+      color: #064d3b;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .content p {
+      font-size: 17px;
+      margin-bottom: 20px;
+      color: #444;
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    .content ul {
+      padding: 0;
+      margin: 0 0 25px 0;
+      list-style: none;
+    }
+
+    .content li {
+      margin-bottom: 12px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      border-radius: 12px;
+      font-size: 16px;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* ----- BUTTON ----- */
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #4169E1 0%, #567ef4 100%);
+      color: #ffffff !important;
+      padding: 16px 40px;
+      text-decoration: none;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 25px 0;
+      box-shadow: 0 10px 20px rgba(65, 105, 225, 0.2);
+    }
+
+    /* footer */
+    .footer {
+      padding: 30px 20px;
+      text-align: center;
+      font-size: 13px;
+      color: #666;
+      background: rgba(0, 0, 0, 0.02);
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .footer a {
+      color: #000;
+      text-decoration: none;
+      font-weight: 600;
+      border-bottom: 1px dotted #ccc;
+    }
+
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        margin: 20px 10px;
+      }
+
+      .content {
+        padding: 0 25px;
+      }
+
+      .header h1 {
+        font-size: 32px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-container">
+    <!-- header: logo + name always adjacent (no stacking) -->
+    <div class="header">
+      <div class="logo-text-container">
+        <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg" alt="Prithu Logo"
+          class="logo" />
+        <h1>Prithu</h1>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <h2 style="color: #064d3b; font-size: 22px;">Hi {userName},</h2>
+
+      <p>Exciting news! Your <strong>{planType} Trial Plan</strong> has been successfully activated. You now have a
+        front-row seat to the best of Prithu Premium.</p>
+
+      <!-- Trial Status Card -->
+      <div
+        style="background: linear-gradient(135deg, #064d3b 0%, #0a7a5e 100%); border-radius: 16px; padding: 25px; margin: 25px 0; color: #ffffff; box-shadow: 0 10px 20px rgba(6, 77, 59, 0.15); text-align: center;">
+        <p style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #d1fae5;">Trial
+          active until</p>
+        <p style="margin: 10px 0; font-size: 32px; font-weight: 800;">{endDate}</p>
+        <div style="height: 1px; background: rgba(255,255,255,0.2); margin: 15px 0;"></div>
+        <p style="margin: 0; font-size: 14px; color: #d1fae5;">Started on {startDate}</p>
+      </div>
+
+      <p><strong>What can you do during your trial?</strong></p>
+      <ul style="list-style-type: none; padding: 0;">
+        <li
+          style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">🚀</span>
+          <span><strong>Discover What’s Trending</strong> — stay updated with the latest viral posts and community
+            favorites.</span>
+        </li>
+        <li
+          style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">⬇️</span>
+          <span><strong>Unlimited Downloads</strong> — save your favorite content directly to your device without
+            limits.</span>
+        </li>
+      </ul>
+
+      <p style="text-align:center; margin-top: 30px;">
+        <a href="https://www.prithu.app/home" class="cta-button">Explore Your Feed Now →</a>
+      </p>
+
+      <p style="margin-top: 30px; font-size: 16px; color: #4b5563; line-height: 1.6;">
+        When your trial ends, you’ll have the option to upgrade to a full Premium subscription to keep these perks. We
+        hope you love the experience!
+      </p>
+
+      <p style="text-align: center; margin-top: 40px;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+      <p>If you wish to unsubscribe, <a href="#">let us know!</a></p>
+      <p><a href="#">View this email as a web page</a></p>
+    </div>
+  </div>
+</body>
+
+</html>

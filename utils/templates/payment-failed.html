@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prithu Payment Failed</title>
+    <style>
+        /* ----- base & reset ----- */
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.4;
+            min-height: 100vh;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+            border-radius: 24px;
+            overflow: hidden;
+        }
+
+        /* ----- header ----- */
+        .header {
+            padding: 40px 20px 20px;
+            text-align: center;
+        }
+
+        .logo-text-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: nowrap;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .header img.logo {
+            width: 65px;
+            height: auto;
+            animation: spin 6s linear infinite;
+            display: block;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 38px;
+            color: #064d3b;
+            font-family: 'Georgia', serif;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        /* ----- content area ----- */
+        .content {
+            padding: 0 40px;
+            color: #333;
+        }
+
+        .content h2 {
+            font-size: 22px;
+            margin: 0 0 15px 0;
+            color: #d12e2e;
+            font-weight: 700;
+            text-align: left;
+        }
+
+        .content p {
+            font-size: 17px;
+            margin-bottom: 20px;
+            color: #444;
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        /* ----- BUTTON ----- */
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #4169E1 0%, #567ef4 100%);
+            color: #ffffff !important;
+            padding: 16px 40px;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 25px 0;
+            box-shadow: 0 10px 20px rgba(65, 105, 225, 0.2);
+        }
+
+        /* footer */
+        .footer {
+            padding: 30px 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            background: rgba(0, 0, 0, 0.02);
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .footer a {
+            color: #000;
+            text-decoration: none;
+            font-weight: 600;
+            border-bottom: 1px dotted #ccc;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                margin: 20px 10px;
+            }
+
+            .content {
+                padding: 0 25px;
+            }
+
+            .header h1 {
+                font-size: 32px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="logo-text-container">
+                <img src="https://res.cloudinary.com/dphyaoav3/image/upload/v1765021105/prithu_hlxvm8.jpg"
+                    alt="Prithu Logo" class="logo" />
+                <h1>Prithu</h1>
+            </div>
+        </div>
+
+        <div class="content">
+            <h2>Oops! Payment Failed</h2>
+            <p>Hi {userName},</p>
+            <p>We encountered an issue while processing your payment for the <strong>{planName}</strong> plan.</p>
+            <p>Don't worry, your account is still secure. You can try renewing your subscription again by clicking the
+                button below.</p>
+
+            <p style="text-align:center;">
+                <a href="https://www.prithu.app/home/subscriptions" class="cta-button">Retry Payment →</a>
+            </p>
+
+            <p>If you have any questions or the issue persists, feel free to reach out to our support team.</p>
+            <p style="text-align:center;"><strong>Warm regards,<br>The Prithu Team</strong></p>
+        </div>
+
+        <div class="footer">
+            <p><a href="mailto:info@prithu.in">info@prithu.in</a></p>
+            <p>Need help? <a href="https://www.prithu.app/contact">Contact Support</a></p>
+        </div>
+    </div>
+</body>
+
+</html>
