@@ -218,9 +218,13 @@ const feedSchema = new mongoose.Schema(
           strokeWidth: { type: Number, default: 1 },
           borderRadius: { type: Number, default: 0 }
         },
+        shape: { type: String, default: "rectangle" },
         calendarConfig: {
-          headerColor: { type: String, default: "#E54B35" },
-          bodyColor: { type: String, default: "#F9F9F9" }
+          type: mongoose.Schema.Types.Mixed,
+          default: {
+            headerColor: "#E54B35",
+            bodyColor: "#F9F9F9"
+          }
         },
         metadata: {
           type: mongoose.Schema.Types.Mixed,

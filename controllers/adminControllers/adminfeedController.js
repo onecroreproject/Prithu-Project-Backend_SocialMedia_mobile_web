@@ -491,10 +491,14 @@ exports.updateFeedDesign = async (req, res) => {
         }
 
         if (designMetadata) {
-            feed.designMetadata = { ...feed.designMetadata, ...designMetadata };
+            const existingMeta = feed.designMetadata ? (feed.designMetadata.toObject ? feed.designMetadata.toObject() : feed.designMetadata) : {};
+            feed.designMetadata = { ...existingMeta, ...designMetadata };
+            feed.markModified('designMetadata');
         }
         if (editMetadata) {
-            feed.editMetadata = { ...feed.editMetadata, ...editMetadata };
+            const existingEdit = feed.editMetadata ? (feed.editMetadata.toObject ? feed.editMetadata.toObject() : feed.editMetadata) : {};
+            feed.editMetadata = { ...existingEdit, ...editMetadata };
+            feed.markModified('editMetadata');
         }
 
         await feed.saveEditHistory(userId, 'Feed design/edit metadata updated');
