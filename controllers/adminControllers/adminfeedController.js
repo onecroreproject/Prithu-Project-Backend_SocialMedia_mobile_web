@@ -36,7 +36,20 @@ exports.adminFeedUpload = async (req, res) => {
         const roleRef = req.role || "Admin";
         const mediaFiles = req.localFilesArr || [];
         const audioFile = req.localAudioFile || null;
-        const { categoryId: globalCategoryId, categoryIds: globalCategoryIds, language = "en", caption: globalCaption, designData: globalDesignData, scheduleTime: globalScheduleTime, audience = "public", perFileMetadata } = req.body;
+        const { 
+            categoryId: globalCategoryId, 
+            categoryIds: globalCategoryIds, 
+            subCategory: globalSubCategory, 
+            language = "en", 
+            title: globalTitle,
+            description: globalDescription,
+            tags: globalTags,
+            caption: globalCaption, 
+            designData: globalDesignData, 
+            scheduleTime: globalScheduleTime, 
+            audience = "public", 
+            perFileMetadata 
+        } = req.body;
 
         if (!mediaFiles.length) {
             console.error("❌ Admin Feed Upload Failed: No media files detected in req.localFilesArr");
@@ -88,7 +101,23 @@ exports.adminFeedUpload = async (req, res) => {
                 // Ensure categoryIds is always an array
                 const categoryIds = Array.isArray(categoryIdInput) ? categoryIdInput : (categoryIdInput ? [categoryIdInput] : []);
 
-                const caption = specificMetadata.caption || globalCaption || "";
+                const rawSubCategory = specificMetadata.subCategory || specificMetadata.god || specificMetadata.scheduling?.god || globalSubCategory || req.body.god || null;
+                const resolvedSubCategory = rawSubCategory && String(rawSubCategory).trim() ? String(rawSubCategory).trim() : null;
+
+                const title = (specificMetadata.title || globalTitle || req.body.title || "").trim();
+                const description = (specificMetadata.description || specificMetadata.caption || globalDescription || globalCaption || req.body.description || req.body.caption || "").trim();
+                const caption = (specificMetadata.caption || specificMetadata.description || globalCaption || globalDescription || req.body.caption || req.body.description || "").trim();
+
+                // Parse tags
+                let tags = [];
+                const rawTags = specificMetadata.tags || globalTags || req.body.tags;
+                if (Array.isArray(rawTags)) {
+                    tags = rawTags.map(t => String(t).trim()).filter(Boolean);
+                } else if (typeof rawTags === 'string' && rawTags.trim()) {
+                    tags = rawTags.split(/[\s,]+/).map(t => t.replace(/^#/, '').trim()).filter(Boolean);
+                }
+                const hashtags = tags.map(t => t.toLowerCase());
+
                 const scheduleTime = specificMetadata.scheduleTime || globalScheduleTime;
                 const designData = specificMetadata.designData || globalDesignData;
 
@@ -153,6 +182,14 @@ exports.adminFeedUpload = async (req, res) => {
                     uploadMode: currentUploadType,
                     language,
                     category: categoryIds,
+                    subCategory: resolvedSubCategory,
+                    god: resolvedSubCategory,
+                    title,
+                    description,
+                    caption,
+                    dec: description || caption,
+                    tags,
+                    hashtags,
                     duration: file.duration, // Top-level duration
                     mediaUrl,
                     files: [{
@@ -166,7 +203,6 @@ exports.adminFeedUpload = async (req, res) => {
                         duration: file.duration
                     }],
                     audioFile: uploadedAudio,
-                    caption,
                     fileHash: file.fileHash,
                     createdByAccount: adminId,
                     postedBy: { userId: adminId, role: roleRef },
@@ -203,7 +239,12 @@ exports.adminFeedUpload = async (req, res) => {
                 // Update all categories
                 await Category.updateMany(
                     { _id: { $in: categoryIds } },
-                    { $addToSet: { feedIds: savedFeed._id } }
+                    { 
+                        $addToSet: { 
+                            feedIds: savedFeed._id,
+                            ...(resolvedSubCategory ? { subcategories: resolvedSubCategory } : {})
+                        } 
+                    }
                 );
 
                 // ✅ SCHEDULED FEED: Add a Bull job with delay instead of broadcasting immediately
@@ -297,6 +338,8 @@ exports.bulkFeedUpload = async (req, res) => {
 
                 const categoryIdInput = req.body.categoryId || req.body.categoryIds;
                 const categoryIds = Array.isArray(categoryIdInput) ? categoryIdInput : (categoryIdInput ? [categoryIdInput] : []);
+                const rawBulkSub = req.body.subCategory || req.body.god || null;
+                const resolvedBulkSub = rawBulkSub && String(rawBulkSub).trim() ? String(rawBulkSub).trim() : null;
 
                 let categorySlug = 'bulk-upload';
                 if (categoryIds.length) {
@@ -310,10 +353,29 @@ exports.bulkFeedUpload = async (req, res) => {
                     subType: feedType
                 });
 
+                const bulkTitle = (req.body.title || "").trim();
+                const bulkDesc = (req.body.description || req.body.caption || "").trim();
+                const bulkCaption = (req.body.caption || req.body.description || "").trim();
+                let bulkTags = [];
+                if (Array.isArray(req.body.tags)) {
+                    bulkTags = req.body.tags.map(t => String(t).trim()).filter(Boolean);
+                } else if (typeof req.body.tags === 'string' && req.body.tags.trim()) {
+                    bulkTags = req.body.tags.split(/[\s,]+/).map(t => t.replace(/^#/, '').trim()).filter(Boolean);
+                }
+                const bulkHashtags = bulkTags.map(t => t.toLowerCase());
+
                 const feedData = {
                     postType: feedType,
                     language: "en",
                     category: categoryIds,
+                    subCategory: resolvedBulkSub,
+                    god: resolvedBulkSub,
+                    title: bulkTitle,
+                    description: bulkDesc,
+                    caption: bulkCaption,
+                    dec: bulkDesc || bulkCaption,
+                    tags: bulkTags,
+                    hashtags: bulkHashtags,
                     mediaUrl: fileSave.url,
                     files: [{
                         url: fileSave.url,
@@ -327,7 +389,6 @@ exports.bulkFeedUpload = async (req, res) => {
                         storageType: "local"
                     }],
                     duration: file.duration,
-                    caption: req.body.caption || "",
                     fileHash: file.fileHash,
                     createdByAccount: adminId,
                     postedBy: { userId: adminId, role: req.role },
@@ -347,7 +408,12 @@ exports.bulkFeedUpload = async (req, res) => {
                 if (categoryIds.length) {
                     await Category.updateMany(
                         { _id: { $in: categoryIds } },
-                        { $addToSet: { feedIds: feed._id } }
+                        { 
+                            $addToSet: { 
+                                feedIds: feed._id,
+                                ...(resolvedBulkSub ? { subcategories: resolvedBulkSub } : {})
+                            } 
+                        }
                     );
                 }
 
@@ -743,12 +809,17 @@ exports.getAllFeedAdmin = async (req, res) => {
 
             return {
                 ...feed,
+                title: feed.title || "",
+                description: feed.description || feed.caption || "",
+                caption: feed.caption || feed.description || "",
+                tags: (feed.tags && feed.tags.length > 0) ? feed.tags : (feed.hashtags || []),
+                hashtags: feed.hashtags || feed.tags || [],
                 contentUrl,
                 thumbnailUrl, // Added to fix missing video images
                 type: feed.postType || "image",
                 creator: profileData ? { userName: profileData.userName || "Unknown", profileAvatar: profileData.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
                 categories: feedCategories,
-                subCategory: feed.subCategory || null,
+                subCategory: feed.subCategory || feed.god || null,
             };
         });
 
@@ -856,12 +927,21 @@ exports.updateFeedCategory = async (req, res) => {
             return res.status(400).json({ success: false, message: "feedId is required" });
         }
 
+        const currentFeed = await Feed.findById(feedId);
+        if (!currentFeed) {
+            return res.status(404).json({ success: false, message: "Feed not found" });
+        }
+
+        const cleanSubCategory = subCategory !== undefined 
+            ? (subCategory && String(subCategory).trim() ? String(subCategory).trim() : null)
+            : undefined;
+
         const updateData = {};
         if (categoryId) {
             updateData.category = [categoryId]; // Assuming one main category is selected for simplicity, or we replace the array
         }
-        if (subCategory !== undefined) {
-            updateData.subCategory = subCategory;
+        if (cleanSubCategory !== undefined) {
+            updateData.subCategory = cleanSubCategory;
         }
 
         const updatedFeed = await Feed.findByIdAndUpdate(
@@ -875,10 +955,23 @@ exports.updateFeedCategory = async (req, res) => {
         }
 
         if (categoryId) {
-            await Category.findByIdAndUpdate(
-                categoryId,
-                { $addToSet: { feedIds: feedId } }
-            );
+            const oldCategoryIds = (currentFeed.category || []).map(id => id.toString());
+            const newCatIdStr = categoryId.toString();
+            const catsToRemoveFrom = oldCategoryIds.filter(id => id !== newCatIdStr);
+
+            if (catsToRemoveFrom.length > 0) {
+                await Category.updateMany(
+                    { _id: { $in: catsToRemoveFrom } },
+                    { $pull: { feedIds: feedId } }
+                );
+            }
+
+            const catUpdate = { $addToSet: { feedIds: feedId } };
+            if (cleanSubCategory) {
+                catUpdate.$addToSet.subcategories = cleanSubCategory;
+            }
+
+            await Category.findByIdAndUpdate(categoryId, catUpdate);
         }
 
         await clearFeedsCache();

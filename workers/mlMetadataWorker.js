@@ -32,6 +32,8 @@ mlMetadataQueue.process(5, async (job) => {
         const timeout = isVideo ? 120000 : 30000; // 2 minutes for video, 30s for images
 
         // Call Python ML service for analysis
+        const startTime = Date.now();
+        console.log(`[Python ML 2/3: Analyze] 🎬 Sending feed ${feedId} to Python ML (${ML_SERVICE_URL}/analyze)...`);
         const response = await axios.post(`${ML_SERVICE_URL}/analyze`, {
             feed_id: feedId,
             caption: feed.caption,
@@ -41,7 +43,10 @@ mlMetadataQueue.process(5, async (job) => {
             mediaUrl: feed.mediaUrl
         }, { timeout });
 
-        const { metadata } = response.data;
+        const metadata = response.data.metadata || response.data.analysis || {};
+        const duration = Date.now() - startTime;
+        console.log(`[Python ML 2/3: Analyze] ✅ Feed ${feedId} analyzed in ${duration}ms by Python ML!`);
+        console.log(`   ↳ SubCategory: ${metadata.subCategory || 'N/A'}, Emotion: ${metadata.emotion || 'N/A'}, Tags: ${(metadata.recommendationTags || []).slice(0, 5).join(', ')}`);
 
         // Update Feed with generated metadata v2
         await Feed.findByIdAndUpdate(feedId, {
@@ -50,7 +55,7 @@ mlMetadataQueue.process(5, async (job) => {
                 analyzedAt: new Date(),
                 aiVersion: 2,
                 
-                contentType: metadata.contentType,
+                contentType: metadata.contentType || (isVideo ? "video" : "image"),
                 subCategory: metadata.subCategory,
                 emotion: metadata.emotion,
                 
@@ -71,10 +76,10 @@ mlMetadataQueue.process(5, async (job) => {
             }
         });
 
-        console.log(`[ML-WORKER] Successfully analyzed feed (v2): ${feedId}`);
+        console.log(`[Python ML 2/3: Analyze] 💾 Saved ML metadata to MongoDB for feed: ${feedId}`);
 
     } catch (error) {
-        console.error(`[ML-WORKER] Error analyzing feed ${feedId}:`, error.message);
+        console.error(`[Python ML 2/3: Analyze] ❌ Error analyzing feed ${feedId} with Python ML (${ML_SERVICE_URL}/analyze):`, error.message);
         
         await Feed.findByIdAndUpdate(feedId, {
             "mlMetadata.processingStatus": "failed",

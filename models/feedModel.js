@@ -72,8 +72,13 @@ const feedSchema = new mongoose.Schema(
       size: { type: Number },
       duration: { type: Number }
     },
+    // Title
+    title: { type: String, default: "", trim: true },
     // Description/caption
-    caption: { type: String, default: "" },
+    caption: { type: String, default: "", trim: true },
+    description: { type: String, default: "", trim: true },
+    dec: { type: String, default: "", trim: true },
+    tags: [{ type: String, trim: true }],
     // File hash for duplicate detection
     fileHash: {
       type: String,
@@ -550,12 +555,18 @@ feedSchema.index({ isFeatured: 1, priority: -1 });
 feedSchema.index({ category: 1, createdAt: -1 });
 // Full text search update
 feedSchema.index({
+  title: 'text',
   caption: 'text',
+  description: 'text',
+  tags: 'text',
   hashtags: 'text',
   'designMetadata.templateName': 'text'
 }, {
   weights: {
+    title: 15,
     caption: 10,
+    description: 10,
+    tags: 8,
     hashtags: 5,
     'designMetadata.templateName': 8
   },
@@ -586,17 +597,40 @@ feedSchema.pre("save", function () {
       this.postType = 'image';
     }
   }
-  // ✅ AUTO-EXTRACT HASHTAGS from caption whenever caption changes
-  if (this.isModified('caption') && this.caption) {
-    const rawTags = this.caption.match(/#([\w]+)/g) || [];
-    const cleaned = rawTags.map(tag =>
+  // Sync caption, description, and dec
+  if (!this.caption && this.description) {
+    this.caption = this.description;
+  } else if (!this.description && this.caption) {
+    this.description = this.caption;
+  }
+  if (!this.dec) {
+    this.dec = this.description || this.caption || "";
+  }
+
+  // ✅ AUTO-EXTRACT HASHTAGS from caption, description, and tags
+  if (this.isModified('caption') || this.isModified('description') || this.isModified('tags')) {
+    const textToScan = `${this.caption || ''} ${this.description || ''}`;
+    const rawTags = textToScan.match(/#([\w]+)/g) || [];
+    const fromText = rawTags.map(tag =>
       tag.replace(/^#/, '')          // remove leading #
         .toLowerCase()              // lowercase
         .replace(/[^a-z0-9_]/g, '') // remove special chars
         .trim()
     ).filter(Boolean);
+
+    const fromExplicitTags = (this.tags || []).map(tag =>
+      String(tag)
+        .replace(/^#/, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .trim()
+    ).filter(Boolean);
+
     // Deduplicate
-    this.hashtags = [...new Set(cleaned)];
+    const merged = [...new Set([...(this.hashtags || []), ...fromText, ...fromExplicitTags])];
+    if (merged.length > 0) {
+      this.hashtags = merged;
+    }
   }
 
   // ✅ PREVENT WHITE FOOTER - replace white/near-white footer background with dark fallback

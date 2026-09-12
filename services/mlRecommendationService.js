@@ -33,30 +33,60 @@ const getRecommendations = async (userId, excludeIds = [], feedId = null, limit 
         // V2 toggle check
         const isV2Enabled = process.env.RECOMMENDATION_V2 !== "false";
 
-        // 1. Call FastAPI Recommendation Engine
+        // 0. Check Redis cache first for instant response (1ms)
+        const cacheKey = `ml_recos_v2:${userId || 'guest'}`;
+        const excludeSet = new Set((excludeIds || []).map(id => id.toString()));
+
+        if (redisClient && redisClient.status === "ready") {
+            try {
+                const cachedRaw = await redisClient.get(cacheKey);
+                if (cachedRaw) {
+                    const cachedList = JSON.parse(cachedRaw);
+                    const available = cachedList.filter(r => !excludeSet.has(r.feed_id));
+                    if (available.length >= limit) {
+                        console.log(`[Python ML 1/3: Recommend] ⚡ Served ${limit} recommendations from Redis cache in 1ms for user: ${userId || 'guest'}`);
+                        return available.slice(0, limit);
+                    }
+                }
+            } catch (cacheErr) {
+                console.warn("⚠️ Redis reco cache error:", cacheErr.message);
+            }
+        }
+
+        // 1. Call FastAPI Recommendation Engine (requesting 30 items buffer)
+        const fetchLimit = Math.max(limit, 30);
         const startTime = Date.now();
+        console.log(`[Python ML 1/3: Recommend] 🚀 Calling ${ML_SERVICE_URL}/recommend for user: ${userId || 'guest'} (limit: ${fetchLimit}, v2: ${isV2Enabled})`);
         
         const response = await axios.post(`${ML_SERVICE_URL}/recommend`, {
             userId: userId,
             feedId: feedId,
             excludeIds: excludeIds, // Pass the exclusion list to Python
-            limit: limit,
+            limit: fetchLimit,
             v2: isV2Enabled,
             diversityBoost: diversityBoost,
             preferShort: preferShort
         }, {
-            timeout: 5000
+            timeout: 15000
         });
 
-        const recommendations = response.data.recommended_reels || [];
+        const recommendations = response.data.recommended_reels || response.data.recommended_feeds || [];
         const duration = Date.now() - startTime;
-        
+        console.log(`[Python ML 1/3: Recommend] ✅ Received ${recommendations.length} recommendations in ${duration}ms from Python ML`);
 
+        // Cache the buffer in Redis for 2 minutes (120s)
+        if (redisClient && redisClient.status === "ready" && recommendations.length > 0) {
+            try {
+                await redisClient.set(cacheKey, JSON.stringify(recommendations), "EX", 120);
+            } catch (setErr) {
+                console.warn("⚠️ Failed to store recommendations in Redis:", setErr.message);
+            }
+        }
 
-        return recommendations;
+        return recommendations.slice(0, limit);
 
     } catch (error) {
-        console.error("❌ ML Service Error:", error.message);
+        console.error(`[Python ML 1/3: Recommend] ❌ Failed to call Python ML (${ML_SERVICE_URL}/recommend):`, error.message);
         return [];
     }
 };
@@ -94,10 +124,14 @@ const getShownFeeds = async (userId) => {
 
 const triggerRefresh = async () => {
     try {
-        await axios.post(`${ML_SERVICE_URL}/refresh`);
-        return { success: true };
+        const startTime = Date.now();
+        console.log(`[Python ML 3/3: Refresh] 🔄 Triggering Python ML cache & score refresh (${ML_SERVICE_URL}/refresh)...`);
+        const res = await axios.post(`${ML_SERVICE_URL}/refresh`);
+        const duration = Date.now() - startTime;
+        console.log(`[Python ML 3/3: Refresh] ✅ Python ML refresh completed in ${duration}ms:`, res.data?.message || "Success");
+        return { success: true, data: res.data };
     } catch (error) {
-        console.error("❌ ML Refresh Error:", error.message);
+        console.error(`[Python ML 3/3: Refresh] ❌ Python ML Refresh Error (${ML_SERVICE_URL}/refresh):`, error.message);
         return { success: false, error: error.message };
     }
 };

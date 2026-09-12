@@ -12,15 +12,20 @@ const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://localhost:8001";
  */
 const fetchMLRecommendations = async (userId, feedId, excludeIds, limit) => {
   try {
+    const startTime = Date.now();
+    console.log(`[Python ML 1/3: Recommend (Analytics)] 🚀 Calling ${ML_SERVICE_URL}/recommend for user: ${userId || 'guest'} (limit: ${limit})`);
     const response = await axios.post(`${ML_SERVICE_URL}/recommend`, {
       userId: userId, 
       feedId: feedId, 
       excludeIds: excludeIds, 
       limit: limit
-    });
-    return response.data.recommended_reels || [];
+    }, { timeout: 15000 });
+    const recommendations = response.data.recommended_reels || response.data.recommended_feeds || [];
+    const duration = Date.now() - startTime;
+    console.log(`[Python ML 1/3: Recommend (Analytics)] ✅ Received ${recommendations.length} recommendations in ${duration}ms from Python ML`);
+    return recommendations;
   } catch (err) {
-    console.error("⚠️ ML Service unreachable:", err.message);
+    console.error(`[Python ML 1/3: Recommend (Analytics)] ⚠️ ML Service unreachable (${ML_SERVICE_URL}/recommend):`, err.message);
     return [];
   }
 };

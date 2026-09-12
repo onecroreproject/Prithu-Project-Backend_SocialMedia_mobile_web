@@ -153,9 +153,14 @@ exports.getAllPublicFeeds = async (req, res) => {
                     _id: 1,
                     postType: 1,
                     mediaUrl: 1,
+                    title: 1,
                     caption: 1,
+                    description: 1,
+                    tags: 1,
+                    hashtags: 1,
                     creatorData: 1,
                     category: 1,
+                    subCategory: 1,
                     createdAt: 1
                 }
             }
