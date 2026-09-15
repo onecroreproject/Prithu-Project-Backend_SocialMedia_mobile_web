@@ -4,71 +4,149 @@ const Feed = require('../../models/feedModel');
 const { clearCategoryCache } = require('../categoriesController');
 const { clearFeedsCache } = require('../feedControllers/feedsController');
 
-
-
 exports.adminAddCategory = async (req, res) => {
   try {
-    const { names } = req.body; // string: "Men, Women, Kids"
-    if (!names) {
-      return res.status(400).json({ message: "Category names are required" });
+    const { name, names, categoryName, subcategories } = req.body;
+    const rawNames = name || names || categoryName;
+
+    if (!rawNames || (typeof rawNames === "string" && !rawNames.trim())) {
+      return res.status(400).json({ message: "Category name is required" });
     }
 
-    // ✅ Convert string into array
-    const inputCategories = names
-      .split(",")
-      .map((n) => n.trim())
-      .filter((n) => n.length > 0)
-      .map((name) => name.charAt(0).toUpperCase() + name.slice(1));
+    // Process subcategories
+    let subcategoriesArray = [];
+    if (subcategories && typeof subcategories === "string") {
+      subcategoriesArray = subcategories
+        .split(",")
+        .map((sub) => sub.trim())
+        .filter((sub) => sub.length > 0)
+        .map((sub) => sub.charAt(0).toUpperCase() + sub.slice(1));
+    } else if (Array.isArray(subcategories)) {
+      subcategoriesArray = subcategories
+        .map((sub) => (typeof sub === "string" ? sub.trim() : ""))
+        .filter((sub) => sub.length > 0)
+        .map((sub) => sub.charAt(0).toUpperCase() + sub.slice(1));
+    }
+    // Deduplicate subcategories
+    subcategoriesArray = [...new Set(subcategoriesArray)];
+
+    // Convert rawNames into array
+    let inputCategories = [];
+    if (typeof rawNames === "string") {
+      inputCategories = rawNames
+        .split(",")
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0)
+        .map((n) => n.charAt(0).toUpperCase() + n.slice(1));
+    } else if (Array.isArray(rawNames)) {
+      inputCategories = rawNames
+        .map((n) => (typeof n === "string" ? n.trim() : ""))
+        .filter((n) => n.length > 0)
+        .map((n) => n.charAt(0).toUpperCase() + n.slice(1));
+    }
+    inputCategories = [...new Set(inputCategories)];
 
     if (!inputCategories.length) {
       return res.status(400).json({ message: "No valid category names provided" });
     }
 
-    // Find existing categories
+    // Find existing categories (case-insensitive)
     const existingCategories = await Categories.find({
-      name: { $in: inputCategories },
-    }).select("name").lean();
+      name: { $in: inputCategories.map((n) => new RegExp(`^${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")) },
+    });
 
-    const existingNames = existingCategories.map((cat) => cat.name);
+    const existingNames = existingCategories.map((cat) => cat.name.toLowerCase());
+
+    // If single category submitted and it already exists
+    if (inputCategories.length === 1 && existingCategories.length > 0) {
+      const existing = existingCategories[0];
+      if (subcategoriesArray.length > 0) {
+        // Merge new subcategories into existing category
+        const currentSubs = existing.subcategories || [];
+        const mergedSubs = [...new Set([...currentSubs, ...subcategoriesArray])];
+        existing.subcategories = mergedSubs;
+        await existing.save();
+
+        clearCategoryCache();
+
+        return res.status(200).json({
+          success: true,
+          message: `Category "${existing.name}" updated with new subcategories`,
+          addedCategories: [{
+            id: existing._id,
+            categoryId: existing._id,
+            name: existing.name,
+            categoriesName: existing.name,
+            subcategories: existing.subcategories || [],
+          }],
+          category: {
+            id: existing._id,
+            categoryId: existing._id,
+            name: existing.name,
+            categoriesName: existing.name,
+            subcategories: existing.subcategories || [],
+          }
+        });
+      } else {
+        return res.status(409).json({ message: `Category "${existing.name}" already exists` });
+      }
+    }
 
     // Filter out duplicates
     const newCategories = inputCategories.filter(
-      (name) => !existingNames.includes(name)
+      (n) => !existingNames.includes(n.toLowerCase())
     );
 
     if (!newCategories.length) {
-      return res.status(409).json({ message: "All categories already exist" });
+      return res.status(409).json({ message: `Category "${inputCategories.join(", ")}" already exists` });
     }
 
+    // Prepare docs to insert
+    const docsToInsert = newCategories.map((catName) => {
+      const doc = { name: catName, subcategories: [] };
+      if (subcategoriesArray.length > 0) {
+        doc.subcategories = subcategoriesArray;
+      }
+      return doc;
+    });
+
     // Insert new categories
-    const createdCategories = await Categories.insertMany(
-      newCategories.map((name) => ({ name }))
-    );
+    const createdCategories = await Categories.insertMany(docsToInsert);
 
     clearCategoryCache(); // 👈 Clear cache for instant UI update
 
     return res.status(201).json({
-      message: "Categories added successfully",
+      success: true,
+      message: "Category added successfully",
       addedCategories: createdCategories.map((cat) => ({
         id: cat._id,
+        categoryId: cat._id,
         name: cat.name,
+        categoriesName: cat.name,
+        subcategories: cat.subcategories || [],
       })),
+      category: createdCategories.length === 1 ? {
+        id: createdCategories[0]._id,
+        categoryId: createdCategories[0]._id,
+        name: createdCategories[0].name,
+        categoriesName: createdCategories[0].name,
+        subcategories: createdCategories[0].subcategories || [],
+      } : null,
     });
   } catch (error) {
     console.error("Error adding categories:", error);
+    if (error.code === 11000) {
+      return res.status(409).json({ message: "A category with this name already exists" });
+    }
     return res
       .status(500)
       .json({ message: "Server error", error: error.message });
   }
 };
 
-
-
-
-
 exports.deleteCategory = async (req, res) => {
   try {
-    const id = req.params.id || req.body.id || req.body.categoryId;
+    const id = req.params.id || req.body.id || req.body.categoryId || req.body._id;
 
     if (!id) {
       return res.status(400).json({ message: "Category ID is required" });
@@ -104,6 +182,7 @@ exports.deleteCategory = async (req, res) => {
     await clearFeedsCache(); // 👈 Clear feeds cache since feeds were deleted
 
     return res.status(200).json({
+      success: true,
       message: "Category and related feeds deleted successfully",
       deletedCategory: { id: category._id, name: category.name },
       deletedFeeds: feeds.map((f) => ({ id: f._id, contentUrl: f.contentUrl })),
@@ -116,18 +195,19 @@ exports.deleteCategory = async (req, res) => {
   }
 };
 
-
-
-// PUT /admin/category/update
+// PUT /admin/update/category or /admin/category/update
 exports.updateCategory = async (req, res) => {
   try {
-    const { id, name, subcategories } = req.body;
-    if (!id || !name) {
+    const id = req.params.id || req.body.id || req.body.categoryId || req.body._id;
+    const { name, categoryName, subcategories } = req.body;
+    const targetName = name || categoryName;
+
+    if (!id || !targetName) {
       return res.status(400).json({ message: "Category ID and new name are required" });
     }
 
     // Capitalize first letter
-    const formattedName = name.charAt(0).toUpperCase() + name.slice(1);
+    const formattedName = targetName.trim().charAt(0).toUpperCase() + targetName.trim().slice(1);
     
     // Process subcategories
     let subcategoriesArray = [];
@@ -139,10 +219,11 @@ exports.updateCategory = async (req, res) => {
         .map(sub => sub.charAt(0).toUpperCase() + sub.slice(1));
     } else if (Array.isArray(subcategories)) {
       subcategoriesArray = subcategories
-        .map(sub => sub.trim())
+        .map(sub => (typeof sub === "string" ? sub.trim() : ""))
         .filter(sub => sub.length > 0)
         .map(sub => sub.charAt(0).toUpperCase() + sub.slice(1));
     }
+    subcategoriesArray = [...new Set(subcategoriesArray)];
 
     const category = await Categories.findByIdAndUpdate(
       id,
@@ -160,11 +241,21 @@ exports.updateCategory = async (req, res) => {
     clearCategoryCache(); // 👈 Clear cache for instant UI update
 
     res.status(200).json({
+      success: true,
       message: "Category updated successfully",
-      updatedCategory: { id: category._id, name: category.name },
+      updatedCategory: { 
+        id: category._id, 
+        categoryId: category._id,
+        name: category.name,
+        categoriesName: category.name,
+        subcategories: category.subcategories || [],
+      },
     });
   } catch (error) {
     console.error("Error updating category:", error);
+    if (error.code === 11000) {
+      return res.status(409).json({ message: "A category with this name already exists" });
+    }
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };

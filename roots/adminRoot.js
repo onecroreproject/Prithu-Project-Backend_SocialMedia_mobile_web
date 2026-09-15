@@ -312,12 +312,23 @@ router.delete("/admin/feed/:feedId/category/:categoryId", auth, checkPermission(
 router.get("/get/trending/feed", auth, checkPermission('canManageTrendingFeeds'), adminGetTrendingFeeds);
 /* --------------------- Admin Category API --------------------- */
 router.post('/admin/add/feed/category', auth, checkPermission('canManageCategories'), adminAddCategory);
+router.post('/admin/add/category', auth, checkPermission('canManageCategories'), adminAddCategory);
+router.post('/admin/create/category', auth, checkPermission('canManageCategories'), adminAddCategory);
+router.post('/add/feed/category', auth, checkPermission('canManageCategories'), adminAddCategory);
+
 router.delete('/admin/feed/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/admin/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category/:id', auth, checkPermission('canManageCategories'), deleteCategory);
 router.delete('/delete/category', auth, checkPermission('canManageCategories'), deleteCategory); // For body-based ID
+router.delete('/admin/delete/category', auth, checkPermission('canManageCategories'), deleteCategory);
+
 router.get('/admin/get/feed/category', auth, checkPermission('canManageCategories'), getAllCategories);
+router.get('/admin/get/category', auth, checkPermission('canManageCategories'), getAllCategories);
+router.get('/admin/getall/categories', auth, checkPermission('canManageCategories'), getAllCategories);
+
 router.put('/admin/update/category', auth, checkPermission('canManageCategories'), updateCategory);
+router.put('/admin/update/category/:id', auth, checkPermission('canManageCategories'), updateCategory);
+router.put('/admin/category/update', auth, checkPermission('canManageCategories'), updateCategory);
 
 /* --------------------- Admin Subscription API --------------------- */
 router.post('/admin/subscription/create', auth, checkPermission('canManageSubscriptions'), createPlan);

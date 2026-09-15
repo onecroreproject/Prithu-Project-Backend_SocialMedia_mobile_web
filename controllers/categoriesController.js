@@ -36,7 +36,7 @@ exports.getAllCategories = async (req, res) => {
       .lean();
 
     if (!categories.length) {
-      return res.status(404).json({ message: "No categories found" });
+      return res.status(200).json({ success: true, message: "No categories found", categories: [] });
     }
 
     // Step 2: Aggregate feed stats by category (category stored as Array of ObjectId)
