@@ -39,7 +39,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:5175",
-  "http://192.168.1.28:5000",
+  "http://192.168.1.20:5000",
   "http://192.168.1.29:5173",
   "https://admin.prithu.app",
   "https://www.prithu.app",
@@ -134,6 +134,18 @@ app.get("/.well-known/apple-app-site-association", (req, res) => {
           paths: ["/share/post/*", "/profile/*", "/ai/prompt/*"]
         }
       ]
+    }
+  });
+});
+
+//
+// 🎯 APP-ADS.TXT (IAB Tech Lab standard for Google AdMob)
+//
+app.get("/app-ads.txt", (req, res) => {
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.sendFile(path.join(__dirname, "public", "app-ads.txt"), (err) => {
+    if (err) {
+      res.send("google.com, pub-6485260803398356, DIRECT, f08c47fec0942fa0\n");
     }
   });
 });

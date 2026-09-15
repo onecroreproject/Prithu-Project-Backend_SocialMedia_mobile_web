@@ -9,6 +9,12 @@ const ProfileSettings = require('../models/profileSettingModel');
 
 const { extractThemeColor } = require("../middlewares/helper/extractThemeColor.js");
 const UserFeedActions = require('../models/userFeedInterSectionModel');
+const {
+  getTodaySpecialDayInfo,
+  getTodayWeekGodsInfo,
+  getSpecialDaysCategoryId,
+  isSpecialDaysCategory,
+} = require("../helpers/specialDayHelper");
 
 // In-memory cache for category stats
 const categoryStatsCache = new Map();
@@ -16,6 +22,32 @@ const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 exports.clearCategoryCache = () => {
   categoryStatsCache.clear();
+};
+
+exports.getTodaySpecialDay = async (req, res) => {
+  try {
+    const todayInfo = await getTodaySpecialDayInfo();
+    return res.status(200).json({
+      success: true,
+      ...todayInfo,
+    });
+  } catch (error) {
+    console.error("Error fetching today's special day:", error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+exports.getTodayWeekGods = async (req, res) => {
+  try {
+    const todayGodsInfo = await getTodayWeekGodsInfo();
+    return res.status(200).json({
+      success: true,
+      ...todayGodsInfo,
+    });
+  } catch (error) {
+    console.error("Error fetching today's week gods:", error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
 };
 
 exports.getAllCategories = async (req, res) => {
@@ -127,6 +159,11 @@ exports.getUserPostCategories = async (req, res) => {
 
 exports.getCategoriesWithFeeds = async (req, res) => {
   try {
+    const [todayInfo, todayGodsInfo] = await Promise.all([
+      getTodaySpecialDayInfo(),
+      getTodayWeekGodsInfo(),
+    ]);
+
     // 1️⃣ Fetch non-interested categories if user is authenticated
     let nonInterestedCategoryIds = [];
     const userId = req.Id;
@@ -140,43 +177,80 @@ exports.getCategoriesWithFeeds = async (req, res) => {
       feedIds: { $exists: true, $ne: [] },
       _id: { $nin: nonInterestedCategoryIds }
     })
-      .select("_id name feedIds")
+      .select("_id name feedIds subcategories")
       .lean();
 
     if (!categories.length) {
-      return res.status(404).json({
+      return res.status(200).json({
         message: "No categories with feeds found",
         categories: [],
+        todaySpecialDay: todayInfo,
+        todayWeekGods: todayGodsInfo,
       });
     }
 
-    // 3️⃣ Optional: filter out categories where all feedIds do not exist in Feed collection
+    // 3️⃣ Filter and enrich categories based on Special Day and Week God rules
     const filteredCategories = [];
     for (const cat of categories) {
-      const feedCount = await Feed.countDocuments({
+      const isSpecialCat = isSpecialDaysCategory(cat);
+      const isGodCat = /^(god|devotional|bhakti|spiritual)$/i.test((cat.name || "").trim());
+
+      // Normal day -> Hide Special Days category
+      if (isSpecialCat && !todayInfo.isSpecialDayToday) {
+        continue;
+      }
+
+      let feedQuery = {
         _id: { $in: cat.feedIds },
         category: { $nin: nonInterestedCategoryIds }
-      });
-      if (feedCount > 0) {
+      };
+
+      let subcategoriesToReturn = cat.subcategories || [];
+
+      // Special day today -> Only count/match posts for today's special day
+      if (isSpecialCat && todayInfo.isSpecialDayToday) {
+        const specialDayRegexes = todayInfo.specialDayNames.map(
+          (n) => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+        );
+        feedQuery.$or = [
+          { subCategory: { $in: specialDayRegexes } },
+          { title: { $in: specialDayRegexes } },
+          { caption: { $in: specialDayRegexes } },
+          { tags: { $in: specialDayRegexes } },
+          { hashtags: { $in: specialDayRegexes } }
+        ];
+        subcategoriesToReturn = todayInfo.specialDayNames;
+      }
+
+      // God category -> Prioritize today's Week Gods in subcategories
+      if (isGodCat && todayGodsInfo?.gods?.length > 0) {
+        subcategoriesToReturn = Array.from(new Set([...todayGodsInfo.gods, ...(cat.subcategories || [])]));
+      }
+
+      const feedCount = await Feed.countDocuments(feedQuery);
+      if (feedCount > 0 || (isSpecialCat && todayInfo.isSpecialDayToday) || isGodCat) {
         filteredCategories.push({
           categoryId: cat._id,
-          categoryName: cat.name,
+          categoryName: isSpecialCat && todayInfo.primarySpecialDay
+            ? `${todayInfo.primarySpecialDay}`
+            : cat.name,
+          rawCategoryName: cat.name,
+          isSpecialDay: isSpecialCat,
+          isGodCategory: isGodCat,
+          todayGods: isGodCat ? todayGodsInfo?.gods : undefined,
+          todayWeekday: isGodCat ? todayGodsInfo?.currentDay : undefined,
+          subcategories: subcategoriesToReturn,
           totalFeeds: feedCount,
         });
       }
     }
 
-    if (!filteredCategories.length) {
-      return res.status(404).json({
-        message: "No categories with active feeds found",
-        categories: [],
-      });
-    }
-
-    // 3️⃣ Return response
+    // 4️⃣ Return response
     res.status(200).json({
       message: "Categories with feeds retrieved successfully",
       categories: filteredCategories,
+      todaySpecialDay: todayInfo,
+      todayWeekGods: todayGodsInfo,
     });
   } catch (error) {
     console.error("Error fetching categories with feeds:", error);
@@ -297,11 +371,49 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
       return res.status(404).json({ message: "Category not found" });
     }
 
-    // Optimized: Pre-fetch profiles for batch processing
-    const feeds = await Feed.find({
+    const isSpecialCat = isSpecialDaysCategory(category);
+    const todayInfo = await getTodaySpecialDayInfo();
+
+    // 🛑 Special Day restriction: On normal days, return empty
+    if (isSpecialCat && !todayInfo.isSpecialDayToday) {
+      return res.status(200).json({
+        category: {
+          categoryId: category._id,
+          categoryName: category.name,
+        },
+        feeds: [],
+        pagination: {
+          total: 0,
+          page,
+          limit,
+          hasMore: false,
+        },
+        message: "No special day today",
+      });
+    }
+
+    // Build feed match filter
+    const feedQuery = {
       category: categoryId,
       _id: { $nin: hiddenPostIds },
-    })
+    };
+
+    // If Special Day today -> only match posts for today's active special day
+    if (isSpecialCat && todayInfo.isSpecialDayToday) {
+      const specialDayRegexes = todayInfo.specialDayNames.map(
+        (n) => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+      );
+      feedQuery.$or = [
+        { subCategory: { $in: specialDayRegexes } },
+        { title: { $in: specialDayRegexes } },
+        { caption: { $in: specialDayRegexes } },
+        { tags: { $in: specialDayRegexes } },
+        { hashtags: { $in: specialDayRegexes } },
+      ];
+    }
+
+    // Optimized: Pre-fetch profiles for batch processing
+    const feeds = await Feed.find(feedQuery)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -312,7 +424,9 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
       return res.status(200).json({
         category: {
           categoryId: category._id,
-          categoryName: category.name,
+          categoryName: isSpecialCat && todayInfo.primarySpecialDay
+            ? todayInfo.primarySpecialDay
+            : category.name,
         },
         feeds: [],
         pagination: {
@@ -383,12 +497,9 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
       userActions.disLikeFeeds?.forEach(d => userActionMap[d.feedId.toString()] = { ...userActionMap[d.feedId.toString()], isDisliked: true });
     }
 
-    // 3️⃣ Enrich feeds with theme colors and avatar frames (batch process theme colors)
-
-
+    // 3️⃣ Enrich feeds with theme colors and avatar frames
     const enrichedFeeds = await Promise.all(
       feeds.map(async (feed) => {
-
         let themeColor = {
           primary: "#ffffff",
           secondary: "#cccccc",
@@ -419,8 +530,8 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
           userName: profile.userName,
           profileAvatar: profile.profileAvatar,
           ...analytics,
-          viewsCount: 0, // Placeholder, implement if needed
-          commentsCount: 0, // Placeholder, implement if needed
+          viewsCount: 0,
+          commentsCount: 0,
           ...actions,
           framedAvatar: feed.profileAvatar || null,
           themeColor,
@@ -430,15 +541,14 @@ exports.getfeedWithCategoryWithId = async (req, res) => {
     );
 
     // 4️⃣ Pagination
-    const totalFeeds = await Feed.countDocuments({
-      category: categoryId,
-      _id: { $nin: hiddenPostIds },
-    });
+    const totalFeeds = await Feed.countDocuments(feedQuery);
 
     res.status(200).json({
       category: {
         categoryId: category._id,
-        categoryName: category.name,
+        categoryName: isSpecialCat && todayInfo.primarySpecialDay
+          ? todayInfo.primarySpecialDay
+          : category.name,
       },
       feeds: enrichedFeeds,
       pagination: {

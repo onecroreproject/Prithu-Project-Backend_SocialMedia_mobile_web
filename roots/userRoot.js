@@ -83,7 +83,9 @@ const {
     getFeedLanguageCategories,
     getUserPostCategories,
     getFeedWithCategoryId,
-    saveInterestedCategory
+    saveInterestedCategory,
+    getTodaySpecialDay,
+    getTodayWeekGods,
 } = require('../controllers/categoriesController');
 
 const {
@@ -473,6 +475,8 @@ router.get("/get/trending/feeds", auth, (req, res, next) => { console.log("REQ: 
 router.get('/get/all/feeds/user', auth, getAllFeedsByUserId);
 router.get('/get/all/public/feeds', getAllPublicFeeds);
 router.get('/get/feed/with/category/:id', auth, getfeedWithCategoryWithId);
+router.get('/get/today/special-day', getTodaySpecialDay);
+router.get('/get/today/week-gods', getTodayWeekGods);
 router.get('/get/user/info/associated/feed/:feedId', auth, getUserInfoAssociatedFeed);
 router.get("/get/feed/category", getCategoriesWithFeeds);
 router.get('/get/feed/:feedId', auth, getSingleFeedById);

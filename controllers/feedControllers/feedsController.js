@@ -36,6 +36,12 @@ const path = require("path");
 const ProfileVisibility = require("../../models/profileVisibilitySchema.js")
 const { getMediaUrl } = require("../../utils/storageEngine");
 const mlRecommendationService = require("../../services/mlRecommendationService");
+const {
+  getTodaySpecialDayInfo,
+  getTodayWeekGodsInfo,
+  getSpecialDaysCategoryId,
+  isSpecialDaysCategory,
+} = require("../../helpers/specialDayHelper");
 
 const FEEDS_CACHE_PREFIX = 'user_feeds:';
 
@@ -279,31 +285,82 @@ exports.getAllFeedsByUserId = async (req, res) => {
     /* -----------------------------------------------------
        ✅ 3️⃣ AGGREGATION PIPELINE (Hybrid Sort & Randomization)
     ------------------------------------------------------*/
-    const hasValidCategory = Boolean(categoryId && categoryId !== "all" && mongoose.Types.ObjectId.isValid(categoryId));
+    const [todayInfo, todayGodsInfo] = await Promise.all([
+      getTodaySpecialDayInfo(),
+      getTodayWeekGodsInfo(),
+    ]);
+    const specialDaysCatId = await getSpecialDaysCategoryId();
+
+    let resolvedCategoryId = categoryId;
+    if ((categoryId === 'special_day' || categoryId === 'special') && specialDaysCatId) {
+      resolvedCategoryId = specialDaysCatId.toString();
+    }
+
+    const hasValidCategory = Boolean(resolvedCategoryId && resolvedCategoryId !== "all" && mongoose.Types.ObjectId.isValid(resolvedCategoryId));
+    const isSpecialCategoryRequested = Boolean(
+      (categoryId === 'special_day' || categoryId === 'special') ||
+      (hasValidCategory && specialDaysCatId && resolvedCategoryId.toString() === specialDaysCatId.toString())
+    );
+
+    // If Special Days category is requested on a normal day -> return empty feeds
+    if (isSpecialCategoryRequested && !todayInfo.isSpecialDayToday) {
+      return res.status(200).json({
+        data: {
+          feeds: [],
+          viewer,
+          footerVisibilityConfig,
+          todaySpecialDay: todayInfo,
+        },
+        message: "No special day today",
+      });
+    }
+
     const finalExcludeIds = hasValidCategory
       ? hiddenPostIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id))
       : excludeIds;
 
+    // On normal days, exclude Special Days category from "All" home feed
+    let effectiveExcludedCategoryIds = [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS];
+    if (specialDaysCatId && !todayInfo.isSpecialDayToday) {
+      effectiveExcludedCategoryIds.push(specialDaysCatId);
+    }
+
+    const matchStage = {
+      _id: { $nin: finalExcludeIds },
+      isApproved: true,
+      isDeleted: false,
+      status: { $in: ["published", "Published"] },
+      category: hasValidCategory
+        ? { $in: [new mongoose.Types.ObjectId(resolvedCategoryId), resolvedCategoryId.toString()] }
+        : { $nin: effectiveExcludedCategoryIds },
+      $and: [
+        {
+          $or: [
+            { status: { $in: ["published", "Published"] }, isScheduled: { $ne: true } },
+            { status: { $in: ["published", "Published"] }, isScheduled: true, scheduleDate: { $lte: new Date() } }
+          ]
+        }
+      ],
+      ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } : postType ? { postType } : {})
+    };
+
+    // If Special Days category requested on a special day -> only match posts for today's active special day
+    if (isSpecialCategoryRequested && todayInfo.isSpecialDayToday) {
+      const specialDayRegexes = todayInfo.specialDayNames.map(
+        (n) => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+      );
+      matchStage.$or = [
+        { subCategory: { $in: specialDayRegexes } },
+        { title: { $in: specialDayRegexes } },
+        { caption: { $in: specialDayRegexes } },
+        { tags: { $in: specialDayRegexes } },
+        { hashtags: { $in: specialDayRegexes } },
+      ];
+    }
+
     const pipeline = [
       {
-        $match: {
-          _id: { $nin: finalExcludeIds },
-          isApproved: true,
-          isDeleted: false,
-          status: { $in: ["published", "Published"] },
-          category: hasValidCategory
-            ? { $in: [new mongoose.Types.ObjectId(categoryId), categoryId.toString()] }
-            : { $nin: [...notInterestedCategoryIds, ...EXCLUDED_CATEGORY_IDS] },
-          $and: [
-            {
-              $or: [
-                { status: { $in: ["published", "Published"] }, isScheduled: { $ne: true } },
-                { status: { $in: ["published", "Published"] }, isScheduled: true, scheduleDate: { $lte: new Date() } }
-              ]
-            }
-          ],
-          ...(postType === "image" ? { postType: { $in: ["image", "image+audio"] } } : postType ? { postType } : {})
-        },
+        $match: matchStage
       }
     ];
 
@@ -509,6 +566,8 @@ exports.getAllFeedsByUserId = async (req, res) => {
       data: {
         viewer,
         feeds: finalEnrichedFeeds,
+        todaySpecialDay: todayInfo,
+        todayWeekGods: todayGodsInfo,
         pagination: {
           page, 
           limit, 
