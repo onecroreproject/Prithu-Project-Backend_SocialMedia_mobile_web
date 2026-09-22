@@ -10,7 +10,10 @@ const { getMediaUrl } = require("../utils/storageEngine");
 const feedQueue = createQueue("feed-posts");
 
 feedQueue.process(async (job) => {
-  const { feedId } = job.data;
+  const feedId = job.data?.feedId || job.data?.id || job.data?._id || (typeof job.data === 'string' ? job.data : null);
+  if (!feedId) {
+    return;
+  }
   console.log(`🚀 Processing scheduled feed job: ${feedId}`);
 
   // ✅ Fetch the feed

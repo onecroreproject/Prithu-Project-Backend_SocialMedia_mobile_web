@@ -62,9 +62,9 @@ exports.getAllCategories = async (req, res) => {
       });
     }
 
-    // Step 1: Fetch all categories (only _id + name + subcategories)
-    const categories = await Categories.find({}, { _id: 1, name: 1, subcategories: 1 })
-      .sort({ createdAt: -1 })
+    // Step 1: Fetch all categories (only _id + name + subcategories + order)
+    const categories = await Categories.find({}, { _id: 1, name: 1, subcategories: 1, order: 1 })
+      .sort({ order: 1, createdAt: -1 })
       .lean();
 
     if (!categories.length) {
@@ -98,6 +98,7 @@ exports.getAllCategories = async (req, res) => {
         categoryId: cat._id,
         categoriesName: cat.name,
         subcategories: cat.subcategories || [],
+        order: cat.order !== undefined && cat.order !== null ? cat.order : 0,
         totalFeeds: stat ? stat.totalFeeds : 0,
         videoCount: stat ? stat.videoCount : 0,
         imageCount: stat ? stat.imageCount : 0,
@@ -125,19 +126,20 @@ exports.getAllCategories = async (req, res) => {
 
 exports.getUserPostCategories = async (req, res) => {
   try {
-    // Fetch only category _id and name
-    const categories = await Categories.find({}, { _id: 1, name: 1 })
-      .sort({ createdAt: -1 })
+    // Fetch only category _id, name, order
+    const categories = await Categories.find({}, { _id: 1, name: 1, order: 1 })
+      .sort({ order: 1, createdAt: -1 })
       .lean();
 
     if (!categories.length) {
       return res.status(404).json({ message: "No categories found" });
     }
 
-    // Format response (optional renaming for clarity)
+    // Format response
     const formattedCategories = categories.map(cat => ({
       categoryId: cat._id,
       categoryName: cat.name,
+      order: cat.order || 0,
     }));
 
     // Send response
@@ -177,7 +179,8 @@ exports.getCategoriesWithFeeds = async (req, res) => {
       feedIds: { $exists: true, $ne: [] },
       _id: { $nin: nonInterestedCategoryIds }
     })
-      .select("_id name feedIds subcategories")
+      .select("_id name feedIds subcategories order")
+      .sort({ order: 1, createdAt: -1 })
       .lean();
 
     if (!categories.length) {
@@ -235,6 +238,7 @@ exports.getCategoriesWithFeeds = async (req, res) => {
             ? `${todayInfo.primarySpecialDay}`
             : cat.name,
           rawCategoryName: cat.name,
+          order: cat.order !== undefined && cat.order !== null ? cat.order : 0,
           isSpecialDay: isSpecialCat,
           isGodCategory: isGodCat,
           todayGods: isGodCat ? todayGodsInfo?.gods : undefined,

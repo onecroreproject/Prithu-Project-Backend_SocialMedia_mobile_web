@@ -6,7 +6,7 @@ const redisClient = require("../Config/redisConfig");
 const hashtagTrendingQueue = createQueue("hashtag-trending");
 
 // Worker / Processor
-hashtagTrendingQueue.process(async (job, done) => {
+hashtagTrendingQueue.process(async (job) => {
   try {
     console.log("🔄 Syncing hashtags from Redis → MongoDB");
 
@@ -14,7 +14,7 @@ hashtagTrendingQueue.process(async (job, done) => {
 
     if (!redisData || Object.keys(redisData).length === 0) {
       console.log("⚠️ No hashtags to sync.");
-      return done();
+      return;
     }
 
     // 1️⃣ Sync Redis → MongoDB
@@ -44,11 +44,9 @@ hashtagTrendingQueue.process(async (job, done) => {
     );
 
     console.log("🔥 Trending hashtags updated successfully");
-
-    done();
   } catch (error) {
     console.error("❌ Error syncing hashtags:", error);
-    done(new Error("Hashtag update worker failed"));
+    throw error;
   }
 });
 

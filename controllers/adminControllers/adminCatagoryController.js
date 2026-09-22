@@ -101,9 +101,12 @@ exports.adminAddCategory = async (req, res) => {
       return res.status(409).json({ message: `Category "${inputCategories.join(", ")}" already exists` });
     }
 
+    const orderNum = Number(req.body.order);
+    const initialOrder = !isNaN(orderNum) ? orderNum : 0;
+
     // Prepare docs to insert
     const docsToInsert = newCategories.map((catName) => {
-      const doc = { name: catName, subcategories: [] };
+      const doc = { name: catName, subcategories: [], order: initialOrder };
       if (subcategoriesArray.length > 0) {
         doc.subcategories = subcategoriesArray;
       }
@@ -124,6 +127,7 @@ exports.adminAddCategory = async (req, res) => {
         name: cat.name,
         categoriesName: cat.name,
         subcategories: cat.subcategories || [],
+        order: cat.order || 0,
       })),
       category: createdCategories.length === 1 ? {
         id: createdCategories[0]._id,
@@ -131,6 +135,7 @@ exports.adminAddCategory = async (req, res) => {
         name: createdCategories[0].name,
         categoriesName: createdCategories[0].name,
         subcategories: createdCategories[0].subcategories || [],
+        order: createdCategories[0].order || 0,
       } : null,
     });
   } catch (error) {
@@ -225,12 +230,18 @@ exports.updateCategory = async (req, res) => {
     }
     subcategoriesArray = [...new Set(subcategoriesArray)];
 
+    const updateFields = {
+      name: formattedName,
+      subcategories: subcategoriesArray,
+    };
+
+    if (req.body.order !== undefined && req.body.order !== null && !isNaN(Number(req.body.order))) {
+      updateFields.order = Number(req.body.order);
+    }
+
     const category = await Categories.findByIdAndUpdate(
       id,
-      { 
-        name: formattedName,
-        subcategories: subcategoriesArray
-      },
+      { $set: updateFields },
       { new: true }
     );
 
@@ -249,6 +260,7 @@ exports.updateCategory = async (req, res) => {
         name: category.name,
         categoriesName: category.name,
         subcategories: category.subcategories || [],
+        order: category.order || 0,
       },
     });
   } catch (error) {
@@ -257,6 +269,111 @@ exports.updateCategory = async (req, res) => {
       return res.status(409).json({ message: "A category with this name already exists" });
     }
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Helper for transient DB retry
+const executeWithRetry = async (fn, maxRetries = 2, delayMs = 300) => {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const isTransient =
+        err.name === "MongoNetworkError" ||
+        err.name === "MongoServerSelectionError" ||
+        err.message?.includes("ECONNRESET") ||
+        err.message?.includes("connection reset") ||
+        err.message?.includes("socket closed");
+      if (isTransient && attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+};
+
+// PUT /admin/categories/reorder
+// Accepts: { categories: [{ id, order }, ...] } OR { orderedIds: [id1, id2, ...] }
+exports.reorderCategories = async (req, res) => {
+  try {
+    const categoriesInput = req.body.categories || req.body.orderList || req.body.orderedIds;
+
+    if (!categoriesInput || !Array.isArray(categoriesInput)) {
+      return res.status(400).json({ message: "Categories array is required for reordering" });
+    }
+
+    const bulkOps = categoriesInput.map((item, index) => {
+      const catId = typeof item === "object" ? (item.id || item.categoryId || item._id) : item;
+      const order = typeof item === "object" && typeof item.order === "number" ? item.order : index + 1;
+
+      return {
+        updateOne: {
+          filter: { _id: catId },
+          update: { $set: { order } },
+        },
+      };
+    }).filter(op => Boolean(op.updateOne.filter._id));
+
+    if (bulkOps.length > 0) {
+      await executeWithRetry(() => Categories.bulkWrite(bulkOps));
+    }
+
+    clearCategoryCache();
+
+    return res.status(200).json({
+      success: true,
+      message: "Categories reordered successfully",
+      count: bulkOps.length,
+    });
+  } catch (error) {
+    console.error("Error reordering categories:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// PUT /admin/category/order or PUT /admin/category/:id/order
+// Accepts: { id, categoryId, order }
+exports.assignCategoryOrder = async (req, res) => {
+  try {
+    const id = req.params.id || req.body.id || req.body.categoryId || req.body._id;
+    const order = Number(req.body.order);
+
+    if (!id || isNaN(order)) {
+      return res.status(400).json({ message: "Valid category ID and numeric order are required" });
+    }
+
+    const category = await executeWithRetry(() =>
+      Categories.findByIdAndUpdate(
+        id,
+        { $set: { order } },
+        { new: true }
+      )
+    );
+
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    clearCategoryCache();
+
+    return res.status(200).json({
+      success: true,
+      message: `Category "${category.name}" order set to ${order}`,
+      category: {
+        id: category._id,
+        categoryId: category._id,
+        name: category.name,
+        categoriesName: category.name,
+        order: category.order,
+      },
+    });
+  } catch (error) {
+    console.error("Error assigning category order:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 

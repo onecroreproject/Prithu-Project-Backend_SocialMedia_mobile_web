@@ -54,6 +54,9 @@ const {
     removeFeedCategory,
     getFeedWithDesign,
     updateFeedDesign,
+    getWatchAnalyticsAdmin,
+    getUserViewFeedsLog,
+    getCategoryViewsAnalytics,
 } = require('../controllers/adminControllers/adminfeedController');
 
 const {
@@ -67,6 +70,8 @@ const {
     adminAddCategory,
     deleteCategory,
     updateCategory,
+    reorderCategories,
+    assignCategoryOrder,
 } = require('../controllers/adminControllers/adminCatagoryController');
 
 const {
@@ -252,6 +257,7 @@ const {
     fetchUserDownloaded,
     getUserAnalyticsSummary,
     fetchUserNonInterested,
+    fetchUserViewedFeeds,
 } = require('../controllers/userControllers/userFeedController');
 
 const { getUserActivitiesForAdmin } = require('../controllers/userControllers/userActivitController');
@@ -302,6 +308,10 @@ router.post(
     adminFeedUpload
 );
 router.get("/admin/get/all/feed", auth, checkPermission('canManageFeeds'), getAllFeedAdmin);
+router.get("/admin/feed/watch-analytics", auth, checkPermission('canManageFeeds'), getWatchAnalyticsAdmin);
+router.get("/admin/analytics/views", auth, checkPermission('canManageFeeds'), getWatchAnalyticsAdmin);
+router.get("/admin/analytics/view-logs", auth, checkPermission('canManageFeeds'), getUserViewFeedsLog);
+router.get("/admin/analytics/category-views", auth, checkPermission('canManageFeeds'), getCategoryViewsAnalytics);
 router.get("/admin/feed/:feedId/design", auth, checkPermission('canManageFeeds'), getFeedWithDesign);
 router.put("/admin/feed/:feedId/design", auth, checkPermission('canManageFeeds'), updateFeedDesign);
 router.put("/admin/feed/:feedId/category", auth, checkPermission('canManageFeeds'), require('../controllers/adminControllers/adminfeedController').updateFeedCategory);
@@ -329,6 +339,10 @@ router.get('/admin/getall/categories', auth, checkPermission('canManageCategorie
 router.put('/admin/update/category', auth, checkPermission('canManageCategories'), updateCategory);
 router.put('/admin/update/category/:id', auth, checkPermission('canManageCategories'), updateCategory);
 router.put('/admin/category/update', auth, checkPermission('canManageCategories'), updateCategory);
+router.put('/admin/categories/reorder', auth, checkPermission('canManageCategories'), reorderCategories);
+router.post('/admin/categories/reorder', auth, checkPermission('canManageCategories'), reorderCategories);
+router.put('/admin/category/order', auth, checkPermission('canManageCategories'), assignCategoryOrder);
+router.put('/admin/category/:id/order', auth, checkPermission('canManageCategories'), assignCategoryOrder);
 
 /* --------------------- Admin Subscription API --------------------- */
 router.post('/admin/subscription/create', auth, checkPermission('canManageSubscriptions'), createPlan);
@@ -373,6 +387,8 @@ router.get("/admin/commented/:userId", auth, checkPermission('canManageUsers'), 
 router.get("/admin/shared/:userId", auth, checkPermission('canManageUsers'), fetchUserShared);
 router.get("/admin/downloaded/:userId", auth, checkPermission('canManageUsers'), fetchUserDownloaded);
 router.get("/admin/nonInterested/:userId", auth, checkPermission('canManageUsers'), fetchUserNonInterested);
+router.get("/admin/viewed/:userId", auth, checkPermission('canManageUsers'), fetchUserViewedFeeds);
+router.get("/admin/user/viewed-feeds/:userId", auth, checkPermission('canManageUsers'), fetchUserViewedFeeds);
 
 // Aliases for New Admin Panel (short paths)
 router.get("/summary/:userId", auth, checkPermission('canManageUsers'), getUserAnalyticsSummary);
@@ -386,6 +402,7 @@ router.get("/commented/:userId", auth, checkPermission('canManageUsers'), fetchU
 router.get("/shared/:userId", auth, checkPermission('canManageUsers'), fetchUserShared);
 router.get("/downloaded/:userId", auth, checkPermission('canManageUsers'), fetchUserDownloaded);
 router.get("/nonInterested/:userId", auth, checkPermission('canManageUsers'), fetchUserNonInterested);
+router.get("/viewed/:userId", auth, checkPermission('canManageUsers'), fetchUserViewedFeeds);
 
 /* --------------------- Admin DashBoard API --------------------- */
 router.get("/admin/dashboard/metricks/counts", auth, getDashboardMetricCount); // Generic dashboard, auth only
@@ -637,5 +654,12 @@ router.get('/admin/visiting-cards/plan', auth, visitingCardController.adminGetPr
 router.put('/admin/visiting-cards/plan', auth, visitingCardController.adminUpdateProfileCardPlan);
 router.get('/admin/visiting-cards/subscribers', auth, visitingCardController.adminGetSubscribers);
 router.post('/admin/visiting-cards/grant-subscription', auth, visitingCardController.adminGrantSubscription);
+
+/* --------------------- Admin App Version & Update API --------------------- */
+const appVersionController = require('../controllers/appVersionController');
+router.get('/admin/app-version', auth, checkPermission('canManageAppManagement'), appVersionController.adminGetAppVersionConfig);
+router.put('/admin/app-version', auth, checkPermission('canManageAppManagement'), appVersionController.adminUpdateAppVersionConfig);
+router.get('/admin/app-version/public', appVersionController.adminGetAppVersionConfig);
+router.get('/app/version-check', appVersionController.checkAppVersion);
 
 module.exports = router;

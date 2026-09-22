@@ -62,8 +62,8 @@ async function computeTrendingCreators() {
               $match: {
                 $expr: {
                   $or: [
-                    { $gt: [{ $size: "$likedFeeds" }, 0] },
-                    { $gt: [{ $size: "$sharedFeeds" }, 0] },
+                    { $gt: [{ $size: { $ifNull: ["$likedFeeds", []] } }, 0] },
+                    { $gt: [{ $size: { $ifNull: ["$sharedFeeds", []] } }, 0] },
                   ],
                 },
               },
@@ -73,7 +73,7 @@ async function computeTrendingCreators() {
                 liked: {
                   $size: {
                     $filter: {
-                      input: "$likedFeeds",
+                      input: { $ifNull: ["$likedFeeds", []] },
                       cond: { $in: ["$$this.feedId", "$$feedIds"] },
                     },
                   },
@@ -81,7 +81,7 @@ async function computeTrendingCreators() {
                 shared: {
                   $size: {
                     $filter: {
-                      input: "$sharedFeeds",
+                      input: { $ifNull: ["$sharedFeeds", []] },
                       cond: { $in: ["$$this.feedId", "$$feedIds"] },
                     },
                   },
@@ -110,7 +110,7 @@ async function computeTrendingCreators() {
       },
       {
         $addFields: {
-          followerCount: { $size: "$followers" },
+          followerCount: { $size: { $ifNull: ["$followers", []] } },
         },
       },
 

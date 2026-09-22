@@ -146,6 +146,7 @@ const {
     politicsDownloadFeed,
     processSharePreview,
     submitFeedbackPopup,
+    postView,
 } = require('../controllers/feedControllers/userActionsFeedController');
 
 const {
@@ -419,6 +420,8 @@ router.delete('/user/delete', auth, deleteUserNow);
 router.put('/user/feed/update', auth, creatorFeedUpdate);
 router.post('/user/feed/like', auth, likeFeed);
 router.post("/user/feed/dislike", auth, toggleDislikeFeed);
+router.post('/user/feed/view', optionalAuth, postView);
+router.post('/post/view', optionalAuth, postView);
 router.post('/user/feed/save', auth, toggleSaveFeed);
 router.post('/user/feed/share', auth, shareFeed);
 router.post('/user/feed/hide', auth, userHideFeed);
@@ -606,5 +609,10 @@ router.post("/user/wallet/bank-details", auth, saveBankDetails);
 router.post("/user/wallet/withdraw", auth, requestWithdrawal);
 router.get("/user/wallet/withdrawals", auth, getWithdrawalHistory);
 router.put("/user/wallet/withdrawal/:requestId", auth, updateWithdrawalRequest);
+
+/* --------------------- App Version & In-App Update API --------------------- */
+const { checkAppVersion } = require('../controllers/appVersionController');
+router.get('/app/version-check', checkAppVersion);
+router.get('/user/app/version-check', checkAppVersion);
 
 module.exports = router;

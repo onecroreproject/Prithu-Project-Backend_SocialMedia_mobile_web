@@ -4,6 +4,7 @@ const UserImageView = require("../../models/userModels/MediaSchema/userImageView
 const ImageStats = require("../../models/userModels/MediaSchema/imageViewModel");
 const UserVideoView = require("../../models/userModels/MediaSchema/userVideoViewModel");
 const VideoStats = require("../../models/userModels/MediaSchema/videoViewStatusModel");
+const UserView = require("../../models/userModels/userViewFeedsModel");
 const mongoose = require("mongoose");
 
 const User = require("../../models/userModels/userModel");
@@ -15,12 +16,8 @@ const Hidden = require("../../models/userModels/hiddenPostSchema");
 const ProfileSettings = require('../../models/profileSettingModel');
 const UserComment = require('../../models/userCommentModel');
 const CreatorFollower = require("../../models/creatorFollowerModel");
-const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator")
-
-
-
-
-
+const { feedTimeCalculator } = require("../../middlewares/feedTimeCalculator");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity");
 
 const redisClient = require("../../Config/redisConfig");
 
@@ -68,6 +65,44 @@ exports.userImageViewCount = async (req, res) => {
         },
         { upsert: true, new: true }
       );
+
+      // 3.1️⃣ Also record to unified UserView collection for analytics
+      const feedDoc = await Feed.findById(feedId, "category postType").lean();
+      const firstCat = feedDoc?.category && feedDoc.category.length > 0 ? feedDoc.category[0] : null;
+
+      await UserView.create({
+        userId: userId || null,
+        feedId,
+        categoryId: firstCat,
+        postType: "image",
+        watchDuration: 0,
+        deviceType: req.headers["x-device-type"] || "app",
+        ipAddress: req.ip || req.headers["x-forwarded-for"] || null
+      }).catch(err => console.error("Error creating UserView image entry:", err.message));
+
+      // 3.2️⃣ Increment feed view counters
+      Feed.updateOne(
+        { _id: feedId },
+        { $inc: { "playbackStats.totalViews": 1, viewsCount: 1 } }
+      ).catch(() => {});
+
+      // 3.3️⃣ Log User Activity
+      if (userId) {
+        logUserActivity({
+          userId,
+          actionType: "VIEW_FEED",
+          targetId: feedId,
+          targetModel: "Feed",
+          metadata: {
+            postType: "image",
+            feedId: feedId.toString(),
+            title: feedDoc?.title || feedDoc?.caption || "Image Feed",
+            categoryId: firstCat ? firstCat.toString() : null,
+            deviceType: req.headers["x-device-type"] || "app",
+          }
+        }).catch(() => {});
+      }
+
     } catch (dbErr) {
       // Duplicate key error (code 11000) means already viewed
       if (dbErr.code !== 11000) throw dbErr;
@@ -95,13 +130,14 @@ exports.userVideoViewCount = async (req, res) => {
     const feedId = req.body.feedId || req.params.id || req.query.feedId;
     const userId = req.Id || req.body.userId;
     const deviceId = req.body.deviceId || req.headers["x-device-id"];
+    const watchDuration = req.body.watchDuration || req.body.watchedSeconds || 0;
 
     if (!feedId || (!userId && !deviceId)) {
       return res.status(400).json({ message: "feedId and (userId or deviceId) are required" });
     }
 
     // 1️⃣ Validate feed
-    const feed = await Feed.findById(feedId, "postType duration");
+    const feed = await Feed.findById(feedId, "postType duration category");
     if (!feed || feed.postType !== "video") {
       return res.status(400).json({ message: "Video feed not found" });
     }
@@ -141,6 +177,24 @@ exports.userVideoViewCount = async (req, res) => {
         { upsert: true, new: true }
       );
 
+      // 4.1️⃣ Record in unified UserView collection
+      const firstCat = feed?.category && feed.category.length > 0 ? feed.category[0] : null;
+      await UserView.create({
+        userId: userId || null,
+        feedId,
+        categoryId: firstCat,
+        postType: "video",
+        watchDuration: Number(watchDuration) || Number(feed.duration) || 0,
+        deviceType: req.headers["x-device-type"] || "app",
+        ipAddress: req.ip || req.headers["x-forwarded-for"] || null
+      }).catch(err => console.error("Error creating UserView video entry:", err.message));
+
+      // 4.2️⃣ Increment feed view counter
+      Feed.updateOne(
+        { _id: feedId },
+        { $inc: { "playbackStats.totalViews": 1, viewsCount: 1 } }
+      ).catch(() => {});
+
       // 5️⃣ Track watched feeds for user personal list (Logged-in only)
       if (userId) {
         await UserFeedActions.findOneAndUpdate(
@@ -155,6 +209,21 @@ exports.userVideoViewCount = async (req, res) => {
           },
           { upsert: true }
         );
+
+        logUserActivity({
+          userId,
+          actionType: "WATCH_FEED",
+          targetId: feedId,
+          targetModel: "Feed",
+          metadata: {
+            postType: "video",
+            feedId: feedId.toString(),
+            title: feed?.title || feed?.caption || "Video Feed",
+            watchDuration: Number(watchDuration) || Number(feed.duration) || 0,
+            categoryId: firstCat ? firstCat.toString() : null,
+            deviceType: req.headers["x-device-type"] || "app",
+          }
+        }).catch(() => {});
       }
     } catch (dbErr) {
       if (dbErr.code !== 11000) throw dbErr;
@@ -743,6 +812,123 @@ exports.getUserdetailWithinTheFeed = async (req, res) => {
   } catch (error) {
     console.error("Error in getUserdetailWithinTheFeed:", error);
     return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/* ================================================================
+   1️⃣0️⃣ FETCH USER VIEWED FEEDS (WATCH HISTORY)
+================================================================ */
+exports.fetchUserViewedFeeds = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { startDate, endDate, type, page = 1, limit = 20 } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "userId is required" });
+    }
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+    const query = { userId: objectId };
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    if (type && type !== "all") {
+      query.postType = type;
+    }
+
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Parallel execution for stats, pagination & views
+    const [totalViews, todayViews, views, allUserViews] = await Promise.all([
+      UserView.countDocuments(query),
+      UserView.countDocuments({ userId: objectId, createdAt: { $gte: startOfDay, $lte: endOfDay } }),
+      UserView.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate({
+          path: "feedId",
+          select: "_id title caption description postType mediaUrl files contentUrl category hashtags createdByAccount createdAt",
+          populate: {
+            path: "category",
+            select: "name categoriesName"
+          }
+        })
+        .populate("categoryId", "name categoriesName")
+        .lean(),
+      UserView.find({ userId: objectId })
+        .select("categoryId watchDuration postType")
+        .populate("categoryId", "name categoriesName")
+        .lean()
+    ]);
+
+    // Calculate category breakdown & total watch duration
+    const categoryCountMap = {};
+    let totalWatchDuration = 0;
+
+    allUserViews.forEach(v => {
+      totalWatchDuration += (v.watchDuration || 0);
+      const catName = v.categoryId?.name || v.categoryId?.categoriesName || "Uncategorized";
+      categoryCountMap[catName] = (categoryCountMap[catName] || 0) + 1;
+    });
+
+    const categoryViews = Object.entries(categoryCountMap)
+      .map(([name, count]) => ({
+        categoryName: name,
+        count,
+        percentage: totalViews > 0 ? Math.round((count / allUserViews.length) * 100) : 0
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const formattedViews = views.map(v => {
+      const feed = v.feedId;
+      const mediaUrl = feed?.mediaUrl || (feed?.files && feed.files[0]?.url) || feed?.contentUrl || null;
+      const categoryName = v.categoryId?.name || v.categoryId?.categoriesName || 
+        (feed?.category && feed.category[0]?.name) || "Uncategorized";
+
+      return {
+        _id: v._id,
+        viewId: v._id,
+        feedId: feed?._id,
+        title: feed?.title || feed?.caption || (v.postType === "video" ? "Video Feed" : "Image Feed"),
+        description: feed?.description || "",
+        postType: v.postType || feed?.postType || "image",
+        mediaUrl,
+        category: categoryName,
+        watchDuration: v.watchDuration || 0,
+        viewedAt: v.createdAt,
+        createdAt: v.createdAt,
+        deviceType: v.deviceType || "web"
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      totalViews,
+      todayViews,
+      totalWatchDuration,
+      totalWatchHours: (totalWatchDuration / 3600).toFixed(2),
+      categoryViews,
+      page: parseInt(page),
+      totalPages: Math.ceil(totalViews / parseInt(limit)),
+      views: formattedViews,
+      feeds: formattedViews
+    });
+  } catch (err) {
+    console.error("Error in fetchUserViewedFeeds:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch user viewed feeds",
+      error: err.message
+    });
   }
 };
 

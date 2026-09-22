@@ -7,10 +7,11 @@ const serviceProductSchema = new mongoose.Schema({
     description: { type: String, default: '' },
     price: { type: String, default: '' },
     image: { type: String, default: '' },
+    imageUrl: { type: String, default: '' },
     badge: { type: String, default: '' }, // e.g. 'Featured', 'Best Seller', 'New'
     link: { type: String, default: '' },
     isAvailable: { type: Boolean, default: true }
-}, { _id: false });
+}, { _id: false, strict: false });
 
 const galleryItemSchema = new mongoose.Schema({
     id: { type: String, default: () => Math.random().toString(36).substring(2, 9) },

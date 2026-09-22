@@ -5,9 +5,10 @@ const { prithuDB } = require("../../database");
 const UserActivitySchema = new mongoose.Schema(
   {
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "User",
       required: true,
+      index: true,
     },
 
     actionType: {
@@ -28,6 +29,10 @@ const UserActivitySchema = new mongoose.Schema(
         "DOWNLOAD_POST",
         "REMOVE_FOLLOWER",
         "DOWNLOAD_POST_REQUEST",
+        "WATCH_FEED",
+        "VIEW_FEED",
+        "SAVE_POST",
+        "DISLIKE_POST",
       ],
       required: true,
       index: true,
@@ -41,7 +46,7 @@ const UserActivitySchema = new mongoose.Schema(
 
     targetModel: {
       type: String,
-      enum: ["User", "Feed", "UserCurricluam"],
+      enum: ["User", "Feed", "UserCurricluam", "Categories"],
       default: null,
     },
 

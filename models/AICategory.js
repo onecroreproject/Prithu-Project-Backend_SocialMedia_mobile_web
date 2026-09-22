@@ -8,7 +8,13 @@ const aiCategorySchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true
-    }
+    },
+    subcategories: [
+      {
+        type: String,
+        trim: true
+      }
+    ]
   },
   { timestamps: true }
 );

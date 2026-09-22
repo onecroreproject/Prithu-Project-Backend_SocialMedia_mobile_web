@@ -14,6 +14,11 @@ const promptSchema = new mongoose.Schema(
       trim: true,
       index: true
     },
+    subCategory: {
+      type: String,
+      trim: true,
+      index: true
+    },
     prompt: {
       type: String,
       required: true,

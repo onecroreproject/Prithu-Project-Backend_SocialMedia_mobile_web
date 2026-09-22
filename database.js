@@ -16,11 +16,15 @@ try {
 
 // 🟢 1. PRITHU Database (Main App DB)
 const prithuDB = mongoose.createConnection(process.env.PRITHU_DB_URI, {
-  maxPoolSize: 20,
+  maxPoolSize: 50,
   minPoolSize: 5,
+  maxIdleTimeMS: 60000,
   autoIndex: true,
   serverSelectionTimeoutMS: 20000,
   socketTimeoutMS: 45000,
+  connectTimeoutMS: 20000,
+  retryWrites: true,
+  retryReads: true,
 });
 
 // Connection lifecycle logs

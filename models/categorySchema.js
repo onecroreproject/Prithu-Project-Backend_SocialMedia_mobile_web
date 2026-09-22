@@ -16,11 +16,15 @@ const categorySchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  order: {
+    type: Number,
+    default: 0,
+    index: true
+  },
   createdAt: {
     type: Date,
     default: Date.now
   }
-
 });
 
 module.exports = prithuDB.model('Categories', categorySchema, 'Categories');

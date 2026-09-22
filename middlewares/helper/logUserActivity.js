@@ -1,4 +1,5 @@
 const UserActivity = require("../../models/userModels/userActivitySchema");
+const Feed = require("../../models/feedModel");
 
 exports.logUserActivity = async ({
   userId,
@@ -8,6 +9,16 @@ exports.logUserActivity = async ({
   metadata = {},
 }) => {
   try {
+    if (targetModel === "Feed" && targetId) {
+      const feed = await Feed.findById(targetId).populate("category").select("postType category");
+      if (feed) {
+        metadata.postType = feed.postType || "video";
+        if (feed.category && feed.category.length > 0) {
+          metadata.category = feed.category[0]?.name || feed.category[0];
+        }
+      }
+    }
+
     // 🔍 Check if same action on same target already exists
     const existing = await UserActivity.findOne({
       userId,

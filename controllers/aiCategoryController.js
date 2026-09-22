@@ -2,16 +2,46 @@ const AICategory = require("../models/AICategory");
 const Prompt = require("../models/Prompt");
 
 const INITIAL_CATEGORIES = [
-  "Halloween",
-  "Anniversary",
-  "Kids",
-  "Couple",
-  "Birthday",
-  "Diwali",
-  "Women",
-  "3D Model",
-  "Men",
-  "Navaratri"
+  {
+    name: "Couple",
+    subcategories: ["Traditional", "Modern & Casual", "Romantic", "Wedding", "Travel"]
+  },
+  {
+    name: "Kids",
+    subcategories: ["Kids Boy", "Kids Girl", "Toddler", "Playing & Outdoor"]
+  },
+  {
+    name: "Halloween",
+    subcategories: ["Spooky Cottage", "Costumes", "Pumpkin & Ghost", "Fantasy"]
+  },
+  {
+    name: "Anniversary",
+    subcategories: ["Dinner Date", "Romantic Setup", "Celebration", "Flowers & Decor"]
+  },
+  {
+    name: "Birthday",
+    subcategories: ["Neon Party", "Kids Birthday", "Celebration & Cake", "Milestone"]
+  },
+  {
+    name: "Diwali",
+    subcategories: ["Diyas & Lights", "Rangoli", "Traditional Attire", "Celebration"]
+  },
+  {
+    name: "Navaratri",
+    subcategories: ["Garba Dance", "Dandiya", "Chaniya Choli", "Festive Lights"]
+  },
+  {
+    name: "Women",
+    subcategories: ["Floral & Nature", "Traditional Saree", "Modern Fashion", "Portraits"]
+  },
+  {
+    name: "Men",
+    subcategories: ["Modern Style", "Traditional Kurta", "Urban & Casual", "Professional"]
+  },
+  {
+    name: "3D Model",
+    subcategories: ["Gods & Mythological", "Sculpture", "Sci-Fi & Cyberpunk", "Fantasy Art"]
+  }
 ];
 
 // Auto-seed categories if empty
@@ -19,10 +49,20 @@ exports.autoSeedCategories = async () => {
   try {
     const count = await AICategory.countDocuments();
     if (count === 0) {
-      console.log("🌱 AICategories collection is empty. Seeding initial categories...");
-      const seededDocs = INITIAL_CATEGORIES.map(name => ({ name }));
-      await AICategory.insertMany(seededDocs);
-      console.log("✅ Successfully seeded initial categories!");
+      console.log("🌱 AICategories collection is empty. Seeding initial categories with subcategories...");
+      await AICategory.insertMany(INITIAL_CATEGORIES);
+      console.log("✅ Successfully seeded initial categories with subcategories!");
+    } else {
+      // Also ensure existing categories have subcategories if empty
+      for (const initial of INITIAL_CATEGORIES) {
+        const existing = await AICategory.findOne({
+          name: { $regex: new RegExp(`^${initial.name}$`, "i") }
+        });
+        if (existing && (!existing.subcategories || existing.subcategories.length === 0)) {
+          existing.subcategories = initial.subcategories;
+          await existing.save();
+        }
+      }
     }
   } catch (err) {
     console.error("❌ Failed to auto-seed categories:", err);
@@ -50,7 +90,7 @@ exports.getAllCategories = async (req, res) => {
 // Create dynamic category (Admin API)
 exports.createCategory = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, subcategories } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({
         success: false,
@@ -71,7 +111,16 @@ exports.createCategory = async (req, res) => {
       });
     }
 
-    const newCategory = new AICategory({ name: trimmedName });
+    const parsedSubs = Array.isArray(subcategories)
+      ? subcategories.map(s => String(s).trim()).filter(Boolean)
+      : typeof subcategories === "string"
+      ? subcategories.split(",").map(s => s.trim()).filter(Boolean)
+      : [];
+
+    const newCategory = new AICategory({
+      name: trimmedName,
+      subcategories: parsedSubs
+    });
     await newCategory.save();
 
     res.status(201).json({
@@ -90,7 +139,7 @@ exports.createCategory = async (req, res) => {
 // Update category (Admin API)
 exports.updateCategory = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, subcategories } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({
         success: false,
@@ -125,6 +174,13 @@ exports.updateCategory = async (req, res) => {
 
     const oldName = category.name;
     category.name = trimmedName;
+    if (subcategories !== undefined) {
+      category.subcategories = Array.isArray(subcategories)
+        ? subcategories.map(s => String(s).trim()).filter(Boolean)
+        : typeof subcategories === "string"
+        ? subcategories.split(",").map(s => s.trim()).filter(Boolean)
+        : [];
+    }
     await category.save();
 
     // Optionally: Update all associated prompts with the new category name
@@ -189,11 +245,10 @@ exports.deleteCategory = async (req, res) => {
 exports.manualSeedCategories = async (req, res) => {
   try {
     await AICategory.deleteMany({});
-    const docs = INITIAL_CATEGORIES.map(name => ({ name }));
-    const seeded = await AICategory.insertMany(docs);
+    const seeded = await AICategory.insertMany(INITIAL_CATEGORIES);
     res.status(200).json({
       success: true,
-      message: "Categories seeded successfully with standard list!",
+      message: "Categories seeded successfully with standard categories and subcategories!",
       count: seeded.length,
       data: seeded
     });

@@ -2394,17 +2394,47 @@ exports.postReplyComment = async (req, res) => {
 
 exports.postView = async (req, res) => {
   const userId = req.Id || req.body.userId; // optional, for anonymous views
-  const { feedId, watchDuration } = req.body;
+  const { feedId, watchDuration, postType, categoryId, deviceType } = req.body;
 
   if (!feedId) return res.status(400).json({ message: "feedId is required" });
 
   try {
-    // Create a new view entry
+    let resolvedCategoryId = categoryId || null;
+    let resolvedPostType = postType || "image";
+
+    if (!resolvedCategoryId || !postType) {
+      const feedDoc = await Feed.findById(feedId).select("category postType files").lean();
+      if (feedDoc) {
+        if (!resolvedCategoryId && feedDoc.category && feedDoc.category.length > 0) {
+          resolvedCategoryId = feedDoc.category[0];
+        }
+        if (!postType) {
+          resolvedPostType = feedDoc.postType || (feedDoc.files && feedDoc.files[0]?.type === "video" ? "video" : "image");
+        }
+      }
+    }
+
+    // 1. Create a new view entry
     const view = await UserView.create({
       userId: userId || null, // allow anonymous views
       feedId,
-      watchDuration: watchDuration || 0
+      categoryId: resolvedCategoryId,
+      postType: resolvedPostType,
+      watchDuration: Number(watchDuration) || 0,
+      deviceType: deviceType || req.headers["x-device-type"] || "web",
+      ipAddress: req.ip || req.headers["x-forwarded-for"] || null
     });
+
+    // 2. Atomically increment Feed views counters
+    Feed.updateOne(
+      { _id: feedId },
+      { 
+        $inc: { 
+          "playbackStats.totalViews": 1,
+          "viewsCount": 1 
+        } 
+      }
+    ).catch(err => console.error("Error updating feed view counter:", err.message));
 
     res.status(201).json({
       message: "View recorded successfully",

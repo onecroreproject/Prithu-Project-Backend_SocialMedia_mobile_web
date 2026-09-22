@@ -38,7 +38,9 @@ const CommentLikes = require("../../models/commentsLikeModel.js");
 const CreatorFollowers = require('../../models/creatorFollowerModel.js');
 const Devices = require("../../models/userModels/userSession-Device/deviceModel.js");
 const UserDeleteLog = require("../../models/userDeleteLog");
-const TrendingCreators = require("../../models/treandingCreators.js")
+const TrendingCreators = require("../../models/treandingCreators.js");
+const UnifiedUserView = require("../../models/userModels/userViewFeedsModel.js");
+const UserActivity = require("../../models/userModels/userActivitySchema.js");
 
 
 
@@ -670,39 +672,225 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
     }
 
     // -------------------------------------------
-    // 4️⃣ WATCH ANALYTICS (HOURS & TOP CATEGORY)
+    // 4️⃣ WATCH ANALYTICS (HOURS, COUNTS, DETAILS & CATEGORIES)
     // -------------------------------------------
-    const videoViews = await VideoView.find({ userId }).select("videoId watchedSeconds").lean();
-    const imageViews = await ImageView.find({ userId }).select("imageId").lean();
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    const totalWatchSeconds = videoViews.reduce((acc, v) => acc + (v.watchedSeconds || 0), 0);
-    const totalWatchHours = (totalWatchSeconds / 3600).toFixed(2);
+    const [
+      unifiedUserViews,
+      todayUnifiedViews,
+      recentViewsRaw,
+      videoViews,
+      imageViews,
+      userFeedActions,
+      userWatchActivities
+    ] = await Promise.all([
+      UnifiedUserView.find({ userId })
+        .populate("categoryId", "name categoriesName")
+        .populate({
+          path: "feedId",
+          select: "_id title caption description postType mediaUrl files contentUrl category duration createdAt",
+          populate: { path: "category", select: "name categoriesName" }
+        })
+        .lean()
+        .catch(() => []),
+      UnifiedUserView.countDocuments({ userId, createdAt: { $gte: startOfDay, $lte: endOfDay } }).catch(() => 0),
+      UnifiedUserView.find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .populate({
+          path: "feedId",
+          select: "_id title caption description postType mediaUrl files contentUrl category duration createdAt",
+          populate: { path: "category", select: "name categoriesName" }
+        })
+        .populate("categoryId", "name categoriesName")
+        .lean()
+        .catch(() => []),
+      VideoView.find({ userId }).select("videoId watchedSeconds viewedAt createdAt").lean().catch(() => []),
+      ImageView.find({ userId }).select("imageId viewedAt createdAt").lean().catch(() => []),
+      UserFeedActions.findOne({ userId })
+        .populate({
+          path: "watchedFeeds.feedId",
+          select: "_id title caption description postType mediaUrl files contentUrl category duration createdAt",
+          populate: { path: "category", select: "name categoriesName" }
+        })
+        .populate({
+          path: "likedFeeds.feedId",
+          select: "_id title caption description postType mediaUrl files contentUrl category duration createdAt",
+          populate: { path: "category", select: "name categoriesName" }
+        })
+        .lean()
+        .catch(() => null),
+      UserActivity.find({
+        userId,
+        actionType: { $in: ["WATCH_FEED", "VIEW_FEED", "LIKE_POST", "SAVE_POST"] }
+      })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .populate({
+          path: "targetId",
+          select: "_id title caption description postType mediaUrl files contentUrl category duration createdAt",
+          populate: { path: "category", select: "name categoriesName" }
+        })
+        .lean()
+        .catch(() => [])
+    ]);
 
-    // Track category frequency
+    // Build unique viewed feeds map
+    const viewedFeedsMap = new Map();
     const categoryFreq = {};
-    const feedIdsToLookup = [
-      ...videoViews.map(v => v.videoId),
-      ...imageViews.map(i => i.imageId)
-    ];
 
-    if (feedIdsToLookup.length > 0) {
-      const feeds = await Feed.find({ _id: { $in: feedIdsToLookup } })
-        .select("category")
-        .populate("category", "name")
-        .lean();
+    // 1. Process UnifiedUserViews
+    unifiedUserViews.forEach(v => {
+      const feed = v.feedId;
+      const catName = v.categoryId?.name || v.categoryId?.categoriesName ||
+        (Array.isArray(feed?.category) && feed.category[0]?.name) ||
+        feed?.category?.name || "General";
+      categoryFreq[catName] = (categoryFreq[catName] || 0) + 1;
 
-      feeds.forEach(f => {
-        if (f.category && Array.isArray(f.category)) {
-          f.category.forEach(cat => {
-            const catName = cat.name || "Uncategorized";
-            categoryFreq[catName] = (categoryFreq[catName] || 0) + 1;
-          });
+      if (feed && feed._id) {
+        const fId = feed._id.toString();
+        const mediaUrl = feed.mediaUrl || (feed.files && feed.files[0]?.url) || feed.contentUrl || null;
+        viewedFeedsMap.set(fId, {
+          _id: v._id,
+          feedId: fId,
+          title: feed.title || feed.caption || (v.postType === "video" ? "Video Feed" : "Image Feed"),
+          description: feed.description || "",
+          mediaUrl,
+          postType: v.postType || feed.postType || "image",
+          category: catName,
+          categoryId: v.categoryId?._id || (Array.isArray(feed.category) && feed.category[0]?._id) || null,
+          watchDuration: v.watchDuration || feed.duration || 0,
+          viewedAt: v.createdAt || new Date(),
+          deviceType: v.deviceType || "app",
+          actionType: v.postType === "video" ? "WATCH_FEED" : "VIEW_FEED"
+        });
+      }
+    });
+
+    // 2. Process UserFeedActions.watchedFeeds
+    if (userFeedActions?.watchedFeeds && Array.isArray(userFeedActions.watchedFeeds)) {
+      userFeedActions.watchedFeeds.forEach(item => {
+        const feed = item.feedId;
+        if (feed && feed._id) {
+          const fId = feed._id.toString();
+          const catName = (Array.isArray(feed.category) && feed.category[0]?.name) ||
+            feed.category?.name || "General";
+          categoryFreq[catName] = (categoryFreq[catName] || 0) + 1;
+
+          if (!viewedFeedsMap.has(fId)) {
+            const mediaUrl = feed.mediaUrl || (feed.files && feed.files[0]?.url) || feed.contentUrl || null;
+            viewedFeedsMap.set(fId, {
+              _id: item._id || fId,
+              feedId: fId,
+              title: feed.title || feed.caption || "Video Feed",
+              description: feed.description || "",
+              mediaUrl,
+              postType: feed.postType || "video",
+              category: catName,
+              categoryId: (Array.isArray(feed.category) && feed.category[0]?._id) || null,
+              watchDuration: feed.duration || 0,
+              viewedAt: item.watchedAt || new Date(),
+              deviceType: "app",
+              actionType: "WATCH_FEED"
+            });
+          }
         }
       });
     }
 
+    // 3. Process UserActivity
+    userWatchActivities.forEach(act => {
+      const feed = act.targetId;
+      const fId = (feed && feed._id) ? feed._id.toString() : (act.metadata?.feedId || null);
+      if (fId) {
+        const catName = (Array.isArray(feed?.category) && feed.category[0]?.name) ||
+          feed?.category?.name || act.metadata?.categoryName || act.metadata?.category || "General";
+        categoryFreq[catName] = (categoryFreq[catName] || 0) + 1;
+
+        if (!viewedFeedsMap.has(fId)) {
+          const mediaUrl = feed?.mediaUrl || (feed?.files && feed.files[0]?.url) || feed?.contentUrl || act.metadata?.mediaUrl || null;
+          viewedFeedsMap.set(fId, {
+            _id: act._id,
+            feedId: fId,
+            title: feed?.title || feed?.caption || act.metadata?.title || act.metadata?.caption || (act.actionType === "WATCH_FEED" ? "Video Feed" : "Feed Post"),
+            description: feed?.description || act.metadata?.description || "",
+            mediaUrl,
+            postType: feed?.postType || act.metadata?.postType || (act.actionType === "WATCH_FEED" ? "video" : "image"),
+            category: catName,
+            categoryId: (Array.isArray(feed?.category) && feed.category[0]?._id) || null,
+            watchDuration: act.metadata?.watchDuration || act.metadata?.watchedSeconds || feed?.duration || 0,
+            viewedAt: act.createdAt || new Date(),
+            deviceType: act.metadata?.deviceType || "app",
+            actionType: act.actionType
+          });
+        }
+      }
+    });
+
+    // 4. Fallback lookup for VideoView & ImageView if feeds map is still empty
+    if (viewedFeedsMap.size === 0) {
+      const feedIdsToLookup = [
+        ...videoViews.map(v => v.videoId),
+        ...imageViews.map(i => i.imageId)
+      ].filter(Boolean);
+
+      if (feedIdsToLookup.length > 0) {
+        const fallbackFeeds = await Feed.find({ _id: { $in: feedIdsToLookup } })
+          .select("_id title caption description postType mediaUrl files contentUrl category duration createdAt")
+          .populate("category", "name categoriesName")
+          .lean()
+          .catch(() => []);
+
+        fallbackFeeds.forEach(f => {
+          const fId = f._id.toString();
+          const catName = (Array.isArray(f.category) && f.category[0]?.name) ||
+            f.category?.name || "General";
+          categoryFreq[catName] = (categoryFreq[catName] || 0) + 1;
+          const mediaUrl = f.mediaUrl || (f.files && f.files[0]?.url) || f.contentUrl || null;
+
+          viewedFeedsMap.set(fId, {
+            _id: f._id,
+            feedId: fId,
+            title: f.title || f.caption || (f.postType === "video" ? "Video Feed" : "Image Feed"),
+            description: f.description || "",
+            mediaUrl,
+            postType: f.postType || "image",
+            category: catName,
+            categoryId: (Array.isArray(f.category) && f.category[0]?._id) || null,
+            watchDuration: f.duration || 0,
+            viewedAt: f.createdAt || new Date(),
+            deviceType: "app",
+            actionType: f.postType === "video" ? "WATCH_FEED" : "VIEW_FEED"
+          });
+        });
+      }
+    }
+
+    const totalWatchSeconds = (unifiedUserViews.reduce((acc, v) => acc + (v.watchDuration || 0), 0)) +
+      videoViews.reduce((acc, v) => acc + (v.watchedSeconds || 0), 0) +
+      Array.from(viewedFeedsMap.values()).reduce((acc, f) => acc + (f.watchDuration || 0), 0);
+
+    const totalWatchHours = (totalWatchSeconds / 3600).toFixed(2);
+    const totalFeedsWatched = Math.max(
+      viewedFeedsMap.size,
+      unifiedUserViews.length,
+      videoViews.length + imageViews.length
+    );
+
+    const todayFeedsWatched = Math.max(
+      todayUnifiedViews,
+      Array.from(viewedFeedsMap.values()).filter(f => new Date(f.viewedAt) >= startOfDay && new Date(f.viewedAt) <= endOfDay).length
+    );
+
     const sortedCategories = Object.entries(categoryFreq).sort((a, b) => b[1] - a[1]);
-    const topCategory = sortedCategories.length > 0 ? sortedCategories[0][0] : "N/A";
+    const topCategory = sortedCategories.length > 0 ? sortedCategories[0][0] : "General";
+
+    const recentViewedFeeds = Array.from(viewedFeedsMap.values())
+      .sort((a, b) => new Date(b.viewedAt) - new Date(a.viewedAt))
+      .slice(0, 20);
 
     // -------------------------------------------
     // 5️⃣ FINANCIALS (EARNINGS, WITHDRAWALS, BALANCE)
@@ -768,8 +956,11 @@ exports.getUserSocialMeddiaDetailWithIdForAdmin = async (req, res) => {
         referralPeople,
         watchAnalytics: {
           totalWatchHours,
+          totalFeedsWatched,
+          todayFeedsWatched,
           topCategory,
-          categoryStats: sortedCategories.slice(0, 5) // Top 5 categories
+          categoryStats: sortedCategories.slice(0, 8), // Top 8 categories
+          recentViewedFeeds
         },
         financials: {
           totalEarnings: user.totalEarnings || 0,
@@ -1209,6 +1400,41 @@ exports.getUserAnalyticalData = async (req, res) => {
     };
 
     // -------------------------------------------------------------------
+    // 9️⃣.1️⃣ USER VIEWED FEEDS (WATCH HISTORY) with date filtering
+    // -------------------------------------------------------------------
+    const userViewsRaw = await UnifiedUserView.find({
+      userId: objectId,
+      ...buildDateQuery('createdAt')
+    })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: 'feedId',
+        select: '_id type postType contentUrl mediaUrl files title caption description createdAt'
+      })
+      .populate('categoryId', 'name categoriesName')
+      .lean();
+
+    const viewedPosts = userViewsRaw.map(v => ({
+      id: v._id,
+      feedId: {
+        _id: v.feedId?._id,
+        title: v.feedId?.title || v.feedId?.caption || (v.postType === 'video' ? '🎥 Video' : '📷 Image'),
+        contentUrl: v.feedId?.mediaUrl || (v.feedId?.files && v.feedId.files[0]?.url) || v.feedId?.contentUrl || null,
+        type: v.postType || v.feedId?.postType || 'image',
+        description: v.feedId?.description || '',
+        createdAt: v.feedId?.createdAt
+      },
+      category: v.categoryId?.name || v.categoryId?.categoriesName || 'General',
+      watchDuration: v.watchDuration || 0,
+      postType: v.postType || 'image',
+      deviceType: v.deviceType || 'web',
+      viewedAt: v.createdAt,
+      createdAt: v.createdAt
+    }));
+
+    interactions.viewed = viewedPosts.length;
+
+    // -------------------------------------------------------------------
     // 🔟 FINAL RESPONSE
     // -------------------------------------------------------------------
     const profile = await ProfileSettings.findOne({ userId: userIdTrimmed }).select("userId userName profileAvatar bio").lean();
@@ -1234,6 +1460,8 @@ exports.getUserAnalyticalData = async (req, res) => {
         totalDownloads,
       },
       posts,
+      viewedPosts,
+      viewedFeeds: viewedPosts,
       imageCount,
       videoCount,
       followers: followersList,

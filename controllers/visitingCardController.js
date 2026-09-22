@@ -304,7 +304,22 @@ exports.updateMyCard = async (req, res) => {
         if (bannerImage !== undefined) card.bannerImage = bannerImage;
         if (contact !== undefined) card.contact = { ...card.contact.toObject(), ...contact };
         if (socialLinks !== undefined) card.socialLinks = { ...card.socialLinks.toObject(), ...socialLinks };
-        if (services !== undefined && Array.isArray(services)) card.services = services;
+        if (services !== undefined && Array.isArray(services)) {
+            card.services = services.map(s => {
+                const img = s.image || s.imageUrl || s.img || s.photo || '';
+                return {
+                    id: s.id || s._id || Math.random().toString(36).substring(2, 9),
+                    title: s.title || '',
+                    description: s.description || '',
+                    price: s.price || '',
+                    badge: s.badge || '',
+                    image: img,
+                    imageUrl: img,
+                    link: s.link || '',
+                    isAvailable: s.isAvailable !== false
+                };
+            });
+        }
         if (gallery !== undefined && Array.isArray(gallery)) card.gallery = gallery;
         if (templateId !== undefined) card.templateId = templateId;
         if (themeConfig !== undefined) card.themeConfig = { ...card.themeConfig.toObject(), ...themeConfig };
@@ -470,7 +485,7 @@ exports.uploadMedia = async (req, res) => {
             return res.status(400).json({ success: false, message: 'No file uploaded' });
         }
 
-        const fileUrl = req.file.path ? `/uploads/${req.file.filename}` : (req.file.location || req.file.url || '');
+        const fileUrl = req.file.filename ? `/uploads/visiting-card/${req.file.filename}` : (req.file.location || req.file.url || '');
         return res.status(200).json({
             success: true,
             message: 'Image uploaded successfully',
@@ -548,15 +563,21 @@ exports.shareCardOG = async (req, res) => {
         if (card.services && card.services.length > 0) {
             servicesHtml = `
             <div class="section-box">
-                <div class="section-title">🛍️ Services & Products</div>
+                <div class="section-title">SERVICES & SOLUTIONS</div>
                 <div class="service-list">
                     ${card.services.map(s => `
                         <div class="service-item">
-                            <div class="service-info">
-                                <div class="service-name">${s.title}</div>
-                                ${s.description ? `<div class="service-desc">${s.description}</div>` : ''}
+                            <div class="service-left">
+                                <div class="service-check">✓</div>
+                                <div class="service-info">
+                                    <div class="service-name">${s.title}</div>
+                                    ${s.description ? `<div class="service-desc">${s.description}</div>` : ''}
+                                </div>
                             </div>
-                            ${s.price ? `<div class="service-price">${s.price}</div>` : ''}
+                            <div class="service-right">
+                                <span class="service-price">${s.price || 'Free'}</span>
+                                <span class="service-arrow">›</span>
+                            </div>
                         </div>
                     `).join('')}
                 </div>
@@ -623,8 +644,8 @@ exports.shareCardOG = async (req, res) => {
                 * { box-sizing: border-box; margin: 0; padding: 0; }
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                    background: #090d16;
-                    color: #ffffff;
+                    background: #f1f5f9;
+                    color: #0f172a;
                     min-height: 100vh;
                     display: flex;
                     align-items: center;
@@ -632,18 +653,35 @@ exports.shareCardOG = async (req, res) => {
                     padding: 16px;
                 }
                 .card {
-                    background: #131d31;
-                    border: 1px solid rgba(255,255,255,0.08);
+                    background: #ffffff;
+                    border: 1px solid #e2e8f0;
                     border-radius: 28px;
                     max-width: 440px;
                     width: 100%;
                     overflow: hidden;
-                    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+                    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.08);
                     text-align: center;
                 }
+                .top-bar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 12px 18px;
+                    border-bottom: 1px solid #f1f5f9;
+                }
+                .top-bar-title {
+                    font-size: 15px;
+                    font-weight: 800;
+                    color: #0f172a;
+                }
+                .top-bar-sub {
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #64748b;
+                }
                 .cover {
-                    height: 160px;
-                    background: linear-gradient(135deg, #10b981, #3b82f6);
+                    height: 190px;
+                    background: #1e293b;
                     background-size: cover;
                     background-position: center;
                     ${card.bannerImage ? `background-image: url('${imageUrl}');` : ''}
@@ -656,17 +694,138 @@ exports.shareCardOG = async (req, res) => {
                 .avatar {
                     width: 90px;
                     height: 90px;
-                    border-radius: 50%;
-                    border: 4px solid #131d31;
+                    border-radius: 20px;
+                    border: 3.5px solid #2563eb;
                     object-fit: cover;
-                    background: #1e293b;
-                    box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+                    background: #ffffff;
+                    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
                 }
-                .content { padding: 18px 20px 24px; text-align: left; }
+                .content { padding: 14px 20px 24px; text-align: left; }
                 .center-info { text-align: center; margin-bottom: 16px; }
-                h1 { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px; }
-                .sub { font-size: 12px; color: #10b981; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
-                .bio { font-size: 13.5px; color: #94a3b8; line-height: 1.5; }
+                h1 { font-size: 23px; font-weight: 800; color: #0f172a; margin-bottom: 3px; }
+                .sub { font-size: 13px; color: #64748b; font-weight: 600; margin-bottom: 5px; }
+                .tagline { font-size: 13.5px; color: #2563eb; font-weight: 600; font-style: italic; margin-bottom: 8px; }
+                
+                .circles-grid {
+                    display: flex;
+                    justify-content: space-around;
+                    margin: 18px 0;
+                }
+                .circle-item {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    text-decoration: none;
+                }
+                .circle-btn {
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 50%;
+                    background: #f1f5f9;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 20px;
+                    color: #1e293b;
+                    margin-bottom: 6px;
+                    transition: transform 0.15s, background 0.15s;
+                }
+                .circle-btn:hover { background: #e2e8f0; transform: scale(1.05); }
+                .circle-label {
+                    font-size: 11.5px;
+                    font-weight: 600;
+                    color: #334155;
+                }
+
+                .btn-duo {
+                    display: flex;
+                    gap: 10px;
+                    margin-bottom: 18px;
+                }
+                .btn-primary {
+                    flex: 1;
+                    padding: 13px;
+                    background: #0f172a;
+                    color: #ffffff;
+                    font-size: 13.5px;
+                    font-weight: 700;
+                    border-radius: 25px;
+                    text-decoration: none;
+                    text-align: center;
+                    box-shadow: 0 4px 10px rgba(15,23,42,0.15);
+                }
+                .btn-outline {
+                    flex: 1;
+                    padding: 13px;
+                    background: #ffffff;
+                    border: 1.5px solid #0f172a;
+                    color: #0f172a;
+                    font-size: 13.5px;
+                    font-weight: 700;
+                    border-radius: 25px;
+                    text-decoration: none;
+                    text-align: center;
+                    cursor: pointer;
+                }
+
+                .section-box {
+                    margin-top: 18px;
+                }
+                .section-title {
+                    font-size: 11.5px;
+                    font-weight: 800;
+                    color: #64748b;
+                    text-transform: uppercase;
+                    letter-spacing: 0.8px;
+                    margin-bottom: 8px;
+                }
+                .about-text {
+                    font-size: 13.5px;
+                    color: #1e293b;
+                    line-height: 1.55;
+                }
+
+                .service-list { display: flex; flex-direction: column; gap: 8px; }
+                .service-item {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    background: #ffffff;
+                    border: 1px solid #f1f5f9;
+                    border-radius: 16px;
+                    padding: 12px 14px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+                }
+                .service-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    flex: 1;
+                    min-width: 0;
+                }
+                .service-check {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 50%;
+                    background: rgba(37,99,235,0.1);
+                    color: #2563eb;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 12px;
+                    font-weight: 900;
+                    flex-shrink: 0;
+                }
+                .service-name { font-size: 14px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .service-desc { font-size: 12px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .service-right {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    flex-shrink: 0;
+                }
+                .service-price { font-size: 13.5px; font-weight: 800; color: #2563eb; }
+                .service-arrow { font-size: 16px; color: #94a3b8; }
                 
                 .btn-app {
                     display: flex;
@@ -674,108 +833,27 @@ exports.shareCardOG = async (req, res) => {
                     justify-content: center;
                     gap: 8px;
                     width: 100%;
-                    padding: 14px;
+                    padding: 13px;
                     background: linear-gradient(135deg, #10b981, #059669);
                     color: #fff;
                     font-weight: 800;
                     text-decoration: none;
                     border-radius: 16px;
-                    font-size: 15px;
-                    margin-bottom: 14px;
-                    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
-                    transition: transform 0.15s;
-                    text-align: center;
-                }
-                .btn-app:active { transform: scale(0.98); }
-                
-                .action-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 10px;
-                    margin-bottom: 14px;
-                }
-                .btn-tile {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 6px;
-                    padding: 12px;
-                    background: rgba(255,255,255,0.06);
-                    border: 1px solid rgba(255,255,255,0.1);
-                    color: #e2e8f0;
-                    border-radius: 14px;
-                    text-decoration: none;
-                    font-size: 13px;
-                    font-weight: 700;
-                }
-                .section-box {
-                    background: rgba(255,255,255,0.03);
-                    border: 1px solid rgba(255,255,255,0.06);
-                    border-radius: 18px;
-                    padding: 14px;
-                    margin-bottom: 14px;
-                }
-                .section-title {
-                    font-size: 12px;
-                    font-weight: 800;
-                    color: #10b981;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    margin-bottom: 10px;
-                }
-                .service-list { display: flex; flex-direction: column; gap: 8px; }
-                .service-item {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    border-bottom: 1px solid rgba(255,255,255,0.05);
-                    padding-bottom: 8px;
-                }
-                .service-item:last-child { border-bottom: none; padding-bottom: 0; }
-                .service-name { font-size: 13.5px; font-weight: 700; color: #f1f5f9; }
-                .service-desc { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
-                .service-price { font-size: 13px; font-weight: 800; color: #10b981; }
-                
-                .info-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #cbd5e1; margin-bottom: 8px; }
-                .info-row a { color: #38bdf8; text-decoration: none; word-break: break-all; }
-                
-                .social-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-                .social-chip {
-                    padding: 6px 12px;
-                    background: rgba(255,255,255,0.06);
-                    border-radius: 20px;
-                    color: #94a3b8;
-                    text-decoration: none;
-                    font-size: 12px;
-                    font-weight: 600;
-                }
-                .social-chip:hover { color: #fff; background: rgba(255,255,255,0.12); }
-                
-                .btn-sec {
-                    display: block;
-                    width: 100%;
-                    padding: 12px;
-                    background: rgba(255,255,255,0.04);
-                    border: 1px solid rgba(255,255,255,0.1);
-                    color: #cbd5e1;
-                    text-decoration: none;
-                    border-radius: 14px;
-                    font-size: 13px;
-                    font-weight: 700;
-                    text-align: center;
+                    font-size: 14px;
+                    margin-top: 20px;
+                    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
                 }
                 .app-promo-tag {
                     display: block;
                     text-align: center;
-                    margin-top: 14px;
+                    margin-top: 12px;
                     font-size: 11px;
-                    color: #64748b;
+                    color: #94a3b8;
                     font-weight: 600;
                 }
             </style>
             
             <script>
-                // Auto launch app if clicked from mobile
                 (function() {
                     var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
                     if (isMobile) {
@@ -790,40 +868,61 @@ exports.shareCardOG = async (req, res) => {
         </head>
         <body>
             <div class="card">
+                <div class="top-bar">
+                    <span style="font-size:18px;">‹</span>
+                    <div style="text-align:center;">
+                        <div class="top-bar-title">${card.businessName}</div>
+                        <div class="top-bar-sub">Digital Profile Card</div>
+                    </div>
+                    <span style="color:#10b981;font-size:18px;">⚏</span>
+                </div>
                 <div class="cover"></div>
                 <div class="avatar-wrap">
-                    <img src="${card.profileImage ? (card.profileImage.startsWith('http') ? card.profileImage : hostUrl + card.profileImage) : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(card.businessName) + '&background=10B981&color=fff'}" class="avatar" alt="${card.businessName}">
+                    <img src="${card.profileImage ? (card.profileImage.startsWith('http') ? card.profileImage : hostUrl + card.profileImage) : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(card.businessName) + '&background=2563eb&color=fff'}" class="avatar" alt="${card.businessName}">
                 </div>
                 <div class="content">
                     <div class="center-info">
                         <h1>${card.businessName}</h1>
-                        <div class="sub">${card.personName ? card.personName + ' • ' : ''}${card.designation || card.category}</div>
-                        <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(16,185,129,0.1);color:#10b981;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:20px;margin:6px 0 8px;">👁️ ${((card.stats?.viewsCount || 0) + 1).toLocaleString()} Page Views</div>
-                        <p class="bio">${card.tagline || card.about || 'Digital profile card with direct contact details, services and portfolio.'}</p>
+                        <div class="sub">${card.category || card.designation || 'Business & Professional Services'}</div>
+                        ${card.tagline ? `<div class="tagline">"${card.tagline}"</div>` : ''}
                     </div>
                     
-                    <a href="${deepLink}" onclick="if(/Android/i.test(navigator.userAgent)){window.location.href='${androidIntent}';return false;}" class="btn-app">
-                        <span>📲 Open in Prithu App</span>
-                    </a>
-
-                    <div class="action-grid">
-                        ${whatsapp ? `<a href="https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hello ' + card.businessName + ', I found your visiting card on Prithu.')}" class="btn-tile">💬 WhatsApp</a>` : ''}
-                        ${phone ? `<a href="tel:${phone}" class="btn-tile">📞 Call</a>` : ''}
+                    <div class="circles-grid">
+                        <a href="https://wa.me/${whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hello ' + card.businessName + ', I found your visiting card on Prithu.')}" class="circle-item">
+                            <div class="circle-btn">💬</div>
+                            <span class="circle-label">WhatsApp</span>
+                        </a>
+                        <a href="tel:${phone}" class="circle-item">
+                            <div class="circle-btn">📞</div>
+                            <span class="circle-label">Call</span>
+                        </a>
+                        <a href="${googleMapsUrl || 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(card.businessName)}" target="_blank" class="circle-item">
+                            <div class="circle-btn">📍</div>
+                            <span class="circle-label">Directions</span>
+                        </a>
+                        <a href="${website ? (website.startsWith('http') ? website : 'https://' + website) : 'https://prithu.app'}" target="_blank" class="circle-item">
+                            <div class="circle-btn">🌐</div>
+                            <span class="circle-label">Website</span>
+                        </a>
                     </div>
 
-                    ${address || email || website ? `
+                    <div class="btn-duo">
+                        <a href="${vcardUrl}" class="btn-primary">👤+ Save Contact</a>
+                        <button onclick="if(navigator.share){navigator.share({title:'${card.businessName}',url:'${webUrl}'})}else{navigator.clipboard.writeText('${webUrl}');alert('Link copied to clipboard!');}" class="btn-outline">➦ Share Card</button>
+                    </div>
+
                     <div class="section-box">
-                        <div class="section-title">📍 Contact Information</div>
-                        ${email ? `<div class="info-row">✉️ <a href="mailto:${email}">${email}</a></div>` : ''}
-                        ${website ? `<div class="info-row">🌐 <a href="${website.startsWith('http') ? website : 'https://' + website}" target="_blank">${website}</a></div>` : ''}
-                        ${address ? `<div class="info-row">📍 ${googleMapsUrl ? `<a href="${googleMapsUrl}" target="_blank">${address}</a>` : address}</div>` : ''}
-                    </div>` : ''}
+                        <div class="section-title">ABOUT THE FIRM</div>
+                        <div class="about-text">${card.about || (card.businessName + ' is dedicated to quality and excellent services.')}</div>
+                    </div>
 
                     ${servicesHtml}
                     ${socialsHtml}
 
-                    <a href="${vcardUrl}" class="btn-sec">💾 Save Contact (.VCF)</a>
-                    <div class="app-promo-tag">Powered by Prithu App</div>
+                    <a href="${deepLink}" onclick="if(/Android/i.test(navigator.userAgent)){window.location.href='${androidIntent}';return false;}" class="btn-app">
+                        <span>📲 Open in Prithu Mobile App</span>
+                    </a>
+                    <div class="app-promo-tag">Powered by Prithu • Digital Profile Card</div>
                 </div>
             </div>
         </body>

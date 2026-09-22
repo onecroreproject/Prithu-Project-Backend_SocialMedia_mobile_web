@@ -13,6 +13,7 @@ const feedPostQueue = require("../../queue/feedPostQueue");
 const fs = require("fs");
 const redisClient = require("../../Config/redisConfig");
 const { clearFeedsCache } = require("../feedControllers/feedsController");
+const UserView = require("../../models/userModels/userViewFeedsModel");
 
 // ✅ Helper delete local file
 const deleteLocalAdminFile = (filePath) => {
@@ -720,33 +721,72 @@ exports.getAllFeedAdmin = async (req, res) => {
             };
         }
 
-        // Aggregate statistics
-        const statsAgg = await Feed.aggregate([
-            { $match: matchQuery },
-            {
-                $facet: {
-                    totalFeeds: [{ $count: "count" }],
-                    totalImages: [
-                        { $unwind: "$files" },
-                        { $match: { "files.type": "image" } },
-                        { $count: "count" }
-                    ],
-                    totalVideos: [
-                        { $unwind: "$files" },
-                        { $match: { "files.type": "video" } },
-                        { $count: "count" }
-                    ]
-                }
-            }
+        // Today date boundary
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+        // Fast parallel count queries + View analytics queries
+        const [
+            totalFeeds, 
+            totalImages, 
+            totalVideos, 
+            totalPostsWatched,
+            todayPostsWatched,
+            todayUniqueUsersList,
+            todayCategoryAgg,
+            feeds
+        ] = await Promise.all([
+            Feed.countDocuments(matchQuery).catch(() => 0),
+            Feed.countDocuments({ ...matchQuery, $or: [{ postType: "image" }, { "files.type": "image" }] }).catch(() => 0),
+            Feed.countDocuments({ ...matchQuery, $or: [{ postType: "video" }, { "files.type": "video" }] }).catch(() => 0),
+            UserView.countDocuments({}).catch(() => 0),
+            UserView.countDocuments({ createdAt: { $gte: startOfDay, $lte: endOfDay } }).catch(() => 0),
+            UserView.distinct("userId", { createdAt: { $gte: startOfDay, $lte: endOfDay }, userId: { $ne: null } }).catch(() => []),
+            UserView.aggregate([
+                { $match: { createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+                {
+                    $lookup: {
+                        from: "Feeds",
+                        localField: "feedId",
+                        foreignField: "_id",
+                        as: "feed"
+                    }
+                },
+                { $unwind: { path: "$feed", preserveNullAndEmptyArrays: false } },
+                { $unwind: { path: "$feed.category", preserveNullAndEmptyArrays: false } },
+                {
+                    $lookup: {
+                        from: "Categories",
+                        localField: "feed.category",
+                        foreignField: "_id",
+                        as: "catInfo"
+                    }
+                },
+                { $unwind: { path: "$catInfo", preserveNullAndEmptyArrays: true } },
+                {
+                    $group: {
+                        _id: { $ifNull: ["$catInfo.categoriesName", { $ifNull: ["$catInfo.name", "Uncategorized"] }] },
+                        categoryId: { $first: "$feed.category" },
+                        viewsToday: { $sum: 1 }
+                    }
+                },
+                { $sort: { viewsToday: -1 } },
+                { $limit: 8 }
+            ]).catch(() => []),
+            Feed.find(matchQuery)
+                .select("-designMetadata -editMetadata")
+                .sort({ createdAt: -1 })
+                .lean()
         ]);
 
-        const totalFeeds = statsAgg[0]?.totalFeeds[0]?.count || 0;
-        const totalImages = statsAgg[0]?.totalImages[0]?.count || 0;
-        const totalVideos = statsAgg[0]?.totalVideos[0]?.count || 0;
+        const todayUniqueUsersWatched = todayUniqueUsersList.length;
+        const todayCategoryWatched = todayCategoryAgg.map(item => ({
+            categoryName: item._id,
+            categoryId: item.categoryId,
+            viewsToday: item.viewsToday
+        }));
 
-        // Fetch feeds
-        const feeds = await Feed.find(matchQuery).sort({ createdAt: -1 }).lean();
-        
         // --- OPTIMIZATION: Bulk lookups to prevent N+1 queries ---
         
         // 1. Gather unique creator IDs
@@ -763,26 +803,26 @@ exports.getAllFeedAdmin = async (req, res) => {
                 else if (feed.roleRef === "User") userIds.add(creatorId.toString());
             }
             if (feed.category && Array.isArray(feed.category)) {
-                feed.category.forEach(c => categoryIds.add(c.toString()));
+                feed.category.forEach(c => c && categoryIds.add(c.toString()));
             }
         }
 
         // 2. Perform bulk queries
         const [admins, childAdmins, users, categories] = await Promise.all([
-            adminIds.size ? ProfileSettings.find({ adminId: { $in: Array.from(adminIds) } }).select("adminId userName profileAvatar").lean() : [],
-            childAdminIds.size ? ProfileSettings.find({ childAdminId: { $in: Array.from(childAdminIds) } }).select("childAdminId userName profileAvatar").lean() : [],
-            userIds.size ? ProfileSettings.find({ userId: { $in: Array.from(userIds) } }).select("userId userName profileAvatar").lean() : [],
-            categoryIds.size ? Category.find({ _id: { $in: Array.from(categoryIds) } }).select("name").lean() : []
+            adminIds.size ? ProfileSettings.find({ adminId: { $in: Array.from(adminIds) } }).select("adminId userName profileAvatar").lean().catch(() => []) : [],
+            childAdminIds.size ? ProfileSettings.find({ childAdminId: { $in: Array.from(childAdminIds) } }).select("childAdminId userName profileAvatar").lean().catch(() => []) : [],
+            userIds.size ? ProfileSettings.find({ userId: { $in: Array.from(userIds) } }).select("userId userName profileAvatar").lean().catch(() => []) : [],
+            categoryIds.size ? Category.find({ _id: { $in: Array.from(categoryIds) } }).select("name").lean().catch(() => []) : []
         ]);
 
         // 3. Build maps for O(1) lookup
         const profileMap = {};
-        admins.forEach(p => profileMap[`Admin_${p.adminId}`] = p);
-        childAdmins.forEach(p => profileMap[`Child_Admin_${p.childAdminId}`] = p);
-        users.forEach(p => profileMap[`User_${p.userId}`] = p);
+        admins.forEach(p => { if (p && p.adminId) profileMap[`Admin_${p.adminId}`] = p; });
+        childAdmins.forEach(p => { if (p && p.childAdminId) profileMap[`Child_Admin_${p.childAdminId}`] = p; });
+        users.forEach(p => { if (p && p.userId) profileMap[`User_${p.userId}`] = p; });
         
         const categoryMap = {};
-        categories.forEach(c => categoryMap[c._id.toString()] = { id: c._id, name: c.name });
+        categories.forEach(c => { if (c && c._id) categoryMap[c._id.toString()] = { id: c._id, name: c.name }; });
 
         // 4. Map feeds
         const results = feeds.map(feed => {
@@ -799,7 +839,7 @@ exports.getAllFeedAdmin = async (req, res) => {
             }
 
             const feedCategories = (feed.category || [])
-                .map(c => categoryMap[c.toString()])
+                .map(c => c ? categoryMap[c.toString()] : null)
                 .filter(Boolean);
 
             const contentUrl = getMediaUrl(feed.mediaUrl || (feed.files && feed.files[0]?.url));
@@ -815,7 +855,7 @@ exports.getAllFeedAdmin = async (req, res) => {
                 tags: (feed.tags && feed.tags.length > 0) ? feed.tags : (feed.hashtags || []),
                 hashtags: feed.hashtags || feed.tags || [],
                 contentUrl,
-                thumbnailUrl, // Added to fix missing video images
+                thumbnailUrl,
                 type: feed.postType || "image",
                 creator: profileData ? { userName: profileData.userName || "Unknown", profileAvatar: profileData.profileAvatar || null } : { userName: "Unknown", profileAvatar: null },
                 categories: feedCategories,
@@ -823,16 +863,529 @@ exports.getAllFeedAdmin = async (req, res) => {
             };
         });
 
-        res.status(200).json({ 
+        return res.status(200).json({ 
             success: true, 
             totalFeeds,
             totalImages,
             totalVideos,
+            totalPostsWatched,
+            todayPostsWatched,
+            todayUniqueUsersWatched,
+            todayCategoryWatched,
             feeds: results 
         });
     } catch (err) {
         console.error("Error in getAllFeedAdmin:", err);
-        res.status(500).json({ success: false, message: "Server error" });
+        return res.status(500).json({ success: false, message: "Server error", error: err.message });
+    }
+};
+
+exports.getWatchAnalyticsAdmin = async (req, res) => {
+    try {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+        // 1. Parallel Counts & Durations
+        const [
+            totalPostsWatched, 
+            todayPostsWatched, 
+            todayUniqueUsersList,
+            totalWatchDurationAgg,
+            todayWatchDurationAgg
+        ] = await Promise.all([
+            UserView.countDocuments({}).catch(() => 0),
+            UserView.countDocuments({ createdAt: { $gte: startOfDay, $lte: endOfDay } }).catch(() => 0),
+            UserView.distinct("userId", { createdAt: { $gte: startOfDay, $lte: endOfDay }, userId: { $ne: null } }).catch(() => []),
+            UserView.aggregate([
+                { $group: { _id: null, totalSeconds: { $sum: "$watchDuration" } } }
+            ]).catch(() => []),
+            UserView.aggregate([
+                { $match: { createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+                { $group: { _id: null, totalSeconds: { $sum: "$watchDuration" } } }
+            ]).catch(() => [])
+        ]);
+
+        const todayUniqueUsersWatched = todayUniqueUsersList.length;
+        const totalWatchHours = ((totalWatchDurationAgg[0]?.totalSeconds || 0) / 3600).toFixed(1);
+        const todayWatchHours = ((todayWatchDurationAgg[0]?.totalSeconds || 0) / 3600).toFixed(1);
+
+        // 2. Category watched today aggregation
+        const todayCategoryAgg = await UserView.aggregate([
+            { $match: { createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+            {
+                $lookup: {
+                    from: "Feeds",
+                    localField: "feedId",
+                    foreignField: "_id",
+                    as: "feed"
+                }
+            },
+            { $unwind: { path: "$feed", preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    categoryId: { 
+                        $ifNull: [
+                            "$categoryId", 
+                            { $arrayElemAt: ["$feed.category", 0] }
+                        ] 
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "Categories",
+                    localField: "categoryId",
+                    foreignField: "_id",
+                    as: "catInfo"
+                }
+            },
+            { $unwind: { path: "$catInfo", preserveNullAndEmptyArrays: true } },
+            {
+                $group: {
+                    _id: { $ifNull: ["$catInfo.categoriesName", { $ifNull: ["$catInfo.name", "Uncategorized"] }] },
+                    categoryId: { $first: "$categoryId" },
+                    viewsToday: { $sum: 1 }
+                }
+            },
+            { $sort: { viewsToday: -1 } },
+            { $limit: 12 }
+        ]).catch(() => []);
+
+        const todayCategoryWatched = todayCategoryAgg.map(item => ({
+            categoryName: item._id,
+            categoryId: item.categoryId,
+            viewsToday: item.viewsToday,
+            percentage: todayPostsWatched > 0 ? Math.round((item.viewsToday / todayPostsWatched) * 100) : 0
+        }));
+
+        // 3. All-time Category aggregation
+        const allTimeCategoryAgg = await UserView.aggregate([
+            {
+                $lookup: {
+                    from: "Feeds",
+                    localField: "feedId",
+                    foreignField: "_id",
+                    as: "feed"
+                }
+            },
+            { $unwind: { path: "$feed", preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    categoryId: { 
+                        $ifNull: [
+                            "$categoryId", 
+                            { $arrayElemAt: ["$feed.category", 0] }
+                        ] 
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "Categories",
+                    localField: "categoryId",
+                    foreignField: "_id",
+                    as: "catInfo"
+                }
+            },
+            { $unwind: { path: "$catInfo", preserveNullAndEmptyArrays: true } },
+            {
+                $group: {
+                    _id: { $ifNull: ["$catInfo.categoriesName", { $ifNull: ["$catInfo.name", "Uncategorized"] }] },
+                    categoryId: { $first: "$categoryId" },
+                    totalViews: { $sum: 1 }
+                }
+            },
+            { $sort: { totalViews: -1 } },
+            { $limit: 12 }
+        ]).catch(() => []);
+
+        const allTimeCategoryWatched = allTimeCategoryAgg.map(item => ({
+            categoryName: item._id,
+            categoryId: item.categoryId,
+            totalViews: item.totalViews,
+            percentage: totalPostsWatched > 0 ? Math.round((item.totalViews / totalPostsWatched) * 100) : 0
+        }));
+
+        // 4. Hourly Views Today (0 to 23)
+        const hourlyViewsAgg = await UserView.aggregate([
+            { $match: { createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+            {
+                $group: {
+                    _id: { $hour: { date: "$createdAt", timezone: "+05:30" } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]).catch(() => []);
+
+        const hourlyMap = {};
+        hourlyViewsAgg.forEach(h => { hourlyMap[h._id] = h.count; });
+        const todayHourlyViews = Array.from({ length: 24 }, (_, i) => ({
+            hour: `${i.toString().padStart(2, "0")}:00`,
+            hourNum: i,
+            views: hourlyMap[i] || 0
+        }));
+
+        // 5. Top watched posts today
+        const topWatchedPostsAgg = await UserView.aggregate([
+            { $match: { createdAt: { $gte: startOfDay, $lte: endOfDay } } },
+            {
+                $group: {
+                    _id: "$feedId",
+                    viewsToday: { $sum: 1 },
+                    totalDuration: { $sum: "$watchDuration" }
+                }
+            },
+            { $sort: { viewsToday: -1 } },
+            { $limit: 8 },
+            {
+                $lookup: {
+                    from: "Feeds",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "feed"
+                }
+            },
+            { $unwind: { path: "$feed", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "Categories",
+                    localField: "feed.category",
+                    foreignField: "_id",
+                    as: "feedCategories"
+                }
+            }
+        ]).catch(() => []);
+
+        const topWatchedPostsToday = topWatchedPostsAgg.map(item => ({
+            feedId: item._id,
+            viewsToday: item.viewsToday,
+            watchDuration: item.totalDuration || 0,
+            title: item.feed?.title || item.feed?.caption || "Untitled Post",
+            type: item.feed?.postType || "image",
+            category: item.feedCategories && item.feedCategories[0]?.name ? item.feedCategories[0].name : "General",
+            mediaUrl: getMediaUrl(item.feed?.mediaUrl || (item.feed?.files && item.feed?.files[0]?.url))
+        }));
+
+        // 6. Top watched posts all-time
+        const topWatchedAllTimeAgg = await UserView.aggregate([
+            {
+                $group: {
+                    _id: "$feedId",
+                    totalViews: { $sum: 1 },
+                    totalDuration: { $sum: "$watchDuration" }
+                }
+            },
+            { $sort: { totalViews: -1 } },
+            { $limit: 8 },
+            {
+                $lookup: {
+                    from: "Feeds",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "feed"
+                }
+            },
+            { $unwind: { path: "$feed", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "Categories",
+                    localField: "feed.category",
+                    foreignField: "_id",
+                    as: "feedCategories"
+                }
+            }
+        ]).catch(() => []);
+
+        const topWatchedPostsAllTime = topWatchedAllTimeAgg.map(item => ({
+            feedId: item._id,
+            totalViews: item.totalViews,
+            watchDuration: item.totalDuration || 0,
+            title: item.feed?.title || item.feed?.caption || "Untitled Post",
+            type: item.feed?.postType || "image",
+            category: item.feedCategories && item.feedCategories[0]?.name ? item.feedCategories[0].name : "General",
+            mediaUrl: getMediaUrl(item.feed?.mediaUrl || (item.feed?.files && item.feed?.files[0]?.url))
+        }));
+
+        return res.status(200).json({
+            success: true,
+            totalPostsWatched,
+            todayPostsWatched,
+            todayUniqueUsersWatched,
+            totalWatchHours: Number(totalWatchHours) || 0,
+            todayWatchHours: Number(todayWatchHours) || 0,
+            todayCategoryWatched,
+            allTimeCategoryWatched,
+            todayHourlyViews,
+            topWatchedPostsToday,
+            topWatchedPostsAllTime
+        });
+    } catch (err) {
+        console.error("Error in getWatchAnalyticsAdmin:", err);
+        return res.status(500).json({ success: false, message: "Error fetching watch analytics", error: err.message });
+    }
+};
+
+/**
+ * 📊 GET /api/admin/analytics/view-logs
+ * Paginated stream/log of user feed views with search & category filtering
+ */
+exports.getUserViewFeedsLog = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 20,
+            search = "",
+            categoryId,
+            postType,
+            dateRange = "all",
+            startDate,
+            endDate
+        } = req.query;
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const matchQuery = {};
+
+        // Date range filter
+        const now = new Date();
+        if (dateRange === "today") {
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            matchQuery.createdAt = { $gte: startOfDay, $lte: endOfDay };
+        } else if (dateRange === "yesterday") {
+            const yStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+            const yEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+            matchQuery.createdAt = { $gte: yStart, $lte: yEnd };
+        } else if (dateRange === "7days") {
+            const past7 = new Date();
+            past7.setDate(past7.getDate() - 7);
+            matchQuery.createdAt = { $gte: past7 };
+        } else if (dateRange === "30days") {
+            const past30 = new Date();
+            past30.setDate(past30.getDate() - 30);
+            matchQuery.createdAt = { $gte: past30 };
+        } else if (startDate || endDate) {
+            matchQuery.createdAt = {};
+            if (startDate) matchQuery.createdAt.$gte = new Date(startDate);
+            if (endDate) matchQuery.createdAt.$lte = new Date(endDate);
+        }
+
+        if (postType && postType !== "all") {
+            matchQuery.postType = postType;
+        }
+
+        if (categoryId && categoryId !== "all") {
+            matchQuery.categoryId = new mongoose.Types.ObjectId(categoryId);
+        }
+
+        // Pipeline with lookups for search across user & feed
+        const pipeline = [
+            { $match: matchQuery },
+            { $sort: { createdAt: -1 } },
+            {
+                $lookup: {
+                    from: "Users",
+                    localField: "userId",
+                    foreignField: "_id",
+                    as: "user"
+                }
+            },
+            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "ProfileSettings",
+                    localField: "userId",
+                    foreignField: "userId",
+                    as: "profileSettings"
+                }
+            },
+            { $unwind: { path: "$profileSettings", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "Feeds",
+                    localField: "feedId",
+                    foreignField: "_id",
+                    as: "feed"
+                }
+            },
+            { $unwind: { path: "$feed", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "Categories",
+                    localField: "categoryId",
+                    foreignField: "_id",
+                    as: "categoryDoc"
+                }
+            },
+            { $unwind: { path: "$categoryDoc", preserveNullAndEmptyArrays: true } }
+        ];
+
+        // If search query is provided
+        if (search && search.trim()) {
+            const regex = new RegExp(search.trim(), "i");
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { "user.userName": regex },
+                        { "user.email": regex },
+                        { "profileSettings.name": regex },
+                        { "feed.title": regex },
+                        { "feed.caption": regex },
+                        { "categoryDoc.name": regex },
+                        { "categoryDoc.categoriesName": regex }
+                    ]
+                }
+            });
+        }
+
+        // Count total matching records
+        const countPipeline = [...pipeline, { $count: "total" }];
+        const countResult = await UserView.aggregate(countPipeline).catch(() => []);
+        const totalRecords = countResult[0]?.total || 0;
+
+        // Paginate and project
+        pipeline.push({ $skip: skip });
+        pipeline.push({ $limit: parseInt(limit) });
+        pipeline.push({
+            $project: {
+                _id: 1,
+                viewId: "$_id",
+                watchDuration: { $ifNull: ["$watchDuration", 0] },
+                postType: { $ifNull: ["$postType", "$feed.postType", "image"] },
+                deviceType: { $ifNull: ["$deviceType", "web"] },
+                ipAddress: 1,
+                viewedAt: "$createdAt",
+                user: {
+                    _id: "$user._id",
+                    userName: { $ifNull: ["$user.userName", "$profileSettings.name", "Anonymous Viewer"] },
+                    email: { $ifNull: ["$user.email", "N/A"] },
+                    profileAvatar: "$profileSettings.profileAvatar"
+                },
+                feed: {
+                    _id: "$feed._id",
+                    title: { $ifNull: ["$feed.title", "$feed.caption", "Post"] },
+                    postType: { $ifNull: ["$feed.postType", "$postType", "image"] },
+                    mediaUrl: {
+                        $ifNull: [
+                            "$feed.mediaUrl",
+                            { $arrayElemAt: ["$feed.files.url", 0] }
+                        ]
+                    }
+                },
+                category: {
+                    _id: "$categoryDoc._id",
+                    name: { $ifNull: ["$categoryDoc.categoriesName", { $ifNull: ["$categoryDoc.name", "General"] }] }
+                }
+            }
+        });
+
+        const rawViews = await UserView.aggregate(pipeline);
+
+        const views = rawViews.map(v => ({
+            ...v,
+            feed: {
+                ...v.feed,
+                mediaUrl: getMediaUrl(v.feed?.mediaUrl)
+            },
+            user: {
+                ...v.user,
+                profileAvatar: getMediaUrl(v.user?.profileAvatar)
+            }
+        }));
+
+        return res.status(200).json({
+            success: true,
+            total: totalRecords,
+            page: parseInt(page),
+            totalPages: Math.ceil(totalRecords / parseInt(limit)),
+            limit: parseInt(limit),
+            views
+        });
+    } catch (err) {
+        console.error("Error in getUserViewFeedsLog:", err);
+        return res.status(500).json({ success: false, message: "Error fetching view logs", error: err.message });
+    }
+};
+
+/**
+ * 📊 GET /api/admin/analytics/category-views
+ * Detailed category view distribution & statistics
+ */
+exports.getCategoryViewsAnalytics = async (req, res) => {
+    try {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const past7Days = new Date();
+        past7Days.setDate(past7Days.getDate() - 7);
+        const past30Days = new Date();
+        past30Days.setDate(past30Days.getDate() - 30);
+
+        const categoryStats = await Category.aggregate([
+            {
+                $lookup: {
+                    from: "UserViews",
+                    localField: "_id",
+                    foreignField: "categoryId",
+                    as: "allViews"
+                }
+            },
+            {
+                $lookup: {
+                    from: "Feeds",
+                    localField: "_id",
+                    foreignField: "category",
+                    as: "feeds"
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    name: { $ifNull: ["$categoriesName", "$name"] },
+                    totalFeeds: { $size: "$feeds" },
+                    totalViews: { $size: "$allViews" },
+                    todayViews: {
+                        $size: {
+                            $filter: {
+                                input: "$allViews",
+                                as: "v",
+                                cond: { $gte: ["$$v.createdAt", startOfDay] }
+                            }
+                        }
+                    },
+                    past7DaysViews: {
+                        $size: {
+                            $filter: {
+                                input: "$allViews",
+                                as: "v",
+                                cond: { $gte: ["$$v.createdAt", past7Days] }
+                            }
+                        }
+                    },
+                    past30DaysViews: {
+                        $size: {
+                            $filter: {
+                                input: "$allViews",
+                                as: "v",
+                                cond: { $gte: ["$$v.createdAt", past30Days] }
+                            }
+                        }
+                    },
+                    totalWatchDuration: {
+                        $sum: "$allViews.watchDuration"
+                    }
+                }
+            },
+            { $sort: { totalViews: -1 } }
+        ]).catch(() => []);
+
+        return res.status(200).json({
+            success: true,
+            categories: categoryStats
+        });
+    } catch (err) {
+        console.error("Error in getCategoryViewsAnalytics:", err);
+        return res.status(500).json({ success: false, message: "Error fetching category views analytics", error: err.message });
     }
 };
 
