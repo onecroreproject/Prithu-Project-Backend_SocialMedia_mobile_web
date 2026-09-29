@@ -51,7 +51,7 @@ const UserActivitySchema = new mongoose.Schema(
     },
 
     metadata: {
-      type: Object, // Extra info like title, device, IP, etc.
+      type: mongoose.Schema.Types.Mixed,
       default: {},
     },
   },
@@ -67,6 +67,10 @@ UserActivitySchema.index(
 
 /* ✅ 2️⃣ Secondary index for recent activity sorting */
 UserActivitySchema.index({ userId: 1, updatedAt: -1 });
+
+/* ✅ 3️⃣ Indexes for Python Engine Recommendation queries */
+UserActivitySchema.index({ "metadata.postType": 1 });
+UserActivitySchema.index({ "metadata.category": 1 });
 
 module.exports =
   mongoose.models.UserActivity ||

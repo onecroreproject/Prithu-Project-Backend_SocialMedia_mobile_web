@@ -3,7 +3,7 @@ const { prithuDB } = require("../../database");
 
 const UserFeedAnalyticsSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+    userId: { type: String, ref: "User", index: true },
     feedId: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", required: true, index: true },
     
     // Watch Time Metrics

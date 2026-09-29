@@ -48,7 +48,7 @@ exports.getUserEarnings = async (req, res) => {
           details: [
             {
               $lookup: {
-                from: "profilesettings",
+                from: "ProfileSettings",
                 localField: "fromUserId",
                 foreignField: "userId",
                 as: "profile",

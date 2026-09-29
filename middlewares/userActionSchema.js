@@ -2,7 +2,7 @@
 import mongoose from "mongoose";
 
 const UserActionSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  user: { type: String, ref: "User", required: true },
   feed: { type: mongoose.Schema.Types.ObjectId, ref: "Feed", required: true },
 
   // Type of action (one record = one action)

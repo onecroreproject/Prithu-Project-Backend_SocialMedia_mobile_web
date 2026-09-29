@@ -1185,7 +1185,7 @@ exports.getUserViewFeedsLog = async (req, res) => {
             { $sort: { createdAt: -1 } },
             {
                 $lookup: {
-                    from: "Users",
+                    from: "User",
                     localField: "userId",
                     foreignField: "_id",
                     as: "user"

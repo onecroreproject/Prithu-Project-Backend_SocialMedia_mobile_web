@@ -161,6 +161,11 @@ const UserSchema = new mongoose.Schema(
       categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Categories" },
       score: { type: Number, default: 0 },
     }],
+    watchedCategories: [{
+      categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Categories" },
+      watchCount: { type: Number, default: 1 },
+      lastWatchedAt: { type: Date, default: Date.now },
+    }],
     engagementScore: { type: Number, default: 0 },
     watchBehavior: {
       averageWatchTime: { type: Number, default: 0 },
@@ -181,6 +186,7 @@ UserSchema.index({ referralCodeIsValid: 1 });
 UserSchema.index({ "subscription.isActive": 1 });
 UserSchema.index({ isOnline: 1 });
 UserSchema.index({ createdAt: 1 });
+UserSchema.index({ "watchedCategories.categoryId": 1 });
 
 // ------------ HOOK --------------
 UserSchema.pre("save", function () {

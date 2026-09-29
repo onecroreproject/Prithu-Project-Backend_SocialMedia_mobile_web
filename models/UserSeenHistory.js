@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const { prithuDB } = require("../database");
 
 const userSeenHistorySchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    userId: { type: String, ref: 'User', required: true, index: true },
     contentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Feed', required: true },
     viewedAt: { type: Date, default: Date.now }
 });

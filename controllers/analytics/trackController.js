@@ -4,6 +4,8 @@ const User = require("../../models/userModels/userModel");
 const SearchHistory = require("../../models/analytics/searchHistoryModel");
 const mongoose = require("mongoose");
 const redisClient = require("../../Config/redisConfig");
+const UserSeenHistory = require("../../models/UserSeenHistory");
+const { logUserActivity } = require("../../middlewares/helper/logUserActivity");
 
 /**
  * 🚀 Initialize feed view tracking
@@ -78,6 +80,29 @@ exports.trackWatchTime = async (req, res) => {
     await Feed.findByIdAndUpdate(feedId, {
       $inc: { "playbackStats.totalWatchTime": watchTime }
     });
+
+    // 🚀 NEW: Log to UserSeenHistory and UserActivity for AI Engine
+    if (userId) {
+      await UserSeenHistory.findOneAndUpdate(
+        { userId, contentId: feedId },
+        { $set: { viewedAt: new Date() } },
+        { upsert: true }
+      );
+
+      await logUserActivity({
+        userId,
+        actionType: "WATCH_FEED",
+        targetId: feedId,
+        targetModel: "Feed",
+        metadata: {
+          watchTime,
+          percentageWatched,
+          sessionId,
+          recoScore,
+          recoSource,
+        },
+      });
+    }
 
     // 🆕 User Feedback Popup Skips Tracking Logic
     let triggerFeedbackPopup = false;

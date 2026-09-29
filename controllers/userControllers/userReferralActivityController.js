@@ -109,7 +109,7 @@ exports.getRecentActivities = async (req, res) => {
             { $limit: parseInt(limit) },
             {
                 $lookup: {
-                    from: "users",
+                    from: "User",
                     localField: "referredUserId",
                     foreignField: "_id",
                     as: "referredUser",
@@ -118,7 +118,7 @@ exports.getRecentActivities = async (req, res) => {
             },
             {
                 $lookup: {
-                    from: "profilesettings",
+                    from: "ProfileSettings",
                     localField: "referredUserId",
                     foreignField: "userId",
                     as: "profile",
